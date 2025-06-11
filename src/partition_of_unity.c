@@ -5,7 +5,6 @@
 PetscErrorCode PUCreate(PartitionOfUnity *pu)
 {
   PartitionOfUnity p;
-  char             name[PETSC_MAX_PATH_LEN],option_name[PETSC_MAX_PATH_LEN];
   PetscFunctionBeginUser;
 
   PetscCall(PetscNew(&p));
@@ -13,7 +12,6 @@ PetscErrorCode PUCreate(PartitionOfUnity *pu)
   p->dap = NULL;
   p->dim = 0;
   p->n = NULL;
-  p->nfields = 0;
   p->npart = 0;
   p->O = NULL;
   p->L = NULL;
