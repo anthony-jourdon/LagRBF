@@ -1,7 +1,7 @@
 liblagrangian-offline-y.c += $(call thisdir, \
 	partition_of_unity.c \
 	partition.c \
-	interp_local.c \
+	partition_solve.c \
 	kernels_rbf.c \
 	io_utils.c \
 )

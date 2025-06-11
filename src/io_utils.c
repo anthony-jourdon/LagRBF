@@ -14,7 +14,7 @@ PetscErrorCode CreateDirectory(const char dirname[])
   /* Generate a new directory on proc 0 */
   error_number = 0;
   if (rank == 0) {
-    num = mkdir(dirname,S_IRWXG);
+    num = mkdir(dirname, S_IRWXU | S_IRWXG);
     error_number = errno;
   }
   PetscCall(MPI_Bcast(&num,1,MPI_INT,0,PETSC_COMM_WORLD));

@@ -7,6 +7,7 @@ struct _p_PartitionOfUnity {
   DM        dap; // Partition of Unity mesh
   PetscInt  dim; // Dimension of the partition of unity mesh
   PetscInt  *n; // Number of partitions in each dimension
+  PetscInt  nfields; // Number of fields
   PetscInt  npart; // Total number of partitions
   PetscReal *O,*L; // Origin and Length of the partition of unity mesh
   char     name[PETSC_MAX_PATH_LEN]; // Name of the partition of unity

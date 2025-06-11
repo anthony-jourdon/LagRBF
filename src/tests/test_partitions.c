@@ -2,7 +2,8 @@
 #include "partition_of_unity.h"
 #include "partition.h"
 #include "kernels_rbf.h"
-#include "interp_local.h"
+#include "partition_solve.h"
+#include "io_utils.h"
 
 static double franke_function(double x, double y)
 {
@@ -178,21 +179,22 @@ static PetscErrorCode DMSwarmCreateInterpolationPoints(PartitionOfUnity pu, DM *
   PetscFunctionReturn(PETSC_SUCCESS);
 }
 
-static PetscErrorCode SetWeights(DM da, DM swarm_data, DM swarm_interp, PetscReal epsilon)
+static PetscErrorCode SetWeights(PartitionOfUnity pu, Partition *partitions, DM swarm_data, DM swarm_interp)
 {
   DMSwarmCellDM celldm;
-  DM            cda;
+  DM            da,cda;
   Vec           coord;
   PetscReal     *LA_coords,*icoords,*weights,*sum_w;
-  PetscInt      i,j,si,sj,nx,ny,nip;
+  PetscInt      i,j,si,sj,nx,ny,nip,dim;
   PetscInt      np_interp,npu;
   const char    **icoordFields;
   PetscFunctionBeginUser;
   PetscPrintf(PETSC_COMM_WORLD,"[[ %s ]]\n",PETSC_FUNCTION_NAME);
 
   /* PU info */
+  PetscCall(PUGetDMDA(pu,&da));
   PetscCall(DMDAGetCorners(da,&si,&sj,NULL,&nx,&ny,NULL));
-  
+  dim = pu->dim;
   /* Interpolation points info */
   PetscCall(DMSwarmGetLocalSize(swarm_interp,&np_interp)); // rank local points
   PetscCall(DMSwarmGetCellDMActive(swarm_interp, &celldm));
@@ -212,36 +214,35 @@ static PetscErrorCode SetWeights(DM da, DM swarm_data, DM swarm_interp, PetscRea
   for (nip=0; nip<np_interp; nip++) {
     /* Initialize sum of weights */
     /* Loop over partitions of unity */
-    for (j=0; j<ny; j++) {
-      for (i=0; i<nx; i++) {
-        PetscInt  d,puidx;
-        PetscReal *pu_centre;
-        double    dist=0.0;
-        puidx = i + j*nx; // partition index, rank local (not the global index)
-        /* Get the coordinates of the partition of unity centre */
-        pu_centre = &LA_coords[2*puidx];
-        for (d=0; d<2; d++) { dist += (icoords[2*nip+d] - pu_centre[d]) * (icoords[2*nip+d] - pu_centre[d]); }
-        dist = PetscSqrtReal(dist);
-        /* Compute the weight */
-        weights[nip*nx*ny + puidx] = KernelWendlandC2(dist,epsilon);
-        sum_w[nip] += weights[nip*nx*ny + puidx];
+    for (i=0; i<pu->npart; i++) {
+      PetscInt  d,puidx;
+      PetscReal *pu_centre;
+      PetscReal dist = 0.0;
+
+      puidx = partitions[i]->idx; // partition index, rank local (not the global index)
+      pu_centre = &LA_coords[dim*puidx];
+      for (d=0; d<dim; d++) { 
+        dist += (icoords[dim*nip+d] - pu_centre[d]) * (icoords[dim*nip+d] - pu_centre[d]); 
       }
+      dist = PetscSqrtReal(dist);
+      /* Compute the weight */
+      weights[nip*nx*ny + puidx] = KernelWendlandC2(dist,partitions[i]->epsilon);
+      sum_w[nip] += weights[nip*nx*ny + puidx];
     }
   }
+
   // Here should perform communication to get the total sum of weights and send it to all processes 
   // but I am not sure if all processes have the same number of points so for now no parallelism
   /* Normalize weights */
   for (nip=0; nip<np_interp; nip++) {
-    for (j=0; j<ny; j++) {
-      for (i=0; i<nx; i++) {
-        PetscInt puidx = i + j*nx;
-        if (sum_w[nip] > 0.0) {
-          /* Normalize the weights */
-        weights[nip*nx*ny + puidx] /= sum_w[nip];
-        } else {
-          /* If the sum of weights is zero, set the weight to zero */
-          weights[nip*nx*ny + puidx] = 0.0;
-        }
+    for (i=0; i<pu->npart; i++) {
+      PetscInt puidx = partitions[i]->idx; // partition index, rank local (not the global index)
+      if (sum_w[nip] > 0.0) {
+        /* Normalize the weights */
+        weights[nip*pu->npart + puidx] /= sum_w[nip];
+      } else {
+        /* If the sum of weights is zero, set the weight to zero */
+        weights[nip*pu->npart + puidx] = 0.0;
       }
     }
   }
@@ -253,36 +254,12 @@ static PetscErrorCode SetWeights(DM da, DM swarm_data, DM swarm_interp, PetscRea
   PetscFunctionReturn(PETSC_SUCCESS);
 }
 
-static PetscErrorCode VecSetRHS(
-  PetscInt npoints,
-  PetscInt found_idx[],
-  PetscReal values[],
-  Vec *B
-)
-{
-  Vec       RHS;
-  PetscInt  i;
-  PetscReal *rhs;
-  PetscFunctionBeginUser;
-
-  PetscCall(VecCreate(PETSC_COMM_SELF,&RHS));
-  PetscCall(VecSetSizes(RHS,PETSC_DECIDE,npoints));
-  PetscCall(VecSetFromOptions(RHS));
-  PetscCall(VecGetArray(RHS,&rhs));
-  /* set the right-hand side with the values of the function at the data points */
-  for (i=0; i<npoints; i++){ rhs[i] = values[found_idx[i]]; }
-  PetscCall(VecRestoreArray(RHS,&rhs));
-  *B = RHS;
-  PetscFunctionReturn(PETSC_SUCCESS);
-}
-
 static PetscErrorCode SolveLocalCoefficients(
   Partition p,
   PetscReal data_coords[],
   PetscReal fval[]
 )
 {
-  Mat       RBF_data;
   Vec       RHS,X;
   PetscInt  ndata;
   PetscInt  *data_idx;
@@ -297,12 +274,11 @@ static PetscErrorCode SolveLocalCoefficients(
   PetscCall(VecZeroEntries(X));
   PetscCall(PartitionGetEpsilon(p,&epsilon));
   /* Create, assemble and factor the RBF matrix */
-  PetscCall(PartitionFactorizeRBFMatrix(p,2,data_coords,KernelWendlandC2,&RBF_data));
+  PetscCall(PartitionSetUpRBFMatrix(p,2,data_coords,KernelWendlandC2));
   /* Create and fill the RHS vector */
-  PetscCall(VecSetRHS(ndata,data_idx,fval,&RHS));
-  PetscCall(MatSolve(RBF_data,RHS,X));
+  PetscCall(PartitionSetVecRHS(p,fval,&RHS));
+  PetscCall(MatSolve(p->A,RHS,X));
   /* Clean-up */
-  PetscCall(MatDestroy(&RBF_data));
   PetscCall(VecDestroy(&RHS));
 
   PetscFunctionReturn(PETSC_SUCCESS);
@@ -337,7 +313,7 @@ static PetscErrorCode SolveLocalCoefficients_KSP(
   /* Create, assemble the RBF matrix */
   PetscCall(PartitionAssembleRBFMatrix(p,2,data_coords,KernelWendlandC2,&RBF_data));
   /* Create and fill the RHS vector */
-  PetscCall(VecSetRHS(ndata,data_idx,fval,&RHS));
+  PetscCall(PartitionSetVecRHS(p,fval,&RHS));
 
   PetscCall(KSPSetOperators(ksp,RBF_data,RBF_data));
   PetscCall(KSPSolve(ksp,RHS,X));
@@ -350,18 +326,19 @@ static PetscErrorCode SolveLocalCoefficients_KSP(
 }
 
 static PetscErrorCode SolveInterpolationCoefficients(
+  PartitionOfUnity pu,
   Partition *partition,
-  DM da,
   DM swarm_data
 )
 {
   DMSwarmCellDM celldm;
+  DM            da;
   PetscInt      i,j,puidx,si,sj,nx,ny,npoints;
   PetscReal     *data_coords,*data;
   const char    **dcoordFields;
   PetscFunctionBeginUser;
   PetscPrintf(PETSC_COMM_WORLD,"[[ %s ]]\n",PETSC_FUNCTION_NAME);
-
+  PetscCall(PUGetDMDA(pu,&da));
   PetscCall(DMDAGetCorners(da,&si,&sj,NULL,&nx,&ny,NULL));
 
   /* Data points */
@@ -373,7 +350,7 @@ static PetscErrorCode SolveInterpolationCoefficients(
   /* Get fields */
   PetscCall(DMSwarmGetField(swarm_data, dcoordFields[0], NULL, NULL, (void **)&data_coords));
   PetscCall(DMSwarmGetField(swarm_data,"data",NULL,NULL,(void **)&data));
-
+#if 0
   /* Loop over partitions of unity */
   for (j=0; j<ny; j++) {
     for (i=0; i<nx; i++) {
@@ -385,6 +362,13 @@ static PetscErrorCode SolveInterpolationCoefficients(
       PetscCall(SolveLocalCoefficients(p,data_coords,data));
       //PetscCall(SolveLocalCoefficients_KSP(p,data_coords,data));
     }
+  }
+#endif
+  /* Loop over partitions */
+  for (i=0; i<pu->npart; i++) {
+    Partition p = partition[i];
+    if (p->ndata == 0) continue; // no data points in this partition, skip
+    PetscCall(SolveLocalCoefficients(p,data_coords,data));
   }
   /* Restore and cleanup */
   PetscCall(DMSwarmSortRestoreAccess(swarm_data));
@@ -459,6 +443,7 @@ static PetscErrorCode PointwiseInterpolation(
       /* Get the coefficients of that partition */
       PetscCall(VecGetArray(X,&coeffs));
       interpolant = 0.0;
+      /* Replace the interpolation on scalar by linear algebra */
       for (nd=0; nd<ndata; nd++) {
         PetscInt  d;
         PetscReal dist,rbf;
@@ -497,8 +482,13 @@ static PetscErrorCode Test()
   DM               swarm_data,swarm_interp;
   PetscReal        overlap,radius,epsilon;
   PetscInt         dim,M,N,m,n,k;
+  PetscBool        exists;
+  const char       *output_dir = "output";
   PetscFunctionBeginUser;
 
+  PetscCall(TestDirectory(output_dir,'w',&exists));
+  if (!exists) { PetscCall(CreateDirectory(output_dir)); }
+  
   PetscCall(PartitionOfUnityCreate(&pu));
   PetscCall(PartitionCreate(pu,&partitions));
   PetscCall(DMDAGetInfo(pu->dap,&dim,&M,&N,NULL,&m,&n,NULL,NULL,NULL,NULL,NULL,NULL,NULL));
@@ -509,27 +499,32 @@ static PetscErrorCode Test()
   for (k=0; k<pu->npart; k++) { 
     PetscCall(PartitionSetEpsilon(partitions[k],epsilon)); // set the epsilon for the RBF kernel
   } 
+  PetscCall(PartitionsSetIndex(pu,partitions));
   PetscCall(CreateDataPoints(pu,&swarm_data));
   PetscCall(DMSwarmSetDataFunction(swarm_data));
   PetscCall(DMSwarmCreateInterpolationPoints(pu,&swarm_interp));
-  PetscCall(SetWeights(pu->dap,swarm_data,swarm_interp,epsilon));
+  PetscCall(SetWeights(pu,partitions,swarm_data,swarm_interp));
   PetscCall(PartitionFillDataPointsIdx_All(partitions,pu->npart,swarm_data));
   //PetscCall(PartitionTestGetters(pu,partitions));
 
-  PetscCall(SolveInterpolationCoefficients(partitions,pu->dap,swarm_data));
+  PetscCall(SolveInterpolationCoefficients(pu,partitions,swarm_data));
   PetscCall(PointwiseInterpolation(pu->dap,swarm_data,swarm_interp,partitions));
 
   /* Output */
   PetscCall(PartitionOfUnityMeshView(pu));
   /* output swarm data */
   {
+    char fname[PETSC_MAX_PATH_LEN];
     const char *fields_names[]= {"data"};
-    PetscCall(DMSwarmViewFieldsXDMF(swarm_data,"swarm_data_ptwise.xmf",1,fields_names));
+    PetscSNPrintf(fname, PETSC_MAX_PATH_LEN-1, "%s/swarm_data_ptwise.xmf", output_dir);
+    PetscCall(DMSwarmViewFieldsXDMF(swarm_data,fname,1,fields_names));
   }
   /* output interpolated data */
   {
+    char fname[PETSC_MAX_PATH_LEN];
     const char *fields_names[]= {"franke"};
-    PetscCall(DMSwarmViewFieldsXDMF(swarm_interp,"swarm_interp_ptwise.xmf",1,fields_names));
+    PetscSNPrintf(fname, PETSC_MAX_PATH_LEN-1, "%s/swarm_interp_ptwise.xmf", output_dir);
+    PetscCall(DMSwarmViewFieldsXDMF(swarm_interp,fname,1,fields_names));
   }
 
   PetscCall(DMDestroy(&swarm_data));

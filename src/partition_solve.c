@@ -3,7 +3,7 @@
 #include "partition_of_unity.h"
 #include "partition.h"
 #include "kernels_rbf.h"
-#include "interp_local.h"
+#include "partition_solve.h"
 
 PetscErrorCode PartitionAssembleRBFMatrix(
   Partition p, 
@@ -27,6 +27,8 @@ PetscErrorCode PartitionAssembleRBFMatrix(
   PetscCall(MatCreateDense(PETSC_COMM_SELF,PETSC_DECIDE,PETSC_DECIDE,npoints,npoints,NULL,&RBF));
   PetscCall(MatSetOptionsPrefix(RBF,"rbf_"));
   PetscCall(MatSetFromOptions(RBF));
+  // MatDenseGetArray(Mat A, PetscScalar *array[]) -> USE THIS DIRECTLY TO GET THE ARRAY
+  // Fill lower (or upper) triangular part of the matrix and copy to the upper (or lower) triangular part from the other part
   /* allocate matrix array and matrix indices */
   PetscMalloc2(npoints*npoints,&rbf,npoints,&mat_idx);
   /* compute the rbf matrix */
@@ -59,7 +61,7 @@ PetscErrorCode PartitionAssembleRBFMatrix(
   However, the matrix A is the same for all fields, so we can factorize it once
   and reuse the factorization for each field. 
 */
-PetscErrorCode PartitionFactorizeRBFMatrix(
+PetscErrorCode PartitionFactorRBFMatrix(
   Partition p, 
   PetscInt dim, 
   PetscReal coords[],
@@ -85,8 +87,35 @@ PetscErrorCode PartitionFactorizeRBFMatrix(
   PetscFunctionReturn(PETSC_SUCCESS);
 }
 
-static PetscErrorCode PartitionSetVecRHS(Partition p, PetscReal fvals[], Vec *B)
+PetscErrorCode PartitionSetUpRBFMatrix(
+  Partition p, 
+  PetscInt dim, 
+  PetscReal coords[],
+  PetscReal (*kernel_fn)(PetscReal,PetscReal)
+)
 {
   PetscFunctionBeginUser;
+  PartitionFactorRBFMatrix(p,dim,coords,kernel_fn,&p->A);
+  PetscFunctionReturn(PETSC_SUCCESS);
+}
+
+PetscErrorCode PartitionSetVecRHS(Partition p, PetscReal fvals[], Vec *B)
+{
+  Vec       RHS;
+  PetscInt  i,npoints;
+  PetscInt  *idx;
+  PetscReal *rhs;
+  PetscFunctionBeginUser;
+  PetscCall(PartitionGetDataPointsIdx(p,&npoints,&idx));
+  PetscCall(VecCreate(PETSC_COMM_SELF,&RHS));
+  PetscCall(VecSetSizes(RHS,PETSC_DECIDE,npoints));
+  PetscCall(VecSetFromOptions(RHS));
+  PetscCall(VecGetArray(RHS,&rhs));
+  /* set the right-hand side with the values of the function at the data points */
+  for (i=0; i<npoints; i++){ 
+    rhs[i] = fvals[ idx[i] ]; 
+  }
+  PetscCall(VecRestoreArray(RHS,&rhs));
+  *B = RHS;
   PetscFunctionReturn(PETSC_SUCCESS);
 }

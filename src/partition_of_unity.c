@@ -2,6 +2,9 @@
 #include "partition_of_unity.h"
 #include "partition.h"
 
+/* 
+  TODO: set the number of partitions (npart) from the DMDA not from the n[] array
+*/
 PetscErrorCode PUCreate(PartitionOfUnity *pu)
 {
   PartitionOfUnity p;

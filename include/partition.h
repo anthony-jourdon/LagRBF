@@ -8,10 +8,12 @@ Partition of Unity Method
 a partition is a node of the DMDA 
 */
 struct _p_Partition {
+  Mat       A; // RBF matrix for the partition
   Vec       X; // Vector to hold the coefficients for the partition interpolation
   PetscInt  ncells; // Number of cells connected to the partition
   PetscInt  *map; // Inverse map from partition to cells
   PetscInt  ndata; // Number of data points in the partition
+  PetscInt  idx; // Index of the partition
   PetscInt  *data_idx; // Indices of data points in the partition
   PetscReal epsilon; // Epsilon factor for the RBF kernel
 };
@@ -27,5 +29,6 @@ PetscErrorCode PartitionGetDataPointsIdx(Partition p, PetscInt *ndata, PetscInt 
 PetscErrorCode PartitionGetCoefficientsVec(Partition p, Vec *X);
 PetscErrorCode PartitionGetEpsilon(Partition p, PetscReal *epsilon);
 PetscErrorCode PartitionSetEpsilon(Partition p, PetscReal epsilon);
+PetscErrorCode PartitionsSetIndex(PartitionOfUnity pu, Partition *partitions);
 
 #endif
