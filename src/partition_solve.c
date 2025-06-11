@@ -119,3 +119,9 @@ PetscErrorCode PartitionSetVecRHS(Partition p, PetscReal fvals[], Vec *B)
   *B = RHS;
   PetscFunctionReturn(PETSC_SUCCESS);
 }
+
+PetscErrorCode PartitionSetMatRHS()
+{
+  PetscFunctionBeginUser;
+  PetscFunctionReturn(PETSC_SUCCESS);
+}
