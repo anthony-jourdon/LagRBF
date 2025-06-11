@@ -2,57 +2,70 @@
 #include "partition_of_unity.h"
 #include "partition.h"
 
-/* 
-  TODO: set the number of partitions (npart) from the DMDA not from the n[] array
-*/
 PetscErrorCode PUCreate(PartitionOfUnity *pu)
 {
   PartitionOfUnity p;
-  PetscInt         nn,d;
-  PetscBool        found;
-  char             prefix[PETSC_MAX_PATH_LEN],option_name[PETSC_MAX_PATH_LEN];
+  char             name[PETSC_MAX_PATH_LEN],option_name[PETSC_MAX_PATH_LEN];
   PetscFunctionBeginUser;
 
   PetscCall(PetscNew(&p));
   PetscCall(PetscSNPrintf(p->name, PETSC_MAX_PATH_LEN-1,"pu_mesh"));
-  PetscCall(PetscSNPrintf(prefix,  PETSC_MAX_PATH_LEN-1,"%s_", p->name));
-
-  p->dim = 2; // Default dimension
-  PetscCall(PetscSNPrintf(option_name, PETSC_MAX_PATH_LEN-1, "-dim"));
-  PetscCall(PetscOptionsGetInt(NULL,prefix,option_name,&p->dim,&found));
-  PetscCall(PetscSNPrintf(option_name,PETSC_MAX_PATH_LEN-1,"-%sdim",prefix));
-  if (!found) { PetscPrintf(PETSC_COMM_WORLD,"[[ WARNING ]]: Spatial dimension of the problem not provided. Using default value: %" PetscInt_FMT ". Use option %s to set it.\n",p->dim,option_name); }
-
-  nn = p->dim;
-  /* Number of partitions in each spatial dimension */
-  PetscCall(PetscMalloc1(p->dim,&p->n));
-  PetscCall(PetscSNPrintf(option_name, PETSC_MAX_PATH_LEN-1, "-n"));
-  PetscCall(PetscOptionsGetIntArray(NULL,prefix,option_name,p->n,&nn,&found));
-  PetscCall(PetscSNPrintf(option_name, PETSC_MAX_PATH_LEN-1, "-%sn",prefix));
-  PetscCheck(found,PETSC_COMM_WORLD,PETSC_ERR_ARG_WRONG,"Option %s not provided. Use it to set the number of partitions in each spatial dimension.",option_name);
-  PetscCheck(nn == p->dim,PETSC_COMM_WORLD,PETSC_ERR_ARG_SIZ,"Option %s. Expected %" PetscInt_FMT " entries, found %" PetscInt_FMT "",option_name,nn,p->dim);
-  /* Total number of partitions */
-  p->npart = 1; // Initialize
-  for (d=0; d<p->dim; d++) { p->npart *= p->n[d]; }
-
-  /* Bounding box */
-  /* Origin */
-  PetscCall(PetscMalloc1(p->dim,&p->O));
-  for (d=0; d<p->dim; d++) { p->O[d] = 0.0; } // Default origin
-  PetscCall(PetscSNPrintf(option_name, PETSC_MAX_PATH_LEN-1, "-O"));
-  PetscCall(PetscOptionsGetRealArray(NULL,prefix,option_name,p->O,&nn,&found));
-  PetscCall(PetscSNPrintf(option_name, PETSC_MAX_PATH_LEN-1, "-%sO",prefix));
-  if (found) { PetscCheck(nn == p->dim,PETSC_COMM_WORLD,PETSC_ERR_ARG_SIZ,"Option %s. Expected %" PetscInt_FMT " entries, found %" PetscInt_FMT "",option_name,p->dim,nn); }
-  /* Length */
-  PetscCall(PetscMalloc1(p->dim,&p->L));
-  for (d=0; d<p->dim; d++) { p->L[d] = 1.0; } // Default length
-  PetscCall(PetscSNPrintf(option_name, PETSC_MAX_PATH_LEN-1, "-L"));
-  PetscCall(PetscOptionsGetRealArray(NULL,prefix,option_name,p->L,&nn,&found));
-  PetscCall(PetscSNPrintf(option_name, PETSC_MAX_PATH_LEN-1, "-%sL",prefix));
-  if (found) { PetscCheck(nn == p->dim,PETSC_COMM_WORLD,PETSC_ERR_ARG_SIZ,"Option %s. Expected %" PetscInt_FMT " entries, found %" PetscInt_FMT "",option_name,p->dim,nn); }
+  p->dap = NULL;
+  p->dim = 0;
+  p->n = NULL;
+  p->nfields = 0;
+  p->npart = 0;
+  p->O = NULL;
+  p->L = NULL;
 
   *pu = p;
+  PetscFunctionReturn(PETSC_SUCCESS);
+}
 
+PetscErrorCode PUSetFromOptions(PartitionOfUnity pu)
+{
+  PetscInt  nn,d;
+  char      prefix[PETSC_MAX_PATH_LEN],option_name[PETSC_MAX_PATH_LEN];
+  PetscBool found;
+  PetscFunctionBeginUser;
+  PetscCheck(pu,PETSC_COMM_SELF,PETSC_ERR_ARG_NULL,"Partition of Unity structure is NULL. Call PUCreate() first.");
+  /* Set prefix for options */
+  PetscCall(PetscSNPrintf(prefix, PETSC_MAX_PATH_LEN-1, "%s_", pu->name));
+
+  /* Spatial dimension */
+  PetscCall(PetscSNPrintf(option_name, PETSC_MAX_PATH_LEN-1, "-%sdim", prefix));
+  PetscCall(PetscOptionsGetInt(NULL,NULL,option_name,&pu->dim,&found));
+  PetscCheck(found,PETSC_COMM_WORLD,PETSC_ERR_ARG_WRONG,"Option %s not provided. Use it to set the spatial dimension of the problem.",option_name);
+  PetscCheck(pu->dim >= 1 && pu->dim <= 3,PETSC_COMM_WORLD,PETSC_ERR_ARG_OUTOFRANGE,"Spatial dimension must be between 1 and 3. Found: %" PetscInt_FMT,pu->dim);
+  
+  /* Number of partition in each dimension */
+  PetscCall(PetscMalloc1(pu->dim,&pu->n));
+  nn = pu->dim; // Number of entries expected
+  PetscCall(PetscSNPrintf(option_name, PETSC_MAX_PATH_LEN-1, "-%sn", prefix));
+  PetscCall(PetscOptionsGetIntArray(NULL,NULL,option_name,pu->n,&nn,&found));
+  PetscCheck(found,PETSC_COMM_WORLD,PETSC_ERR_ARG_WRONG,"Option %s not provided. Use it to set the number of partitions in each spatial dimension.",option_name);
+  PetscCheck(nn == pu->dim,PETSC_COMM_WORLD,PETSC_ERR_ARG_SIZ,"Option %s. Expected %" PetscInt_FMT " entries, found %" PetscInt_FMT "",option_name,pu->dim,nn);
+  
+  /* Bounding box */
+  /* Origin */
+  PetscCall(PetscMalloc1(pu->dim,&pu->O));
+  for (d=0; d<pu->dim; d++) { pu->O[d] = 0.0; } // Default origin
+  PetscCall(PetscSNPrintf(option_name, PETSC_MAX_PATH_LEN-1, "-%sO",prefix));
+  PetscCall(PetscOptionsGetRealArray(NULL,NULL,option_name,pu->O,&nn,&found));
+  if (found) { PetscCheck(nn == pu->dim,PETSC_COMM_WORLD,PETSC_ERR_ARG_SIZ,"Option %s. Expected %" PetscInt_FMT " entries, found %" PetscInt_FMT "",option_name,pu->dim,nn); }
+  /* Length */
+  PetscCall(PetscMalloc1(pu->dim,&pu->L));
+  for (d=0; d<pu->dim; d++) { pu->L[d] = 1.0; } // Default length
+  PetscCall(PetscSNPrintf(option_name, PETSC_MAX_PATH_LEN-1, "-%sL",prefix));
+  PetscCall(PetscOptionsGetRealArray(NULL,NULL,option_name,pu->L,&nn,&found));
+  if (found) { PetscCheck(nn == pu->dim,PETSC_COMM_WORLD,PETSC_ERR_ARG_SIZ,"Option %s. Expected %" PetscInt_FMT " entries, found %" PetscInt_FMT "",option_name,pu->dim,nn); }
+
+  PetscFunctionReturn(PETSC_SUCCESS);
+}
+
+PetscErrorCode PULoadFromFile(PartitionOfUnity pu, const char filename[])
+{
+  PetscFunctionBeginUser;
   PetscFunctionReturn(PETSC_SUCCESS);
 }
 
@@ -93,10 +106,19 @@ PetscErrorCode PUCreateDMDA(PartitionOfUnity pu)
 PetscErrorCode PartitionOfUnityCreate(PartitionOfUnity *pu)
 {
   PartitionOfUnity p;
+  DM               da;
+  PetscInt         d,s[3],n[3];
   PetscFunctionBeginUser;
   PetscPrintf(PETSC_COMM_WORLD,"[[ %s ]]\n",PETSC_FUNCTION_NAME);
   PetscCall(PUCreate(&p));
+  PetscCall(PUSetFromOptions(p));
   PetscCall(PUCreateDMDA(p));
+  /* set the total number of partitions (local) */
+  PetscCall(PUGetDMDA(p,&da));
+  PetscCall(DMDAGetCorners(da,&s[0],&s[1],&s[2],&n[0],&n[1],&n[2]));
+  p->npart = 1; // Initialize
+  for (d=0; d<p->dim; d++) { p->npart *= n[d]; }
+
   *pu = p;
   PetscFunctionReturn(PETSC_SUCCESS);
 }
@@ -131,6 +153,14 @@ PetscErrorCode PUGetNPartitions(PartitionOfUnity pu, PetscInt *npart)
   PetscFunctionBeginUser;
   PetscCheck(pu,PETSC_COMM_SELF,PETSC_ERR_ARG_NULL,"Partition of Unity structure is NULL. Call PartitionOfUnityCreate() first.");
   if (npart) { *npart = pu->npart; }
+  PetscFunctionReturn(PETSC_SUCCESS);
+}
+
+PetscErrorCode PUGetDimension(PartitionOfUnity pu, PetscInt *dim)
+{
+  PetscFunctionBeginUser;
+  PetscCheck(pu,PETSC_COMM_SELF,PETSC_ERR_ARG_NULL,"Partition of Unity structure is NULL. Call PartitionOfUnityCreate() first.");
+  if (dim) { *dim = pu->dim; }
   PetscFunctionReturn(PETSC_SUCCESS);
 }
 
