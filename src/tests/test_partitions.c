@@ -1,6 +1,7 @@
 #include <petsc.h>
-#include "partition_of_unity.h"
-#include "partition.h"
+#include "lagrangian_rbf.h"
+//#include "partition_of_unity.h"
+//#include "partition.h"
 #include "kernels_rbf.h"
 #include "partition_solve.h"
 #include "io_utils.h"
@@ -185,7 +186,7 @@ static PetscErrorCode SetWeights(PartitionOfUnity pu, Partition *partitions, DM 
   DM            da,cda;
   Vec           coord;
   PetscReal     *LA_coords,*icoords,*weights,*sum_w;
-  PetscInt      i,j,si,sj,nx,ny,nip,dim;
+  PetscInt      i,si,sj,nx,ny,nip,dim;
   PetscInt      np_interp,npu;
   const char    **icoordFields;
   PetscFunctionBeginUser;
@@ -333,7 +334,7 @@ static PetscErrorCode SolveInterpolationCoefficients(
 {
   DMSwarmCellDM celldm;
   DM            da;
-  PetscInt      i,j,puidx,si,sj,nx,ny,npoints;
+  PetscInt      i,si,sj,nx,ny,npoints;
   PetscReal     *data_coords,*data;
   const char    **dcoordFields;
   PetscFunctionBeginUser;
@@ -350,20 +351,7 @@ static PetscErrorCode SolveInterpolationCoefficients(
   /* Get fields */
   PetscCall(DMSwarmGetField(swarm_data, dcoordFields[0], NULL, NULL, (void **)&data_coords));
   PetscCall(DMSwarmGetField(swarm_data,"data",NULL,NULL,(void **)&data));
-#if 0
-  /* Loop over partitions of unity */
-  for (j=0; j<ny; j++) {
-    for (i=0; i<nx; i++) {
-      Partition p;
-      puidx = i + j*nx; // partition index, rank local (not the global index)
 
-      p = partition[puidx];
-      if (p->ndata == 0) continue; // no data points in this partition, skip
-      PetscCall(SolveLocalCoefficients(p,data_coords,data));
-      //PetscCall(SolveLocalCoefficients_KSP(p,data_coords,data));
-    }
-  }
-#endif
   /* Loop over partitions */
   for (i=0; i<pu->npart; i++) {
     Partition p = partition[i];
@@ -477,6 +465,7 @@ static PetscErrorCode PointwiseInterpolation(
 
 static PetscErrorCode Test()
 {
+  LagRBFCtx        ctx;
   PartitionOfUnity pu;
   Partition        *partitions;
   DM               swarm_data,swarm_interp;
@@ -489,8 +478,13 @@ static PetscErrorCode Test()
   PetscCall(TestDirectory(output_dir,'w',&exists));
   if (!exists) { PetscCall(CreateDirectory(output_dir)); }
   
-  PetscCall(PartitionOfUnityCreate(&pu));
-  PetscCall(PartitionCreate(pu,&partitions));
+  PetscCall(LagRBFCtxCreate(&ctx));
+  PetscCall(LagRBF_PartitionOfUnityCreate(ctx));
+  PetscCall(LagRBF_PartitionCreate(ctx));
+
+  PetscCall(LagRBFGetPartitionOfUnity(ctx,&pu));
+  PetscCall(LagRBFGetPartitions(ctx,&partitions));
+
   PetscCall(DMDAGetInfo(pu->dap,&dim,&M,&N,NULL,&m,&n,NULL,NULL,NULL,NULL,NULL,NULL,NULL));
 
   overlap = 1.5;
@@ -528,8 +522,8 @@ static PetscErrorCode Test()
   }
 
   PetscCall(DMDestroy(&swarm_data));
-  PetscCall(PartitionDestroy(pu,&partitions));
-  PetscCall(PartitionOfUnityDestroy(&pu));
+  PetscCall(DMDestroy(&swarm_interp));
+  PetscCall(LagRBFCtxDestroy(&ctx));
 
   PetscFunctionReturn(PETSC_SUCCESS);
 }
