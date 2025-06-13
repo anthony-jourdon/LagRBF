@@ -17,3 +17,55 @@ PetscErrorCode SwarmCreatePIC(PartitionOfUnity pu, DM *sw)
   *sw = swarm;
   PetscFunctionReturn(PETSC_SUCCESS);
 }
+
+PetscErrorCode SwarmOutputCoordsPetscVec(DM sw, const char *prefix)
+{
+  DMSwarmCellDM celldm;
+  PetscViewer   viewer;
+  Vec           coords;
+  char          fname[PETSC_MAX_PATH_LEN];
+  const char    *dm_name,**coordFields;
+  PetscFunctionBeginUser;
+  /* filename */
+  PetscCall(PetscObjectGetName((PetscObject)sw,&dm_name));
+  if (prefix) { PetscCall(PetscSNPrintf(fname, PETSC_MAX_PATH_LEN-1,"%s/%s_coords.pbvec",prefix,dm_name)); }
+  else        { PetscCall(PetscSNPrintf(fname, PETSC_MAX_PATH_LEN-1,"%s_coords.pbvec", dm_name)); }
+  
+  /* Setup for coords */
+  PetscCall(DMSwarmGetCellDMActive(sw,&celldm));
+  PetscCall(DMSwarmCellDMGetCoordinateFields(celldm, NULL, &coordFields));
+  PetscCall(DMSwarmCreateGlobalVectorFromField(sw, coordFields[0], &coords));
+  /* Output */
+  PetscCall(PetscViewerCreate(PetscObjectComm((PetscObject)sw),&viewer));
+  PetscCall(PetscViewerSetType(viewer,PETSCVIEWERBINARY));
+  PetscCall(PetscViewerFileSetMode(viewer,FILE_MODE_WRITE));
+  PetscCall(PetscViewerFileSetName(viewer,fname));
+  PetscCall(VecView(coords,viewer));
+  PetscCall(PetscViewerDestroy(&viewer));
+
+  PetscFunctionReturn(PETSC_SUCCESS);
+}
+
+PetscErrorCode SwarmOutputFieldsPetscVec(DM sw, const char *prefix)
+{
+  PetscViewer viewer;
+  Vec         dvec;
+  char        fname[PETSC_MAX_PATH_LEN];
+  const char  *dm_name;
+  PetscFunctionBeginUser;
+  /* filename */
+  PetscCall(PetscObjectGetName((PetscObject)sw,&dm_name));
+  if (prefix) { PetscCall(PetscSNPrintf(fname, PETSC_MAX_PATH_LEN-1,"%s/%s_fields.pbvec",prefix,dm_name)); }
+  else        { PetscCall(PetscSNPrintf(fname, PETSC_MAX_PATH_LEN-1,"%s_fields.pbvec", dm_name)); }
+  /* Generate a global vector from fields */
+  PetscCall(DMSwarmCreateGlobalVectorFromField(sw, "fields", &dvec));
+  /* Output */
+  PetscCall(PetscViewerCreate(PetscObjectComm((PetscObject)sw),&viewer));
+  PetscCall(PetscViewerSetType(viewer,PETSCVIEWERBINARY));
+  PetscCall(PetscViewerFileSetMode(viewer,FILE_MODE_WRITE));
+  PetscCall(PetscViewerFileSetName(viewer,fname));
+  PetscCall(VecView(dvec,viewer));
+  PetscCall(PetscViewerDestroy(&viewer));
+
+  PetscFunctionReturn(PETSC_SUCCESS);
+}

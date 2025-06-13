@@ -1,6 +1,8 @@
 #include <petsc.h>
 #include "lagrangian_rbf.h"
 #include "swarm_utils.h"
+#include "kernels_rbf.h"
+#include "swarm_interp.h"
 
 static PetscErrorCode SwarmInterpCreate(LagRBFCtx ctx, DM *sw)
 {
@@ -42,7 +44,7 @@ static PetscErrorCode SwarmInterpSetUniformCoordinates(PartitionOfUnity pu, DM s
   
   PetscCall(PUGetDMDA(pu,&da));
   PetscCall(DMGetBoundingBox(da,O,L));
-  PetscCall(DMGetOptionsPrefix(da,&prefix));
+  PetscCall(DMGetOptionsPrefix(sw,&prefix));
   d = pu->dim;
   PetscCall(PetscMalloc1(d,&m));
   PetscCall(PetscOptionsGetIntArray(NULL,prefix,"-npi",m,&d,&found));
@@ -59,6 +61,15 @@ static PetscErrorCode SwarmInterpLoadCoordinates(PartitionOfUnity pu, DM sw)
   PetscFunctionBeginUser;
   PetscFunctionReturn(PETSC_SUCCESS);
 }
+
+/* For mpi implementation, test:
+  - Get the total number of points in the swarm (the global size over all ranks)
+  - Allocate the weights array with the total size
+  - Get a map from local index to global index for the points in the swarm
+  - Loop over the local points and compute the local weights and the local sum
+  - Communicate the local sums to all ranks with MPI_Allreduce
+  - Normalize the weights by dividing each local weight by the global sum of weights for that point
+*/
 
 static PetscErrorCode SwarmInterpSetWeights_SEQ(LagRBFCtx ctx, DM sw)
 {
@@ -77,6 +88,8 @@ static PetscErrorCode SwarmInterpSetWeights_SEQ(LagRBFCtx ctx, DM sw)
   PetscCall(PUGetDMDA(pu,&da));
   PetscCall(PUGetDimension(pu,&dim));
   PetscCall(PUGetNPartitions(pu,&npart));
+
+  
 
   /* Interpolation points */
   PetscCall(DMSwarmGetLocalSize(sw,&npoints)); // rank local points
@@ -152,9 +165,20 @@ PetscErrorCode SwarmInterpSetWeights(LagRBFCtx ctx, DM sw)
   PetscFunctionReturn(PETSC_SUCCESS);
 }
 
+PetscErrorCode SwarmInterpAssignUniquePointIndex(DM sw, PetscInt start_idx, PetscInt end_idx)
+{
+  PetscInt npoints;
+  PetscInt *pidx;
+  PetscFunctionBeginUser;
+
+  PetscCall(DMSwarmGetLocalSize(sw,&npoints)); // rank local points
+  PetscCall(DMSwarmGetField(sw, "pidx", NULL, NULL, (void **)&pidx));
+
+  PetscFunctionReturn(PETSC_SUCCESS);
+}
+
 PetscErrorCode SwarmInterpSetUp(LagRBFCtx ctx, DM *sw)
 {
-  PartitionOfUnity pu;
   DM               swarm;
   PetscFunctionBeginUser;
 
