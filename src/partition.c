@@ -1,5 +1,7 @@
 #include "partition_of_unity.h"
 #include "partition.h"
+#include "partition_solve.h"
+#include "kernels_rbf.h"
 
 /*
   Create the inverse map from partition to cells.
@@ -121,7 +123,7 @@ PetscErrorCode PartitionCreate_SinglePartition(Partition *partition)
   PetscFunctionBeginUser;
 
   PetscCall(PetscNew(&p));
-  VecCreate(PETSC_COMM_SELF,&p->X); // Vector holding coefficients for the partition interpolation
+  p->X        = NULL; // Matrix holding coefficients for the partition interpolation
   p->A        = NULL; // RBF matrix for the partition
   p->ncells   = 0; // Initialize number of cells connected to the partition
   p->map      = NULL; // Initialize the map
@@ -143,7 +145,7 @@ PetscErrorCode PartitionDestroy_SinglePartition(Partition *partition)
   if (!p)          { PetscFunctionReturn(PETSC_SUCCESS); }
   if (p->map)      { PetscCall(PetscFree(p->map));       }
   if (p->data_idx) { PetscCall(PetscFree(p->data_idx));  }
-  if (p->X)        { PetscCall(VecDestroy(&p->X));       }
+  if (p->X)        { PetscCall(MatDestroy(&p->X));       }
   if (p->A)        { PetscCall(MatDestroy(&p->A));       }
   PetscCall(PetscFree(p));
   *partition = NULL;
@@ -216,13 +218,51 @@ PetscErrorCode PartitionFillDataPointsIdx(Partition p, DM swarm)
   PetscFunctionReturn(PETSC_SUCCESS);
 }
 
-PetscErrorCode PartitionFillDataPointsIdx_All(Partition *partitions, PetscInt npart, DM swarm)
+static PetscErrorCode PartitionCreateCoefficientsMat(Partition p, PetscInt nfields)
 {
-  PetscInt n;
+  PetscInt npoints;
   PetscFunctionBeginUser;
+  PetscCheck(p,PETSC_COMM_SELF,PETSC_ERR_ARG_NULL,"Partition structure is NULL. Call PartitionCreate() first.");
+  PetscCheck(!p->X,PETSC_COMM_SELF,PETSC_ERR_ARG_WRONGSTATE,"Coefficients matrix already created.");
+  PetscCall(PartitionGetDataPointsIdx(p,&npoints,NULL));
+  PetscCall(MatCreateDense(PETSC_COMM_SELF,PETSC_DECIDE,PETSC_DECIDE,npoints,nfields,NULL,&p->X));
+  PetscFunctionReturn(PETSC_SUCCESS);
+}
+
+PetscErrorCode PartitionSetUp_All(Partition *partitions, PetscInt npart, DM swarm)
+{
+  DMSwarmCellDM celldm;
+  PetscInt      n,dim,nfields;
+  PetscReal     *coords,*values;
+  const char    **coordFieldsName;
+  PetscFunctionBeginUser;
+  PetscCheck(swarm,PETSC_COMM_SELF,PETSC_ERR_ARG_NULL,"Swarm is NULL. Create the data swarm first.");
+  /* Swarm */
   PetscCall(DMSwarmSortGetAccess(swarm));
-  for (n=0; n<npart; n++) { PetscCall(PartitionFillDataPointsIdx(partitions[n],swarm)); }
+  PetscCall(DMGetDimension(swarm,&dim));
+  /* Setup for coords */
+  PetscCall(DMSwarmGetCellDMActive(swarm, &celldm));
+  PetscCall(DMSwarmCellDMGetCoordinateFields(celldm, NULL, &coordFieldsName));
+  /* Get fields */
+  PetscCall(DMSwarmGetField(swarm, coordFieldsName[0], NULL, NULL, (void **)&coords));
+  PetscCall(DMSwarmGetField(swarm,"fields",&nfields,NULL,(void **)&values));
+  /* 
+    For each partition:
+      - fill the data points indices belonging to the partition
+      - create the matrix to hold the solution
+      - fill and factor the RBF matrix for the partition
+  */
+  for (n=0; n<npart; n++) {
+    Partition p = partitions[n];
+    PetscCall(PartitionFillDataPointsIdx(p,swarm));
+    PetscCall(PartitionCreateCoefficientsMat(p,nfields));
+    PetscCall(PartitionSetUpRBFMatrix(p,dim,coords,KernelWendlandC2));
+  }
+  /* Restore */
   PetscCall(DMSwarmSortRestoreAccess(swarm));
+  PetscCall(DMSwarmRestoreField(swarm,coordFieldsName[0],NULL,NULL,(void **)&coords));
+  PetscCall(DMSwarmRestoreField(swarm,"fields",&nfields,NULL,(void **)&values));
+  
   PetscFunctionReturn(PETSC_SUCCESS);
 }
 
@@ -245,11 +285,19 @@ PetscErrorCode PartitionGetDataPointsIdx(Partition p, PetscInt *ndata, PetscInt 
   PetscFunctionReturn(PETSC_SUCCESS);
 }
 
-PetscErrorCode PartitionGetCoefficientsVec(Partition p, Vec *X)
+PetscErrorCode PartitionGetCoefficientsMat(Partition p, Mat *X)
 {
   PetscFunctionBeginUser;
   PetscCheck(p,PETSC_COMM_SELF,PETSC_ERR_ARG_NULL,"Partition structure is NULL. Call PartitionCreate() first.");
   if (X) { *X = p->X; }
+  PetscFunctionReturn(PETSC_SUCCESS);
+}
+
+PetscErrorCode PartitionGetRBFMatrix(Partition p, Mat *A)
+{
+  PetscFunctionBeginUser;
+  PetscCheck(p,PETSC_COMM_SELF,PETSC_ERR_ARG_NULL,"Partition structure is NULL. Call PartitionCreate() first.");
+  if (A) { *A = p->A; }
   PetscFunctionReturn(PETSC_SUCCESS);
 }
 
