@@ -5,85 +5,72 @@
 #include "kernels_rbf.h"
 #include "partition_solve.h"
 
-PetscErrorCode PartitionAssembleRBFMatrix(
+static PetscErrorCode PartitionCreateRBFMatrix(Partition p)
+{
+  PetscFunctionBeginUser;
+  PetscCheck(p,PETSC_COMM_SELF,PETSC_ERR_ARG_NULL,"Partition structure is NULL. Call PartitionCreate() first.");
+  PetscCheck(!p->A,PETSC_COMM_SELF,PETSC_ERR_ARG_WRONGSTATE,"RBF matrix already created.");
+  PetscCall(MatCreateDense(PETSC_COMM_SELF,PETSC_DECIDE,PETSC_DECIDE,p->ndata,p->ndata,NULL,&p->A));
+  PetscFunctionReturn(PETSC_SUCCESS);
+}
+
+static PetscErrorCode PartitionAssembleRBFMatrix(
   Partition p, 
   PetscInt dim, 
   PetscReal coords[], 
-  PetscReal (*kernel_fn)(PetscReal,PetscReal), 
-  Mat *A
+  PetscReal (*kernel_fn)(PetscReal,PetscReal)
 )
 {
-  Mat            RBF;
-  PetscInt       i,j,d,npoints;
-  PetscInt       *pidx,*mat_idx;
-  PetscReal      epsilon;
-  PetscReal      *rbf;
+  Mat       A;
+  PetscInt  i,j,d,npoints;
+  PetscInt  *pidx;
+  PetscReal epsilon;
+  PetscReal *rbf;
   PetscFunctionBeginUser;
 
-  /* Get the data points belonging to this partition */
+  PetscCall(PartitionGetRBFMatrix(p,&A));
+  PetscCheck(A,PETSC_COMM_SELF,PETSC_ERR_ARG_WRONGSTATE,"RBF matrix not created yet. Call PartitionCreateRBFMatrix() first.");
   PetscCall(PartitionGetDataPointsIdx(p,&npoints,&pidx));
-  PartitionGetEpsilon(p,&epsilon);
-  /* Create the rbf matrix to solve for local interpolation coefficients */
-  PetscCall(MatCreateDense(PETSC_COMM_SELF,PETSC_DECIDE,PETSC_DECIDE,npoints,npoints,NULL,&RBF));
-  PetscCall(MatSetOptionsPrefix(RBF,"rbf_"));
-  PetscCall(MatSetFromOptions(RBF));
-  // MatDenseGetArray(Mat A, PetscScalar *array[]) -> USE THIS DIRECTLY TO GET THE ARRAY
-  // Fill lower (or upper) triangular part of the matrix and copy to the upper (or lower) triangular part from the other part
-  /* allocate matrix array and matrix indices */
-  PetscMalloc2(npoints*npoints,&rbf,npoints,&mat_idx);
-  /* compute the rbf matrix */
-  for (i=0; i<npoints; i++){
-    mat_idx[i] = i;
-    for (j=0; j<npoints; j++) {
+  PetscCall(PartitionGetEpsilon(p,&epsilon));
+  PetscCall(MatDenseGetArray(A,&rbf));
+  /* Fill the matrix */
+  for (i=0; i<npoints; i++) {
+    for (j=i; j<npoints; j++) {
       PetscReal dist = 0.0;
+      /* Compute the distance between points */
       for (d=0; d<dim; d++) {
         dist += (coords[ dim*pidx[i] + d] - coords[ dim*pidx[j] + d]) * (coords[ dim*pidx[i] + d] - coords[ dim*pidx[j] + d]);
       }
       dist = PetscSqrtReal(dist);
+      /* Fill the upper triangular part with the RBF kernel */
       rbf[npoints*i + j] = kernel_fn(dist,epsilon);
+      /* Copy the value to the lower triangular part (diagonal already filled) */
+      if (i != j) {
+        rbf[npoints*j + i] = rbf[npoints*i + j];
+      }
     }
   }
-  /* Set the values in the matrix */
-  PetscCall(MatSetValues(RBF,npoints,mat_idx,npoints,mat_idx,rbf,ADD_VALUES));
-  PetscCall(MatAssemblyBegin(RBF,MAT_FINAL_ASSEMBLY));
-  PetscCall(MatAssemblyEnd(RBF,MAT_FINAL_ASSEMBLY));
-  /* Set the output matrix */
-  *A = RBF;
-  /* Clean-up */
-  PetscCall(PetscFree(rbf));
-  PetscCall(PetscFree(mat_idx));
+  PetscCall(MatDenseRestoreArray(A,&rbf));
+
   PetscFunctionReturn(PETSC_SUCCESS);
 }
 
-/*
-  We want to interpolate different fields, therefore it is required to 
-  solve the system Ax = b as much as there are fields to interpolate.
-  However, the matrix A is the same for all fields, so we can factorize it once
-  and reuse the factorization for each field. 
-*/
-PetscErrorCode PartitionFactorRBFMatrix(
-  Partition p, 
-  PetscInt dim, 
-  PetscReal coords[],
-  PetscReal (*kernel_fn)(PetscReal,PetscReal),
-  Mat *A
-)
+static PetscErrorCode PartitionFactorRBFMatrix(Partition p)
 {
   MatFactorInfo factinfo;
-  Mat           RBF;
   IS            perm,cperm;
-  
+  Mat           A;
   PetscFunctionBeginUser;
-  /* Fill the RBF matrix */
-  PetscCall(PartitionAssembleRBFMatrix(p,dim,coords,kernel_fn,&RBF));
-  PetscCall(MatGetOrdering(RBF, MATORDERINGNATURAL, &perm, &cperm));
+
+  PetscCall(PartitionGetRBFMatrix(p,&A));
+  PetscCheck(A,PETSC_COMM_SELF,PETSC_ERR_ARG_WRONGSTATE,"RBF matrix not created yet. Call PartitionCreateRBFMatrix() first.");
+  PetscCall(MatGetOrdering(A, MATORDERINGNATURAL, &perm, &cperm));
   PetscCall(ISDestroy(&cperm));
   /* initialize factinfo */
   PetscCall(MatFactorInfoInitialize(&factinfo));
   /* factor */
-  PetscCall(MatCholeskyFactor(RBF,perm,&factinfo));
+  PetscCall(MatCholeskyFactor(A,perm,&factinfo));
   PetscCall(ISDestroy(&perm));
-  *A = RBF;
   PetscFunctionReturn(PETSC_SUCCESS);
 }
 
@@ -95,33 +82,96 @@ PetscErrorCode PartitionSetUpRBFMatrix(
 )
 {
   PetscFunctionBeginUser;
-  PartitionFactorRBFMatrix(p,dim,coords,kernel_fn,&p->A);
+  PetscCall(PartitionCreateRBFMatrix(p));
+  PetscCall(PartitionAssembleRBFMatrix(p,dim,coords,kernel_fn));
+  PetscCall(PartitionFactorRBFMatrix(p));
   PetscFunctionReturn(PETSC_SUCCESS);
 }
 
-PetscErrorCode PartitionSetVecRHS(Partition p, PetscReal fvals[], Vec *B)
+PetscErrorCode PartitionMatSetRHS(Partition p, PetscInt nfields, PetscReal fval[], Mat *B)
 {
-  Vec       RHS;
-  PetscInt  i,npoints;
+  Mat       RHS;
+  PetscInt  f,np,npoints;
   PetscInt  *idx;
-  PetscReal *rhs;
+  PetscReal *LA_rhs;
   PetscFunctionBeginUser;
   PetscCall(PartitionGetDataPointsIdx(p,&npoints,&idx));
-  PetscCall(VecCreate(PETSC_COMM_SELF,&RHS));
-  PetscCall(VecSetSizes(RHS,PETSC_DECIDE,npoints));
-  PetscCall(VecSetFromOptions(RHS));
-  PetscCall(VecGetArray(RHS,&rhs));
-  /* set the right-hand side with the values of the function at the data points */
-  for (i=0; i<npoints; i++){ 
-    rhs[i] = fvals[ idx[i] ]; 
+  PetscCall(MatCreateDense(PETSC_COMM_SELF,PETSC_DECIDE,PETSC_DECIDE,npoints,nfields,NULL,&RHS));
+  PetscCall(MatDenseGetArray(RHS,&LA_rhs));
+  /* 
+    Fill the matrix 
+    WARNING: The array accessed by MatDenseGetArray() is stored column by column (not the usual way)
+
+      -----> fields 
+    | x00 x01 ... x0f |     
+    | x10 x11 ... x1f |    [npoints of field 0][npoints of field 1] ... [npoints of field f] 
+    | x20 x21 ... x2f | ==> x00 x10 x20 ... x0n x01 x11 x21 ... xn1 ... x0f x1f x2f ... xnf
+    | ... ... ... ... |
+    | xn0 xn1 ... xnf |
+
+  */
+  for (np=0; np<npoints; np++) {
+    for (f=0; f<nfields; f++) {
+      LA_rhs[f*npoints + np] = fval[ idx[np]*nfields + f ]; // set the RHS values
+    }
   }
-  PetscCall(VecRestoreArray(RHS,&rhs));
+  PetscCall(MatDenseRestoreArray(RHS,&LA_rhs));
   *B = RHS;
   PetscFunctionReturn(PETSC_SUCCESS);
 }
 
-PetscErrorCode PartitionSetMatRHS()
+static PetscErrorCode PartitionMatSetRHS_Columnwise(Partition p, PetscInt nfields, PetscReal fval[], Mat *B)
 {
+  Mat       RHS;
+  PetscInt  f,np,npoints;
+  PetscInt  *idx;
+  PetscReal *LA_rhs;
   PetscFunctionBeginUser;
+  PetscCall(PartitionGetDataPointsIdx(p,&npoints,&idx));
+  PetscCall(MatCreateDense(PETSC_COMM_SELF,PETSC_DECIDE,PETSC_DECIDE,npoints,nfields,NULL,&RHS));
+  for (f=0; f<nfields; f++) {
+    PetscCall(MatDenseGetColumn(RHS,f,&LA_rhs));
+    for (np=0; np<npoints; np++) {
+      LA_rhs[np] = fval[ idx[np]*nfields + f ]; // set the RHS values
+    }
+    PetscCall(MatDenseRestoreColumn(RHS,&LA_rhs));
+  }
+  *B = RHS;
+  PetscFunctionReturn(PETSC_SUCCESS);
+}
+
+static PetscErrorCode PartitionSolveLocalCoefficients(Partition p, PetscInt nfields, PetscReal fval[])
+{
+  Mat      A,B,X;
+  PetscFunctionBeginUser;
+
+  PetscCall(PartitionGetCoefficientsMat(p,&X));
+  PetscCall(PartitionGetRBFMatrix(p,&A));
+  PetscCall(PartitionMatSetRHS(p,nfields,fval,&B));
+  /* solve the linear system A*X = B */
+  PetscCall(MatMatSolve(A,B,X));
+  /* Clean-up */
+  PetscCall(MatDestroy(&B));
+
+  PetscFunctionReturn(PETSC_SUCCESS);
+}
+
+PetscErrorCode PartitionSolveInterpolationCoefficients(PartitionOfUnity pu, Partition *partitions, DM swarm)
+{
+  PetscInt  n,npart,nfields;
+  PetscReal *values;
+  PetscFunctionBeginUser;
+  PetscPrintf(PETSC_COMM_WORLD,"[[ %s ]]\n",PETSC_FUNCTION_NAME);
+  PetscCall(PUGetNPartitions(pu,&npart));
+  PetscCall(DMSwarmGetField(swarm,"fields",&nfields,NULL,(void **)&values));
+  for (n=0; n<npart; n++) {
+    Partition p = partitions[n];
+    PetscInt  npoints;
+    PetscCall(PartitionGetDataPointsIdx(p,&npoints,NULL));
+    if (npoints == 0) continue; // no data points in this partition, skip
+    PetscCall(PartitionSolveLocalCoefficients(p,nfields,values));
+  }
+  /* Restore the field */
+  PetscCall(DMSwarmRestoreField(swarm,"fields",&nfields,NULL,(void **)&values));
   PetscFunctionReturn(PETSC_SUCCESS);
 }

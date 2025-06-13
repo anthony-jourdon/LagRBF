@@ -4,9 +4,8 @@
 #include <petsc.h>
 #include "partition.h"
 
-PetscErrorCode PartitionAssembleRBFMatrix(Partition p,PetscInt dim,PetscReal coords[],PetscReal (*kernel_fn)(PetscReal,PetscReal), Mat *A);
-PetscErrorCode PartitionFactorRBFMatrix(Partition p,PetscInt dim,PetscReal coords[],PetscReal (*kernel_fn)(PetscReal,PetscReal),Mat *A);
-PetscErrorCode PartitionSetUpRBFMatrix(Partition p,PetscInt dim,PetscReal coords[],PetscReal (*kernel_fn)(PetscReal,PetscReal));
-PetscErrorCode PartitionSetVecRHS(Partition p, PetscReal fvals[], Vec *B);
+PetscErrorCode PartitionSetUpRBFMatrix(Partition p, PetscInt dim, PetscReal coords[],PetscReal (*kernel_fn)(PetscReal,PetscReal));
+PetscErrorCode PartitionMatSetRHS(Partition p, PetscInt nfields, PetscReal fval[], Mat *B);
+PetscErrorCode PartitionSolveInterpolationCoefficients(PartitionOfUnity pu, Partition *partitions, DM swarm);
 
 #endif
