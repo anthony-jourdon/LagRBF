@@ -34,7 +34,7 @@ PetscErrorCode LagRBFCtxDestroy(LagRBFCtx *ctx)
 
 PetscErrorCode LagRBF_PartitionOfUnityCreate(LagRBFCtx ctx)
 {
-  PartitionOfUnity pu;
+  PartitionOfUnity pu = NULL;
   PetscFunctionBeginUser;
   PetscCall(PartitionOfUnityCreate(&pu));
   ctx->pu = pu;
@@ -43,7 +43,7 @@ PetscErrorCode LagRBF_PartitionOfUnityCreate(LagRBFCtx ctx)
 
 PetscErrorCode LagRBF_PartitionCreate(LagRBFCtx ctx)
 {
-  PartitionOfUnity pu;
+  PartitionOfUnity pu = NULL;
   Partition        *partitions;
   PetscFunctionBeginUser;
   PetscCall(LagRBFGetPartitionOfUnity(ctx,&pu));

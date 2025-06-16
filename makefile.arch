@@ -21,5 +21,5 @@
 # Default
 #export LAG_CFLAGS = -O2 -Wall -fstrict-aliasing -funroll-loops #-std=gnu99
 # <example> Enforce debug build (independent of petsc configuration)
-export LAG_CFLAGS	= -O0 -Wall -g #-std=gnu99
-#export LAG_CFLAGS	= -O3 -Wall -fast -ftree-vectorize -ftree-vectorizer-verbose=4 -fstrict-aliasing -funroll-loops #-std=gnu99 
+#export LAG_CFLAGS	= -O0 -Wall -g #-std=gnu99
+export LAG_CFLAGS	= -O3 -Wall -Ofast -ftree-vectorize -ftree-vectorizer-verbose=4 -fstrict-aliasing -funroll-loops #-std=gnu99 

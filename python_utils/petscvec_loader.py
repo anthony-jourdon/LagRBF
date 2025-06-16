@@ -19,6 +19,16 @@ def PetscVecLoadBlockSizeFromFile(fname):
     block_size = int(line.split()[1])
   return block_size
 
+def PetscVecLoad(fname, **kwargs):
+  v = PetscVecLoadFromFile(fname, **kwargs)
+  try:
+    bs = PetscVecLoadBlockSizeFromFile(fname + '.info')
+    v = np.reshape(v, (-1, bs))
+  except FileNotFoundError:
+    return v
+  return v
+
+
 def test():
   import matplotlib.pyplot as plt
   root = os.path.dirname(__file__)
