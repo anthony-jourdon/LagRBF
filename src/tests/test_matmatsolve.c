@@ -493,6 +493,7 @@ static PetscErrorCode PointWiseInterpolation_AVX256(PartitionOfUnity pu, Partiti
 
       // Step 1: Compute RBF values for this point
       PetscCall(PetscMalloc1(ndata,&rbf_val)); // consider allocating an array of size max_ndata outside the pointwise loop
+#if 0
       // 1. Try to vectorize this loop
       // 2. Try to fuse the 2 loops
       for (nd=0; nd<ndata; nd++) {
@@ -502,6 +503,103 @@ static PetscErrorCode PointWiseInterpolation_AVX256(PartitionOfUnity pu, Partiti
           dist += delta * delta;
         }
         rbf_val[nd] = KernelWendlandC2(PetscSqrtReal(dist), p->epsilon);
+      }
+#endif
+      nd_aligned = (ndata / 4) * 4;
+      double dist2_buf[4] __attribute__((aligned(32)));
+      __m256d eps_v = _mm256_set1_pd(p->epsilon);
+      __m256d one_v = _mm256_set1_pd(1.0);
+
+      if (dim == 2) {
+        for (nd = 0; nd < nd_aligned; nd += 4) {
+          __m256d dx = _mm256_set_pd(
+            coords_d[2*data_idx[nd+3] + 0] - coords_i[2*np + 0],
+            coords_d[2*data_idx[nd+2] + 0] - coords_i[2*np + 0],
+            coords_d[2*data_idx[nd+1] + 0] - coords_i[2*np + 0],
+            coords_d[2*data_idx[nd+0] + 0] - coords_i[2*np + 0]
+          );
+          __m256d dy = _mm256_set_pd(
+            coords_d[2*data_idx[nd+3] + 1] - coords_i[2*np + 1],
+            coords_d[2*data_idx[nd+2] + 1] - coords_i[2*np + 1],
+            coords_d[2*data_idx[nd+1] + 1] - coords_i[2*np + 1],
+            coords_d[2*data_idx[nd+0] + 1] - coords_i[2*np + 1]
+          );
+
+          __m256d dist2 = _mm256_fmadd_pd(dx, dx, _mm256_mul_pd(dy, dy));
+          _mm256_store_pd(dist2_buf, dist2);
+
+          // Now apply KernelWendlandC2
+          __m256d r_v = _mm256_set_pd(
+            PetscSqrtReal(dist2_buf[3]),
+            PetscSqrtReal(dist2_buf[2]),
+            PetscSqrtReal(dist2_buf[1]),
+            PetscSqrtReal(dist2_buf[0])
+          );
+
+          __m256d u = _mm256_sub_pd(one_v, _mm256_mul_pd(eps_v, r_v));
+          __m256d mask = _mm256_cmp_pd(u, _mm256_setzero_pd(), _CMP_GE_OQ);
+          __m256d u2 = _mm256_mul_pd(u, u);
+          __m256d u4 = _mm256_mul_pd(u2, u2);
+          __m256d four_u = _mm256_mul_pd(_mm256_set1_pd(4.0), u);
+          __m256d inner = _mm256_sub_pd(_mm256_set1_pd(5.0), four_u);
+          __m256d phi = _mm256_mul_pd(u4, inner);
+          phi = _mm256_blendv_pd(_mm256_setzero_pd(), phi, mask);
+          _mm256_storeu_pd(&rbf_val[nd], phi); // rbf not aligned, consider aligning to replace by _mm256_store_pd()
+        }
+      } else if (dim == 3) {
+        for (nd = 0; nd < nd_aligned; nd += 4) {
+          __m256d dx = _mm256_set_pd(
+            coords_d[3*data_idx[nd+3] + 0] - coords_i[3*np + 0],
+            coords_d[3*data_idx[nd+2] + 0] - coords_i[3*np + 0],
+            coords_d[3*data_idx[nd+1] + 0] - coords_i[3*np + 0],
+            coords_d[3*data_idx[nd+0] + 0] - coords_i[3*np + 0]
+          );
+          __m256d dy = _mm256_set_pd(
+            coords_d[3*data_idx[nd+3] + 1] - coords_i[3*np + 1],
+            coords_d[3*data_idx[nd+2] + 1] - coords_i[3*np + 1],
+            coords_d[3*data_idx[nd+1] + 1] - coords_i[3*np + 1],
+            coords_d[3*data_idx[nd+0] + 1] - coords_i[3*np + 1]
+          );
+          __m256d dz = _mm256_set_pd(
+            coords_d[3*data_idx[nd+3] + 2] - coords_i[3*np + 2],
+            coords_d[3*data_idx[nd+2] + 2] - coords_i[3*np + 2],
+            coords_d[3*data_idx[nd+1] + 2] - coords_i[3*np + 2],
+            coords_d[3*data_idx[nd+0] + 2] - coords_i[3*np + 2]
+          );
+
+          __m256d dist2 = _mm256_fmadd_pd(dx, dx,
+                              _mm256_fmadd_pd(dy, dy,
+                                              _mm256_mul_pd(dz, dz)));
+          _mm256_store_pd(dist2_buf, dist2);
+
+          __m256d r_v = _mm256_set_pd(
+            PetscSqrtReal(dist2_buf[3]),
+            PetscSqrtReal(dist2_buf[2]),
+            PetscSqrtReal(dist2_buf[1]),
+            PetscSqrtReal(dist2_buf[0])
+          );
+
+          __m256d u = _mm256_sub_pd(one_v, _mm256_mul_pd(eps_v, r_v));
+          __m256d mask = _mm256_cmp_pd(u, _mm256_setzero_pd(), _CMP_GE_OQ);
+          __m256d u2 = _mm256_mul_pd(u, u);
+          __m256d u4 = _mm256_mul_pd(u2, u2);
+          __m256d four_u = _mm256_mul_pd(_mm256_set1_pd(4.0), u);
+          __m256d inner = _mm256_sub_pd(_mm256_set1_pd(5.0), four_u);
+          __m256d phi = _mm256_mul_pd(u4, inner);
+          phi = _mm256_blendv_pd(_mm256_setzero_pd(), phi, mask);
+          _mm256_storeu_pd(&rbf_val[nd], phi); // rbf not aligned, consider aligning to replace by _mm256_store_pd()
+        }
+      }
+      // Remainder (optional)
+      for (nd = nd_aligned; nd < ndata; ++nd) {
+        PetscReal dist = 0.0;
+        for (PetscInt d = 0; d < dim; ++d) {
+          PetscReal delta = coords_i[dim*np + d] - coords_d[dim*data_idx[nd] + d];
+          dist += delta * delta;
+        }
+        PetscReal r = PetscSqrtReal(dist);
+        PetscReal u = 1.0 - p->epsilon * r;
+        rbf_val[nd] = (u < 0.0) ? 0.0 : PetscPowReal(u, 4) * (5.0 - 4.0 * u);
       }
 
       // Step 2: Vectorized loop over ndata in chunks of 4
@@ -513,10 +611,17 @@ static PetscErrorCode PointWiseInterpolation_AVX256(PartitionOfUnity pu, Partiti
           __m256d coeff_v = _mm256_load_pd(&coeffs[f * ndata + nd]);           // aligned load
           accum = _mm256_fmadd_pd(rbf_v, coeff_v, accum);
         }
+#if 0
         // Horizontal sum of accum
         double tmp[4] __attribute__((aligned(32)));
         _mm256_store_pd(tmp, accum);
         interpolant[f] = tmp[0] + tmp[1] + tmp[2] + tmp[3]; // See how to improve this
+#endif
+        __m128d hi128  = _mm256_extractf128_pd(accum, 1);
+        __m128d lo128  = _mm256_castpd256_pd128(accum);
+        __m128d sum128 = _mm_add_pd(lo128, hi128);
+        __m128d final  = _mm_hadd_pd(sum128, sum128);
+        interpolant[f] = _mm_cvtsd_f64(final);
         // Remainder loop
         for (nd = nd_aligned; nd < ndata; ++nd) {
           interpolant[f] += rbf_val[nd] * coeffs[f * ndata + nd];
@@ -589,7 +694,7 @@ static PetscErrorCode Test()
 
   PetscCall(PartitionSolveInterpolationCoefficients(pu,partitions,swarm_data));
   PetscCall(PointWiseInterpolation(pu,partitions,swarm_interp,swarm_data));
-  PetscCall(PointWiseInterpolation_MatMult(pu,partitions,swarm_interp,swarm_data));
+  //PetscCall(PointWiseInterpolation_MatMult(pu,partitions,swarm_interp,swarm_data));
   PetscCall(PointWiseInterpolation_AVX256(pu,partitions,swarm_interp,swarm_data));
   /* Output */
   //PetscCall(PartitionOfUnityMeshView(pu));
