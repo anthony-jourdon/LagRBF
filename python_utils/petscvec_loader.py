@@ -32,9 +32,9 @@ def PetscVecLoad(fname, **kwargs):
 def test():
   import matplotlib.pyplot as plt
   root = os.path.dirname(__file__)
-  coor_fname = os.path.join(root,'../output/swarm_data_coords.pbvec')
+  coor_fname = os.path.join(root,'../output/swarm_interp_coords.pbvec')
   coor_bsinfo = coor_fname+'.info'
-  field_fname = os.path.join(root,'../output/swarm_data_fields.pbvec')
+  field_fname = os.path.join(root,'../output/swarm_interp_fields.pbvec')
   field_bsinfo = field_fname+'.info'
 
   coor_bs = PetscVecLoadBlockSizeFromFile(coor_bsinfo)
@@ -52,7 +52,7 @@ def test():
   fig,ax = plt.subplots(1, field_bs)
   cb = [None]*field_bs
   for i in range(field_bs):
-    cb[i] = ax[i].scatter(coor[:,0], coor[:,1], c=field[:,i], s=10, cmap='viridis')
+    cb[i] = ax[i].scatter(coor[:,0], coor[:,1], c=field[:,i], s=15, cmap='viridis')
     ax[i].set_title(f'Field {i}')
     ax[i].set_xlabel('x')
     ax[i].set_ylabel('y')
