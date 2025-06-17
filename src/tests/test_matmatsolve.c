@@ -256,10 +256,12 @@ static PetscErrorCode PointWiseInterpolation_MatMult(PartitionOfUnity pu, Partit
     PetscCall(MatCreateDense(PETSC_COMM_SELF,PETSC_DECIDE,PETSC_DECIDE,nfields,npart,NULL,&U));
     
     /* Create a vector holding the interpolated fields for this point */
-    PetscCall(VecCreateFromOptions(PETSC_COMM_SELF,"interp_values_",1,PETSC_DECIDE,nfields,&V));
+    //PetscCall(VecCreateFromOptions(PETSC_COMM_SELF,"interp_values_",1,PETSC_DECIDE,nfields,&V));
+    PetscCall(VecCreateSeq(PETSC_COMM_SELF,nfields,&V));
 
     /* Create a vector holding the weights of all partitions for this point */
-    PetscCall(VecCreateFromOptions(PETSC_COMM_SELF,"interp_weights_",1,PETSC_DECIDE,npart,&W));
+    //PetscCall(VecCreateFromOptions(PETSC_COMM_SELF,"interp_weights_",1,PETSC_DECIDE,npart,&W));
+    PetscCall(VecCreateSeq(PETSC_COMM_SELF,npart,&W));
     PetscCall(VecZeroEntries(W));
     PetscCall(VecGetArray(W,&LA_w));
     
@@ -284,7 +286,8 @@ static PetscErrorCode PointWiseInterpolation_MatMult(PartitionOfUnity pu, Partit
       PetscCall(MatDenseGetColumnVec(U,puidx,&Up));
 
       /* Create vector for the RBF */
-      PetscCall(VecCreateFromOptions(PETSC_COMM_SELF,"interp_rbf_",1,PETSC_DECIDE,ndata,&R));
+      //PetscCall(VecCreateFromOptions(PETSC_COMM_SELF,"interp_rbf_",1,PETSC_DECIDE,ndata,&R));
+      PetscCall(VecCreateSeq(PETSC_COMM_SELF,ndata,&R));
       PetscCall(VecGetArray(R,&rbf));
       for (nd=0; nd<ndata; nd++) {
         PetscInt  d;
@@ -490,6 +493,8 @@ static PetscErrorCode PointWiseInterpolation_AVX256(PartitionOfUnity pu, Partiti
 
       // Step 1: Compute RBF values for this point
       PetscCall(PetscMalloc1(ndata,&rbf_val)); // consider allocating an array of size max_ndata outside the pointwise loop
+      // 1. Try to vectorize this loop
+      // 2. Try to fuse the 2 loops
       for (nd=0; nd<ndata; nd++) {
         PetscReal dist = 0.0;
         for (d=0; d<dim; d++) {
@@ -511,7 +516,7 @@ static PetscErrorCode PointWiseInterpolation_AVX256(PartitionOfUnity pu, Partiti
         // Horizontal sum of accum
         double tmp[4] __attribute__((aligned(32)));
         _mm256_store_pd(tmp, accum);
-        interpolant[f] = tmp[0] + tmp[1] + tmp[2] + tmp[3];
+        interpolant[f] = tmp[0] + tmp[1] + tmp[2] + tmp[3]; // See how to improve this
         // Remainder loop
         for (nd = nd_aligned; nd < ndata; ++nd) {
           interpolant[f] += rbf_val[nd] * coeffs[f * ndata + nd];
@@ -584,7 +589,7 @@ static PetscErrorCode Test()
 
   PetscCall(PartitionSolveInterpolationCoefficients(pu,partitions,swarm_data));
   PetscCall(PointWiseInterpolation(pu,partitions,swarm_interp,swarm_data));
-  //PetscCall(PointWiseInterpolation_MatMult(pu,partitions,swarm_interp,swarm_data));
+  PetscCall(PointWiseInterpolation_MatMult(pu,partitions,swarm_interp,swarm_data));
   PetscCall(PointWiseInterpolation_AVX256(pu,partitions,swarm_interp,swarm_data));
   /* Output */
   //PetscCall(PartitionOfUnityMeshView(pu));
