@@ -1,4 +1,5 @@
 #include <petsc.h>
+#include "lagrangian_rbf_init.h"
 #include "lagrangian_rbf.h"
 #include "kernels_rbf.h"
 #include "partition_solve.h"
@@ -6,6 +7,7 @@
 #include "swarm_utils.h"
 #include "swarm_interp.h"
 #include "swarm_data.h"
+#include "interpolation.h"
 
 #include <immintrin.h>
 
@@ -956,8 +958,9 @@ static PetscErrorCode Test()
   PetscCall(PartitionSetUp_All(partitions,pu->npart,swarm_data));
 
   PetscCall(PartitionSolveInterpolationCoefficients(pu,partitions,swarm_data));
-  PetscCall(PointWiseInterpolation(pu,partitions,swarm_interp,swarm_data));
+  //PetscCall(PointWiseInterpolation(pu,partitions,swarm_interp,swarm_data));
   //PetscCall(PointWiseInterpolation_MatMult(pu,partitions,swarm_interp,swarm_data));
+  PetscCall(RBFInterpolation(pu,partitions,swarm_interp,swarm_data));
   PetscCall(PointWiseInterpolation_AVX256(pu,partitions,swarm_interp,swarm_data));
   PetscCall(PointWiseInterpolation_AVX256_v2(pu,partitions,swarm_interp,swarm_data));
   /* Output */
@@ -978,7 +981,8 @@ static PetscErrorCode Test()
 int main(int argc, char *argv[])
 {
   PetscFunctionBeginUser;
-  PetscCall(PetscInitialize(&argc,&argv,NULL,NULL));
+  //PetscCall(PetscInitialize(&argc,&argv,NULL,NULL));
+  PetscCall(LagRBFInitialize(&argc,&argv,NULL,NULL));
 
   PetscCall(Test());
 
