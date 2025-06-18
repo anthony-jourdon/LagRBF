@@ -431,6 +431,164 @@ static PetscErrorCode PointWiseInterpolation(PartitionOfUnity pu, Partition *par
   PetscFunctionReturn(PETSC_SUCCESS);
 }
 
+static PetscErrorCode PointWiseInterpolation_AVX256_v2(PartitionOfUnity pu, Partition *partitions, DM swi, DM swd)
+{
+  DMSwarmCellDM  celldm_i,celldm_d;
+  DM             da;
+  PetscInt       d,k,np,dim,npart,npoints_i,nfields,nel,nen;
+  PetscInt       *cellid_i;
+  const PetscInt *elidx;
+  PetscReal      *coords_i,*coords_d,*weights,*values_i,*interpolant;
+  const char     **coordFieldName_i,**coordFieldName_d,*cellFieldName_i;
+  PetscLogDouble time[2];
+
+  __m256d *interpolant_vec;
+
+  PetscFunctionBeginUser;
+
+  PetscCall(PetscTime(&time[0]));
+  PetscCall(PUGetDMDA(pu,&da));
+  PetscCall(PUGetNPartitions(pu,&npart));
+  PetscCall(PUGetDimension(pu,&dim));
+  PetscCall(DMDAGetElements(da,&nel,&nen,&elidx));
+  /* Interpolation points */
+  PetscCall(DMSwarmGetLocalSize(swi,&npoints_i));
+  /* Setup for coords */
+  PetscCall(DMSwarmGetCellDMActive(swi,&celldm_i));
+  PetscCall(DMSwarmCellDMGetCoordinateFields(celldm_i,NULL,&coordFieldName_i));
+  /* Setup for cell indices */
+  PetscCall(DMSwarmCellDMGetCellID(celldm_i,&cellFieldName_i));
+  /* Get fields */
+  PetscCall(DMSwarmGetField(swi, coordFieldName_i[0], NULL, NULL, (void **)&coords_i));
+  PetscCall(DMSwarmGetField(swi, cellFieldName_i, NULL, NULL, (void **)&cellid_i));
+  PetscCall(DMSwarmGetField(swi, "weights",NULL,NULL,(void **)&weights));
+  PetscCall(DMSwarmGetField(swi, "fields",&nfields,NULL,(void **)&values_i));
+
+  /* Data points */
+  /* Setup for coords */
+  PetscCall(DMSwarmGetCellDMActive(swd,&celldm_d));
+  PetscCall(DMSwarmCellDMGetCoordinateFields(celldm_d,NULL,&coordFieldName_d));
+  /* Get fields */
+  PetscCall(DMSwarmGetField(swd, coordFieldName_d[0], NULL, NULL, (void **)&coords_d));
+
+  PetscCall(PetscMalloc1(nfields,&interpolant)); // allocate memory for the interpolant
+  interpolant_vec = (__m256d *)_mm_malloc(nfields * sizeof(__m256d), 32); // allocate memory for the avx interpolant
+
+  for (np=0; np<npoints_i; np++) {
+    PetscInt f;
+    PetscInt cidx = cellid_i[np]; // cell index for the particle p
+    /* Initialize the interpolation value for the point p */
+    for (f=0; f<nfields; f++) { values_i[nfields*np + f] = 0.0; }
+    /* Iterate over the partitions to which that point is connected */
+    for (k=0; k<nen; k++) {
+      Partition p;
+      Mat       X;
+      PetscInt  nd,puidx,ndata,nd_aligned;
+      PetscInt  *data_idx;
+      PetscReal *coeffs,*rbf_val;
+      __m256d   eps_v,one_v;
+
+      puidx = elidx[nen*cidx + k];
+      p     = partitions[puidx];
+      PetscCall(PartitionGetDataPointsIdx(p,&ndata,&data_idx));
+      if (ndata == 0) continue; // no data points in this partition, skip
+      /* Get the coefficients of that partition */
+      PetscCall(PartitionGetCoefficientsMat(p,&X));
+      PetscCall(MatDenseGetArray(X,&coeffs));
+
+      /* Initialize the interpolant */
+      for (f=0; f<nfields; f++) { interpolant_vec[f] = _mm256_setzero_pd(); }
+      // Step 1: Compute RBF values for this point
+      //PetscCall(PetscMalloc1(ndata,&rbf_val)); // consider allocating an array of size max_ndata outside the pointwise loop
+
+      nd_aligned = (ndata / 4) * 4;
+      eps_v = _mm256_set1_pd(p->epsilon);
+      one_v = _mm256_set1_pd(1.0);
+      /* NOTE: Only 2D version here */
+      for (nd=0; nd<nd_aligned; nd+=4) {
+        __m256d dx,dy,dist2,dist,u,mask,u2,u4,four_u,inner,rbf;
+        dx = _mm256_set_pd(
+          coords_d[2*data_idx[nd+3] + 0] - coords_i[2*np + 0],
+          coords_d[2*data_idx[nd+2] + 0] - coords_i[2*np + 0],
+          coords_d[2*data_idx[nd+1] + 0] - coords_i[2*np + 0],
+          coords_d[2*data_idx[nd+0] + 0] - coords_i[2*np + 0]
+        );
+        dy = _mm256_set_pd(
+          coords_d[2*data_idx[nd+3] + 1] - coords_i[2*np + 1],
+          coords_d[2*data_idx[nd+2] + 1] - coords_i[2*np + 1],
+          coords_d[2*data_idx[nd+1] + 1] - coords_i[2*np + 1],
+          coords_d[2*data_idx[nd+0] + 1] - coords_i[2*np + 1]
+        );
+        dist2  = _mm256_fmadd_pd(dx, dx, _mm256_mul_pd(dy, dy)); // dx*dx + dy*dy
+        dist   = _mm256_sqrt_pd(dist2); // sqrt(dx*dx + dy*dy)
+        u      = _mm256_sub_pd(one_v, _mm256_mul_pd(eps_v, dist)); // u = 1 - epsilon * dist
+        mask   = _mm256_cmp_pd(u, _mm256_setzero_pd(), _CMP_GE_OQ); // mask for u >= 0
+        u2     = _mm256_mul_pd(u, u); // u^2
+        u4     = _mm256_mul_pd(u2, u2); // u^4
+        four_u = _mm256_mul_pd(_mm256_set1_pd(4.0), u); // 4 * u
+        inner  = _mm256_sub_pd(_mm256_set1_pd(5.0), four_u); // 5 - 4 * u
+        rbf    = _mm256_mul_pd(u4, inner); // rbf = u^4 * (5 - 4 * u)
+        rbf    = _mm256_blendv_pd(_mm256_setzero_pd(), rbf, mask); // apply mask to zero out values where u < 0
+
+        for (f=0; f<nfields; f++) {
+          __m256d coeff_v;
+          __m128d hi128,lo128,sum128,final;
+          coeff_v = _mm256_loadu_pd(&coeffs[f * ndata + nd]);
+          interpolant_vec[f] = _mm256_fmadd_pd(rbf, coeff_v, interpolant_vec[f]);
+        }
+      }
+
+      for (f=0; f<nfields; f++) {
+        __m128d hi128,lo128,sum128,final;
+        hi128  = _mm256_extractf128_pd(interpolant_vec[f], 1);
+        lo128  = _mm256_castpd256_pd128(interpolant_vec[f]);
+        sum128 = _mm_add_pd(lo128, hi128);
+        final  = _mm_hadd_pd(sum128, sum128);
+        interpolant[f] = _mm_cvtsd_f64(final);
+      }
+      
+
+      // remaining data points that are not a multiple of 4
+      for (nd=nd_aligned; nd<ndata; nd++) {
+        PetscInt  d;
+        PetscReal dist,rbf;
+        /* Compute the RBF value for the interpolation point */
+        dist = 0.0;
+        for (d=0; d<dim; d++) {
+          dist += (coords_i[dim*np + d] - coords_d[dim*data_idx[nd] + d]) * (coords_i[dim*np + d] - coords_d[dim*data_idx[nd] + d]);
+        }
+        dist = PetscSqrtReal(dist);
+        rbf  = KernelWendlandC2(dist,p->epsilon);
+        for (f=0; f<nfields; f++) {
+          /* multiply the RBF value by the coefficient and accumulate the RBF value for each field  */
+          interpolant[f] += rbf * coeffs[f*ndata + nd];
+        }
+      }
+      for (f = 0; f < nfields; ++f) {
+        values_i[nfields*np + f] += interpolant[f] * weights[np * npart + puidx];
+      }
+
+      /* Restore the coefficients array */
+      PetscCall(MatDenseRestoreArray(X,&coeffs));
+      //PetscCall(PetscFree(rbf_val));
+    }
+  }
+  _mm_free(interpolant_vec);
+  PetscCall(PetscFree(interpolant));
+  PetscCall(DMSwarmRestoreField(swi,coordFieldName_i[0],NULL,NULL,(void **)&coords_i));
+  PetscCall(DMSwarmRestoreField(swi,cellFieldName_i,NULL,NULL,(void **)&cellid_i));
+  PetscCall(DMSwarmRestoreField(swi,"weights",NULL,NULL,(void **)&weights));
+  PetscCall(DMSwarmRestoreField(swi,"fields",NULL,NULL,(void **)&values_i));
+  PetscCall(DMSwarmRestoreField(swd,coordFieldName_d[0],NULL,NULL,(void **)&coords_d));
+  PetscCall(DMDARestoreElements(da,&nel,&nen,&elidx));
+
+  PetscCall(PetscTime(&time[1]));
+  PetscPrintf(PETSC_COMM_WORLD,"[[ %s ]] interpolated %" PetscInt_FMT " points in %g seconds\n",PETSC_FUNCTION_NAME,npoints_i,time[1]-time[0]);
+
+  PetscFunctionReturn(PETSC_SUCCESS);
+}
+
+
 static PetscErrorCode PointWiseInterpolation_AVX256(PartitionOfUnity pu, Partition *partitions, DM swi, DM swd)
 {
   DMSwarmCellDM  celldm_i,celldm_d;
@@ -696,6 +854,7 @@ static PetscErrorCode Test()
   PetscCall(PointWiseInterpolation(pu,partitions,swarm_interp,swarm_data));
   //PetscCall(PointWiseInterpolation_MatMult(pu,partitions,swarm_interp,swarm_data));
   PetscCall(PointWiseInterpolation_AVX256(pu,partitions,swarm_interp,swarm_data));
+  PetscCall(PointWiseInterpolation_AVX256_v2(pu,partitions,swarm_interp,swarm_data));
   /* Output */
   //PetscCall(PartitionOfUnityMeshView(pu));
   /* output swarm data */
