@@ -544,7 +544,7 @@ static PetscErrorCode PointWiseInterpolation_AVX256(PartitionOfUnity pu, Partiti
           __m256d inner = _mm256_sub_pd(_mm256_set1_pd(5.0), four_u);
           __m256d phi = _mm256_mul_pd(u4, inner);
           phi = _mm256_blendv_pd(_mm256_setzero_pd(), phi, mask);
-          _mm256_storeu_pd(&rbf_val[nd], phi); // rbf not aligned, consider aligning to replace by _mm256_store_pd()
+          _mm256_store_pd(&rbf_val[nd], phi); // rbf not aligned, consider aligning to replace by _mm256_store_pd()
         }
       } else if (dim == 3) {
         for (nd = 0; nd < nd_aligned; nd += 4) {
@@ -587,7 +587,7 @@ static PetscErrorCode PointWiseInterpolation_AVX256(PartitionOfUnity pu, Partiti
           __m256d inner = _mm256_sub_pd(_mm256_set1_pd(5.0), four_u);
           __m256d phi = _mm256_mul_pd(u4, inner);
           phi = _mm256_blendv_pd(_mm256_setzero_pd(), phi, mask);
-          _mm256_storeu_pd(&rbf_val[nd], phi); // rbf not aligned, consider aligning to replace by _mm256_store_pd()
+          _mm256_store_pd(&rbf_val[nd], phi); // rbf not aligned, consider aligning to replace by _mm256_store_pd()
         }
       }
       // Remainder (optional)
@@ -607,7 +607,7 @@ static PetscErrorCode PointWiseInterpolation_AVX256(PartitionOfUnity pu, Partiti
       for (f = 0; f < nfields; ++f) {
         __m256d accum = _mm256_setzero_pd();
         for (nd = 0; nd < nd_aligned; nd += 4) {
-          __m256d rbf_v   = _mm256_loadu_pd(&rbf_val[nd]);                      // unaligned load
+          __m256d rbf_v   = _mm256_load_pd(&rbf_val[nd]);                      // unaligned load
           __m256d coeff_v = _mm256_load_pd(&coeffs[f * ndata + nd]);           // aligned load
           accum = _mm256_fmadd_pd(rbf_v, coeff_v, accum);
         }
