@@ -1,4 +1,5 @@
 liblagrangian-offline-y.c += $(call thisdir, \
+	lagrangian_rbf_init.c \
 	lagrangian_rbf.c \
 	partition_of_unity.c \
 	partition.c \
@@ -8,6 +9,7 @@ liblagrangian-offline-y.c += $(call thisdir, \
 	swarm_utils.c \
 	swarm_interp.c \
 	swarm_data.c \
+	interpolation.c \
 )
 
 lagrangian-offline-drivers-y.c += $(call thisdir, \
