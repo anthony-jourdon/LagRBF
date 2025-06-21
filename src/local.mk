@@ -10,6 +10,7 @@ liblagrangian-offline-y.c += $(call thisdir, \
 	swarm_interp.c \
 	swarm_data.c \
 	interpolation.c \
+	interpolation_avx.c \
 )
 
 lagrangian-offline-drivers-y.c += $(call thisdir, \

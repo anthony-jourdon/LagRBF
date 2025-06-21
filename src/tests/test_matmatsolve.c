@@ -696,7 +696,7 @@ static PetscErrorCode PointWiseInterpolation_AVX256_v2(PartitionOfUnity pu, Part
 }
 
 
-static PetscErrorCode PointWiseInterpolation_AVX256(PartitionOfUnity pu, Partition *partitions, DM swi, DM swd)
+static PetscErrorCode PointWiseInterpolation_AVX256_v1(PartitionOfUnity pu, Partition *partitions, DM swi, DM swd)
 {
   DMSwarmCellDM  celldm_i,celldm_d;
   DM             da;
@@ -961,7 +961,7 @@ static PetscErrorCode Test()
   //PetscCall(PointWiseInterpolation(pu,partitions,swarm_interp,swarm_data));
   //PetscCall(PointWiseInterpolation_MatMult(pu,partitions,swarm_interp,swarm_data));
   PetscCall(RBFInterpolation(pu,partitions,swarm_interp,swarm_data));
-  PetscCall(PointWiseInterpolation_AVX256(pu,partitions,swarm_interp,swarm_data));
+  PetscCall(PointWiseInterpolation_AVX256_v1(pu,partitions,swarm_interp,swarm_data));
   PetscCall(PointWiseInterpolation_AVX256_v2(pu,partitions,swarm_interp,swarm_data));
   /* Output */
   //PetscCall(PartitionOfUnityMeshView(pu));

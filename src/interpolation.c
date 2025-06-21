@@ -3,6 +3,9 @@
 #include "partition.h"
 #include "partition_solve.h"
 #include "kernels_rbf.h"
+#if defined(__AVX__)
+#include "interpolation_avx.h"
+#endif
 
 PetscLogEvent LAGRBF_PointwiseInterpolation_Scalar;
 
@@ -38,9 +41,7 @@ PetscErrorCode PointwiseInterpolation_Scalar(
     PetscInt f;
     PetscInt cidx = cellid_i[np]; // cell index for the particle p
     /* Initialize the interpolation value for the point p */
-    for (f=0; f<nfields; f++) {
-      values_i[nfields*np + f] = 0.0; // set the initial value to zero
-    }
+    for (f=0; f<nfields; f++) { values_i[nfields*np + f] = 0.0; }
     /* Iterate over the partitions to which that point is connected */
     for (k=0; k<nen; k++) {
       Partition p;
@@ -120,8 +121,11 @@ PetscErrorCode RBFInterpolation(PartitionOfUnity pu, Partition *partitions, DM s
   PetscCall(DMSwarmGetField(swd, coordFieldName_d[0], NULL, NULL, (void **)&coords_d));
 
   /* Perform the interpolation */
+#if defined(__AVX__)
+  PetscCall(PointwiseInterpolation_AVX256(pu,partitions,nfields,npoints_i,cellid_i,coords_i,coords_d,weights,values_i));
+#else
   PetscCall(PointwiseInterpolation_Scalar(pu,partitions,nfields,npoints_i,cellid_i,coords_i,coords_d,weights,values_i));
-
+#endif
   
   PetscCall(DMSwarmRestoreField(swi,coordFieldName_i[0],NULL,NULL,(void **)&coords_i));
   PetscCall(DMSwarmRestoreField(swi,cellFieldName_i,NULL,NULL,(void **)&cellid_i));
