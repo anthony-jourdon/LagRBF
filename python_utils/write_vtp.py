@@ -69,32 +69,40 @@ def test():
   return
 
 def test2():
-  output_dir = os.path.join(os.path.dirname(__file__), '../output')
+  root = os.path.join(os.path.dirname(__file__), '../output')
+  step = [0, 1]
+  for s in step:
+    output_dir = os.path.join(root, f'step_{s:04d}')
+    if not os.path.exists(output_dir):
+      print(f"Output directory {output_dir} does not exist. Please check the path.")
+      return
 
-  data_fnames = {
-    'coords': os.path.join(output_dir, 'swarm_data_coords.pbvec'),
-    'fields': os.path.join(output_dir, 'swarm_data_fields.pbvec'),
-  }
-  interp_fnames = {
-    'coords': os.path.join(output_dir, 'swarm_interp_coords.pbvec'),
-    'fields': os.path.join(output_dir, 'swarm_interp_fields.pbvec'),
-  }
-  data_coor    = load.PetscVecLoad(data_fnames['coords'])
-  data_field   = load.PetscVecLoad(data_fnames['fields'])
-  data = {
-    'f0': data_field[:, 0],
-    'f1': data_field[:, 1],
-    'f2': data_field[:, 2],
-  }
-  interp_coor  = load.PetscVecLoad(interp_fnames['coords'])
-  interp_field = load.PetscVecLoad(interp_fnames['fields'])
-  interp = {
-    'f0': interp_field[:, 0],
-    'f1': interp_field[:, 1],
-    'f2': interp_field[:, 2],
-  }
-  write_vtp(data_coor, data, os.path.join(os.environ['M3D_DIR'], 'Stagyy', 'output', 'swarm_data.vtp'))
-  write_vtp(interp_coor, interp, os.path.join(os.environ['M3D_DIR'], 'Stagyy', 'output', 'swarm_interp.vtp'))
+    data_fnames = {
+      'coords': os.path.join(output_dir, 'swarm_data_coords.pbvec'),
+      'fields': os.path.join(output_dir, 'swarm_data_fields.pbvec'),
+    }
+    interp_fnames = {
+      'coords': os.path.join(output_dir, 'swarm_interp_coords.pbvec'),
+      'fields': os.path.join(output_dir, 'swarm_interp_fields.pbvec'),
+    }
+    #data_coor    = load.PetscVecLoad(data_fnames['coords'])
+    #data_field   = load.PetscVecLoad(data_fnames['fields'])
+    #data = {
+    #  'f0': data_field[:, 0],
+    #  'f1': data_field[:, 1],
+    #  'f2': data_field[:, 2],
+    #}
+    interp_coor  = load.PetscVecLoad(interp_fnames['coords'])
+    interp_field = load.PetscVecLoad(interp_fnames['fields'])
+    interp = {
+      'f0': interp_field[:, 0],
+      'f1': interp_field[:, 1],
+      'f2': interp_field[:, 2],
+    }
+    #write_vtp(data_coor, data, os.path.join(os.environ['M3D_DIR'], 'Stagyy', 'output', 'swarm_data.vtp'))
+    fname = os.path.join(os.environ['M3D_DIR'], 'Stagyy', 'output', f'swarm_interp_{s:04d}.vtp')
+    print(f"Writing VTP file to {fname}...")
+    write_vtp(interp_coor, interp, fname)
   print("VTP files created successfully.")
   
 
