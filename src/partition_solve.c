@@ -5,6 +5,12 @@
 #include "kernels_rbf.h"
 #include "partition_solve.h"
 
+PetscLogEvent LAGRBF_PartitionAssembleRBFMatrix;
+PetscLogEvent LAGRBF_PartitionFactorRBFMatrix;
+PetscLogEvent LAGRBF_PartitionMatSetRHS;
+PetscLogEvent LAGRBF_PartitionSolveLocalCoefficients;
+PetscLogEvent LAGRBF_PartitionSolveInterpolationCoefficients;
+
 static PetscErrorCode PartitionCreateRBFMatrix(Partition p)
 {
   PetscFunctionBeginUser;
@@ -28,6 +34,7 @@ static PetscErrorCode PartitionAssembleRBFMatrix(
   PetscReal *rbf;
   PetscFunctionBeginUser;
 
+  PetscCall(PetscLogEventBegin(LAGRBF_PartitionAssembleRBFMatrix,0,0,0,0));
   PetscCall(PartitionGetRBFMatrix(p,&A));
   PetscCheck(A,PETSC_COMM_SELF,PETSC_ERR_ARG_WRONGSTATE,"RBF matrix not created yet. Call PartitionCreateRBFMatrix() first.");
   PetscCall(PartitionGetDataPointsIdx(p,&npoints,&pidx));
@@ -51,7 +58,7 @@ static PetscErrorCode PartitionAssembleRBFMatrix(
     }
   }
   PetscCall(MatDenseRestoreArray(A,&rbf));
-
+  PetscCall(PetscLogEventEnd(LAGRBF_PartitionAssembleRBFMatrix,0,0,0,0));
   PetscFunctionReturn(PETSC_SUCCESS);
 }
 
@@ -61,7 +68,7 @@ static PetscErrorCode PartitionFactorRBFMatrix(Partition p)
   IS            perm,cperm;
   Mat           A;
   PetscFunctionBeginUser;
-
+  PetscCall(PetscLogEventBegin(LAGRBF_PartitionFactorRBFMatrix,0,0,0,0));
   PetscCall(PartitionGetRBFMatrix(p,&A));
   PetscCheck(A,PETSC_COMM_SELF,PETSC_ERR_ARG_WRONGSTATE,"RBF matrix not created yet. Call PartitionCreateRBFMatrix() first.");
   PetscCall(MatGetOrdering(A, MATORDERINGNATURAL, &perm, &cperm));
@@ -71,6 +78,7 @@ static PetscErrorCode PartitionFactorRBFMatrix(Partition p)
   /* factor */
   PetscCall(MatCholeskyFactor(A,perm,&factinfo));
   PetscCall(ISDestroy(&perm));
+  PetscCall(PetscLogEventEnd(LAGRBF_PartitionFactorRBFMatrix,0,0,0,0));
   PetscFunctionReturn(PETSC_SUCCESS);
 }
 
@@ -95,6 +103,7 @@ PetscErrorCode PartitionMatSetRHS(Partition p, PetscInt nfields, PetscReal fval[
   PetscInt  *idx;
   PetscReal *LA_rhs;
   PetscFunctionBeginUser;
+  PetscCall(PetscLogEventBegin(LAGRBF_PartitionMatSetRHS,0,0,0,0));
   PetscCall(PartitionGetDataPointsIdx(p,&npoints,&idx));
   PetscCall(MatCreateDense(PETSC_COMM_SELF,PETSC_DECIDE,PETSC_DECIDE,npoints,nfields,NULL,&RHS));
   PetscCall(MatDenseGetArray(RHS,&LA_rhs));
@@ -117,6 +126,7 @@ PetscErrorCode PartitionMatSetRHS(Partition p, PetscInt nfields, PetscReal fval[
   }
   PetscCall(MatDenseRestoreArray(RHS,&LA_rhs));
   *B = RHS;
+  PetscCall(PetscLogEventEnd(LAGRBF_PartitionMatSetRHS,0,0,0,0));
   PetscFunctionReturn(PETSC_SUCCESS);
 }
 
@@ -144,7 +154,7 @@ static PetscErrorCode PartitionSolveLocalCoefficients(Partition p, PetscInt nfie
 {
   Mat      A,B,X;
   PetscFunctionBeginUser;
-
+  PetscCall(PetscLogEventBegin(LAGRBF_PartitionSolveLocalCoefficients,0,0,0,0));
   PetscCall(PartitionGetCoefficientsMat(p,&X));
   PetscCall(PartitionGetRBFMatrix(p,&A));
   PetscCall(PartitionMatSetRHS(p,nfields,fval,&B));
@@ -152,7 +162,7 @@ static PetscErrorCode PartitionSolveLocalCoefficients(Partition p, PetscInt nfie
   PetscCall(MatMatSolve(A,B,X));
   /* Clean-up */
   PetscCall(MatDestroy(&B));
-
+  PetscCall(PetscLogEventEnd(LAGRBF_PartitionSolveLocalCoefficients,0,0,0,0));
   PetscFunctionReturn(PETSC_SUCCESS);
 }
 
@@ -161,6 +171,7 @@ PetscErrorCode PartitionSolveInterpolationCoefficients(PartitionOfUnity pu, Part
   PetscInt  n,npart,nfields;
   PetscReal *values;
   PetscFunctionBeginUser;
+  PetscCall(PetscLogEventBegin(LAGRBF_PartitionSolveInterpolationCoefficients,0,0,0,0));
   PetscPrintf(PETSC_COMM_WORLD,"[[ %s ]]\n",PETSC_FUNCTION_NAME);
   PetscCall(PUGetNPartitions(pu,&npart));
   PetscCall(DMSwarmGetField(swarm,"fields",&nfields,NULL,(void **)&values));
@@ -173,5 +184,6 @@ PetscErrorCode PartitionSolveInterpolationCoefficients(PartitionOfUnity pu, Part
   }
   /* Restore the field */
   PetscCall(DMSwarmRestoreField(swarm,"fields",&nfields,NULL,(void **)&values));
+  PetscCall(PetscLogEventEnd(LAGRBF_PartitionSolveInterpolationCoefficients,0,0,0,0));
   PetscFunctionReturn(PETSC_SUCCESS);
 }
