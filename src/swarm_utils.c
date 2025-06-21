@@ -42,7 +42,8 @@ PetscErrorCode SwarmOutputCoordsPetscVec(DM sw, const char *prefix)
   PetscCall(PetscViewerFileSetName(viewer,fname));
   PetscCall(VecView(coords,viewer));
   PetscCall(PetscViewerDestroy(&viewer));
-
+  /* Clean-up */
+  PetscCall(DMSwarmDestroyGlobalVectorFromField(sw, coordFields[0], &coords));
   PetscFunctionReturn(PETSC_SUCCESS);
 }
 
@@ -66,6 +67,7 @@ PetscErrorCode SwarmOutputFieldsPetscVec(DM sw, const char *prefix)
   PetscCall(PetscViewerFileSetName(viewer,fname));
   PetscCall(VecView(dvec,viewer));
   PetscCall(PetscViewerDestroy(&viewer));
-
+  /* Clean-up */
+  PetscCall(DMSwarmDestroyGlobalVectorFromField(sw, "fields", &dvec));
   PetscFunctionReturn(PETSC_SUCCESS);
 }
