@@ -31,7 +31,6 @@ static double franke_function(double x, double y)
 }
 
 static PetscReal triple_gaussians(PetscReal x, PetscReal y)
-
 {
   /*
     0.81*exp(-0.9*(x + 1.0)**2 - 0.9*(z + 1.0)**2)
@@ -961,8 +960,8 @@ static PetscErrorCode Test()
   //PetscCall(PointWiseInterpolation(pu,partitions,swarm_interp,swarm_data));
   //PetscCall(PointWiseInterpolation_MatMult(pu,partitions,swarm_interp,swarm_data));
   PetscCall(RBFInterpolation(pu,partitions,swarm_interp,swarm_data));
-  PetscCall(PointWiseInterpolation_AVX256_v1(pu,partitions,swarm_interp,swarm_data));
-  PetscCall(PointWiseInterpolation_AVX256_v2(pu,partitions,swarm_interp,swarm_data));
+  //PetscCall(PointWiseInterpolation_AVX256_v1(pu,partitions,swarm_interp,swarm_data));
+  //PetscCall(PointWiseInterpolation_AVX256_v2(pu,partitions,swarm_interp,swarm_data));
   /* Output */
   //PetscCall(PartitionOfUnityMeshView(pu));
   /* output swarm data */
