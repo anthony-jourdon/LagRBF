@@ -4,7 +4,7 @@
 #include "kernels_rbf.h"
 #include "swarm_interp.h"
 
-static PetscErrorCode SwarmInterpCreate(LagRBFCtx ctx, DM *sw)
+PetscErrorCode SwarmInterpCreate(LagRBFCtx ctx, DM *sw)
 {
   PartitionOfUnity pu;
   DM               swarm;
@@ -23,6 +23,7 @@ static PetscErrorCode SwarmInterpCreate(LagRBFCtx ctx, DM *sw)
 
   PetscCall(DMSwarmInitializeFieldRegister(swarm));
   PetscCall(DMSwarmRegisterPetscDatatypeField(swarm,"weights",pu->npart,PETSC_REAL));
+  PetscCall(DMSwarmRegisterPetscDatatypeField(swarm,"velocity",pu->dim,PETSC_REAL));
   PetscCall(DMSwarmRegisterPetscDatatypeField(swarm,"fields",ctx->n_ifields,PETSC_REAL));
   // May need to add another set of fields that need to be advected but not interpolated
   // PetscCall(DMSwarmRegisterPetscDatatypeField(swarm,"pfields",ctx->n_pfields,PETSC_REAL));

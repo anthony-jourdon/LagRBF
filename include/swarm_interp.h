@@ -3,6 +3,7 @@
 
 #include "lagrangian_rbf.h"
 
+PetscErrorCode SwarmInterpCreate(LagRBFCtx ctx, DM *sw);
 PetscErrorCode SwarmInterpSetWeights(LagRBFCtx ctx, DM sw);
 PetscErrorCode SwarmInterpSetUp(LagRBFCtx ctx, DM *sw);
 
