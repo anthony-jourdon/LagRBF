@@ -11,7 +11,10 @@ PetscErrorCode LagRBFCtxCreate(LagRBFCtx *ctx)
   p->partitions = NULL;
   p->n_ifields  = 0;
   p->n_pfields  = 0;
+  p->step       = 0;
+  p->time       = 0.0;
   p->restart    = PETSC_FALSE;
+  PetscCall(PetscSNPrintf(p->output_dir, PETSC_MAX_PATH_LEN-1, "output"));
 
   *ctx = p;
 
