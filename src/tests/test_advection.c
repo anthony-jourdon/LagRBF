@@ -202,17 +202,19 @@ static PetscErrorCode Test()
   PetscCall(PetscOptionsGetInt(NULL,NULL,"-nsteps",&nsteps,NULL));
   PetscCall(PetscOptionsGetReal(NULL,NULL,"-dt",&dt,NULL));
   for (step=0; step<nsteps; step++) {
-    char step_dir[PETSC_MAX_PATH_LEN];
-
     PetscCall(PetscPrintf(PETSC_COMM_WORLD,"[[ STEP: %" PetscInt_FMT " ]], time: %g\n",step,step*dt));
+    ctx->step = step;
+    ctx->time = step*dt;
     /* Output */
+#if 0
     PetscSNPrintf(step_dir, PETSC_MAX_PATH_LEN-1, "%s/step_%04" PetscInt_FMT, output_dir, step);
     PetscCall(TestDirectory(step_dir,'w',&exists));
     if (!exists) { PetscCall(CreateDirectory(step_dir)); }
     /* output swarm data */
     PetscCall(SwarmOutputCoordsPetscVec(swarm_data,step_dir));
     PetscCall(SwarmOutputFieldsPetscVec(swarm_data,step_dir));
-    
+#endif
+    PetscCall(SwarmOutput(ctx,swarm_data));
     /* Advection step */
     PetscCall(PointAdvection_Euler(swarm_data,dt));
     

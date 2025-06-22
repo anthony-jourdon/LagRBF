@@ -129,8 +129,8 @@ static PetscErrorCode Test()
   /* Output */
   PetscCall(PartitionOfUnityMeshView(pu));
   /* output swarm data */
-  PetscCall(SwarmOutputCoordsPetscVec(swarm_data,output_dir));
-  PetscCall(SwarmOutputFieldsPetscVec(swarm_data,output_dir));
+  PetscCall(SwarmOutputCoordsPetscVec(swarm_data,output_dir,NULL));
+  PetscCall(SwarmOutputFieldsPetscVec(swarm_data,output_dir,NULL));
   
 
   PetscCall(DMDestroy(&swarm_interp));
