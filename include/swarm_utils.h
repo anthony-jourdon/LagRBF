@@ -5,6 +5,7 @@
 #include "partition_of_unity.h"
 
 PetscErrorCode SwarmCreatePIC(PartitionOfUnity pu, DM *sw);
-PetscErrorCode SwarmOutputCoordsPetscVec(DM sw, const char *prefix);
-PetscErrorCode SwarmOutputFieldsPetscVec(DM sw, const char *prefix);
+PetscErrorCode SwarmOutputCoordsPetscVec(DM sw, const char *directory, const char *prefix);
+PetscErrorCode SwarmOutputFieldsPetscVec(DM sw, const char *directory, const char *prefix);
+PetscErrorCode SwarmOutput(LagRBFCtx ctx, DM sw);
 #endif
