@@ -22,8 +22,8 @@ PetscErrorCode SwarmInterpCreate(LagRBFCtx ctx, DM *sw)
   PetscCall(DMSetFromOptions(swarm));
 
   PetscCall(DMSwarmInitializeFieldRegister(swarm));
+  PetscCall(DMSwarmRegisterPetscDatatypeField(swarm,"pidx",1,PETSC_INT));
   PetscCall(DMSwarmRegisterPetscDatatypeField(swarm,"weights",pu->npart,PETSC_REAL));
-  PetscCall(DMSwarmRegisterPetscDatatypeField(swarm,"velocity",pu->dim,PETSC_REAL));
   PetscCall(DMSwarmRegisterPetscDatatypeField(swarm,"fields",ctx->n_ifields,PETSC_REAL));
   // May need to add another set of fields that need to be advected but not interpolated
   // PetscCall(DMSwarmRegisterPetscDatatypeField(swarm,"pfields",ctx->n_pfields,PETSC_REAL));
@@ -38,19 +38,23 @@ static PetscErrorCode SwarmInterpSetUniformCoordinates(PartitionOfUnity pu, DM s
   DM         da;
   PetscInt   *m;
   PetscInt   d;
-  PetscReal  O[3],L[3];
+  PetscReal  O[]={0.0, 0.0, 0.0};
+  PetscReal  L[]={1.0, 1.0, 1.0};
   PetscBool  found;
   const char *prefix;
   PetscFunctionBeginUser;
   
   PetscCall(PUGetDMDA(pu,&da));
-  PetscCall(DMGetBoundingBox(da,O,L));
   PetscCall(DMGetOptionsPrefix(sw,&prefix));
   d = pu->dim;
   PetscCall(PetscMalloc1(d,&m));
   PetscCall(PetscOptionsGetIntArray(NULL,prefix,"-npi",m,&d,&found));
   PetscCheck(found,PETSC_COMM_WORLD,PETSC_ERR_ARG_WRONG,"Option -%snpi not found. User must provide the number of interpolation points in each dimension.",prefix);
   PetscCheck(d == pu->dim,PETSC_COMM_WORLD,PETSC_ERR_ARG_SIZ,"Option -%snpi must have %" PetscInt_FMT " values, found: %" PetscInt_FMT "",prefix,pu->dim,d);
+  PetscCall(PetscOptionsGetRealArray(NULL,prefix,"-O",O,&d,&found));
+  PetscCheck(d == pu->dim,PETSC_COMM_WORLD,PETSC_ERR_ARG_SIZ,"Option -%sO must have %" PetscInt_FMT " values, found: %" PetscInt_FMT "",prefix,pu->dim,d);
+  PetscCall(PetscOptionsGetRealArray(NULL,prefix,"-L",L,&d,&found));
+  PetscCheck(d == pu->dim,PETSC_COMM_WORLD,PETSC_ERR_ARG_SIZ,"Option -%sL must have %" PetscInt_FMT " values, found: %" PetscInt_FMT "",prefix,pu->dim,d);
   PetscCall(DMSwarmSetPointsUniformCoordinates(sw,O,L,m,INSERT_VALUES));
 
   PetscFree(m);
@@ -83,15 +87,13 @@ static PetscErrorCode SwarmInterpSetWeights_SEQ(LagRBFCtx ctx, DM sw)
   PetscReal        *pcoords,*weights,*LA_coords,*sum_w;
   const char      **coordFields;
   PetscFunctionBeginUser;
+  PetscPrintf(PETSC_COMM_WORLD,"[[ %s ]]\n",PETSC_FUNCTION_NAME);
 
   PetscCall(LagRBFGetPartitionOfUnity(ctx,&pu));
   PetscCall(LagRBFGetPartitions(ctx,&partitions));
   PetscCall(PUGetDMDA(pu,&da));
   PetscCall(PUGetDimension(pu,&dim));
   PetscCall(PUGetNPartitions(pu,&npart));
-
-  
-
   /* Interpolation points */
   PetscCall(DMSwarmGetLocalSize(sw,&npoints)); // rank local points
   PetscCall(DMSwarmGetCellDMActive(sw,&celldm));
@@ -168,19 +170,42 @@ PetscErrorCode SwarmInterpSetWeights(LagRBFCtx ctx, DM sw)
 
 PetscErrorCode SwarmInterpAssignUniquePointIndex(DM sw, PetscInt start_idx, PetscInt end_idx)
 {
-  PetscInt npoints;
-  PetscInt *pidx;
+  PetscInt    p,npoints,max_local,max,np_local,np_global;
+  PetscInt    *pidx;
+  PetscMPIInt rank;
+  MPI_Comm    comm;
   PetscFunctionBeginUser;
-
+  
+  PetscCall(PetscObjectGetComm((PetscObject)sw,&comm));
+  PetscCall(MPI_Comm_rank(comm,&rank));
   PetscCall(DMSwarmGetLocalSize(sw,&npoints)); // rank local points
   PetscCall(DMSwarmGetField(sw, "pidx", NULL, NULL, (void **)&pidx));
+  /* find max pid presently in the system */
+  max_local = 0;
+  for (p=0; p<npoints; p++) {
+    PetscInt mp_idx = pidx[p]; 
+    if ( mp_idx > max_local ) { max_local = mp_idx; }
+  }
+  PetscCall(MPI_Allreduce(&max_local,&max,1,MPI_LONG,MPI_MAX,comm));
+  /*PetscPrintf(comm,"[[ %s ]] : max_pid = %" PetscInt_FMT "\n",PETSC_FUNCTION_NAME,max);*/
+  max += 1;
 
+  /* give particles a unique identifier */
+  np_local = end_idx - start_idx;
+  PetscCall(MPI_Scan(&np_local,&np_global,1,MPI_LONG,MPI_SUM,comm));
+  //printf("rank %d : np_local = %" PetscInt_FMT ", np_global = %" PetscInt_FMT "\n",(int)rank,np_local,np_global);
+  for (p=start_idx; p<end_idx; p++) {
+    pidx[p] = max + (np_global-np_local) + (long int)(p-start_idx);
+    //printf("assigning %" PetscInt_FMT " -> pid = %" PetscInt_FMT " \n", p, pidx[p] );
+  }
+  PetscCall(DMSwarmRestoreField(sw,"pidx",NULL,NULL,(void **)&pidx));
   PetscFunctionReturn(PETSC_SUCCESS);
 }
 
 PetscErrorCode SwarmInterpSetUp(LagRBFCtx ctx, DM *sw)
 {
-  DM               swarm;
+  DM       swarm;
+  PetscInt npoints;
   PetscFunctionBeginUser;
 
   PetscCall(SwarmInterpCreate(ctx,&swarm));
@@ -191,6 +216,8 @@ PetscErrorCode SwarmInterpSetUp(LagRBFCtx ctx, DM *sw)
     PetscCall(SwarmInterpSetUniformCoordinates(ctx->pu,swarm));
   }
   PetscCall(SwarmInterpSetWeights(ctx,swarm));
+  PetscCall(DMSwarmGetLocalSize(swarm,&npoints));
+  PetscCall(SwarmInterpAssignUniquePointIndex(swarm,0,npoints));
   *sw = swarm;
   PetscFunctionReturn(PETSC_SUCCESS);
 }
