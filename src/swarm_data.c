@@ -1,6 +1,7 @@
 #include <petsc.h>
 #include "lagrangian_rbf.h"
 #include "swarm_utils.h"
+#include "geodynamics_fields.h"
 
 PetscErrorCode SwarmDataCreate(LagRBFCtx ctx, DM *sw)
 {

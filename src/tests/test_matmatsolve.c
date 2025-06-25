@@ -956,10 +956,10 @@ static PetscErrorCode Test()
   PetscCall(SwarmDataSetValues(swarm_data));
   PetscCall(PartitionSetUp_All(partitions,pu->npart,swarm_data));
 
-  PetscCall(PartitionSolveInterpolationCoefficients(pu,partitions,swarm_data));
+  PetscCall(PartitionSolveInterpolationCoefficients(pu,partitions,swarm_data,"fields"));
   //PetscCall(PointWiseInterpolation(pu,partitions,swarm_interp,swarm_data));
   //PetscCall(PointWiseInterpolation_MatMult(pu,partitions,swarm_interp,swarm_data));
-  PetscCall(RBFInterpolation(pu,partitions,swarm_interp,swarm_data));
+  PetscCall(RBFInterpolation(ctx,swarm_interp,swarm_data,"fields"));
   //PetscCall(PointWiseInterpolation_AVX256_v1(pu,partitions,swarm_interp,swarm_data));
   //PetscCall(PointWiseInterpolation_AVX256_v2(pu,partitions,swarm_interp,swarm_data));
   /* Output */
