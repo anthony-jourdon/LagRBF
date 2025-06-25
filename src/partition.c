@@ -186,10 +186,12 @@ PetscErrorCode PartitionDestroy(PartitionOfUnity pu, Partition **partition)
 
 PetscErrorCode PartitionFillDataPointsIdx(Partition p, DM swarm)
 {
-  PetscInt      iel,ncells,offset,cellidx;
-  PetscInt     *map,*point_count,**point_idx;
+  PetscInt      iel,offset,cellidx,ncells;
+  PetscInt     *map=NULL;
+  PetscInt     *point_count,**point_idx;
   PetscFunctionBeginUser;
   /* Get number of cells connected to that partition and their indices */
+  ncells = -1; // Initialize to an invalid value
   PetscCall(PartitionGetMap(p,&ncells,&map));
   /* 
     Allocate two arrays to hold the points indices before we generate a unique array 
