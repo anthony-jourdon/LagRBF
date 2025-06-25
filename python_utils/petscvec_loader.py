@@ -28,6 +28,13 @@ def PetscVecLoad(fname, **kwargs):
     return v
   return v
 
+def PetscISLoadFromFile(fname,**kwargs):
+  io = PetscBinaryIO.PetscBinaryIO(**kwargs) # Instantiate a petsc binary loader
+  with open(fname) as fp:
+    objecttype = io.readObjectType(fp)
+    v = io.readIS(fp)
+  return v
+
 
 def test():
   import matplotlib.pyplot as plt
