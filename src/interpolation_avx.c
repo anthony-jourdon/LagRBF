@@ -55,8 +55,6 @@ PetscErrorCode PointwiseInterpolation_AVX256_2D(
 
       puidx = elidx[nen*cidx + k];
       p     = partitions[puidx];
-      puidx = elidx[nen*cidx + k];
-      p     = partitions[puidx];
       PetscCall(PartitionGetDataPointsIdx(p,&ndata,&data_idx));
       if (ndata == 0) continue; // no data points in this partition, skip
       /* Get the coefficients of that partition */
