@@ -1,4 +1,5 @@
 #include <petsc.h>
+#include "lagrangian_rbf.h"
 #include "partition_of_unity.h"
 #include "partition.h"
 #include "partition_solve.h"
@@ -91,15 +92,19 @@ PetscErrorCode PointwiseInterpolation_Scalar(
   PetscFunctionReturn(PETSC_SUCCESS);
 }
 
-PetscErrorCode RBFInterpolation(PartitionOfUnity pu, Partition *partitions, DM swi, DM swd)
+PetscErrorCode RBFInterpolation(LagRBFCtx ctx, DM swi, DM swd, const char *fieldname)
 {
-  DMSwarmCellDM  celldm_i,celldm_d;
-  PetscInt       npoints_i,nfields;
-  PetscInt       *cellid_i;
-  PetscReal      *coords_i,*coords_d,*weights,*values_i;
-  const char     **coordFieldName_i,**coordFieldName_d,*cellFieldName_i;
+  DMSwarmCellDM    celldm_i,celldm_d;
+  PartitionOfUnity pu;
+  Partition        *partitions;
+  PetscInt         npoints_i,nfields;
+  PetscInt         *cellid_i;
+  PetscReal        *coords_i,*coords_d,*weights,*values_i;
+  const char       **coordFieldName_i,**coordFieldName_d,*cellFieldName_i;
   PetscFunctionBeginUser;
 
+  PetscCall(LagRBFGetPartitionOfUnity(ctx,&pu));
+  PetscCall(LagRBFGetPartitions(ctx,&partitions));
   /* Interpolation points */
   PetscCall(DMSwarmGetLocalSize(swi,&npoints_i));
   /* Setup for coords */
@@ -111,7 +116,7 @@ PetscErrorCode RBFInterpolation(PartitionOfUnity pu, Partition *partitions, DM s
   PetscCall(DMSwarmGetField(swi, coordFieldName_i[0], NULL, NULL, (void **)&coords_i));
   PetscCall(DMSwarmGetField(swi, cellFieldName_i, NULL, NULL, (void **)&cellid_i));
   PetscCall(DMSwarmGetField(swi, "weights",NULL,NULL,(void **)&weights));
-  PetscCall(DMSwarmGetField(swi, "fields",&nfields,NULL,(void **)&values_i));
+  PetscCall(DMSwarmGetField(swi, fieldname,&nfields,NULL,(void **)&values_i));
 
   /* Data points */
   /* Setup for coords */
@@ -130,7 +135,7 @@ PetscErrorCode RBFInterpolation(PartitionOfUnity pu, Partition *partitions, DM s
   PetscCall(DMSwarmRestoreField(swi,coordFieldName_i[0],NULL,NULL,(void **)&coords_i));
   PetscCall(DMSwarmRestoreField(swi,cellFieldName_i,NULL,NULL,(void **)&cellid_i));
   PetscCall(DMSwarmRestoreField(swi,"weights",NULL,NULL,(void **)&weights));
-  PetscCall(DMSwarmRestoreField(swi,"fields",NULL,NULL,(void **)&values_i));
+  PetscCall(DMSwarmRestoreField(swi,fieldname,&nfields,NULL,(void **)&values_i));
   PetscCall(DMSwarmRestoreField(swd,coordFieldName_d[0],NULL,NULL,(void **)&coords_d));
   
   PetscFunctionReturn(PETSC_SUCCESS);

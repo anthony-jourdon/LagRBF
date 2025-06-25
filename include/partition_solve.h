@@ -6,6 +6,6 @@
 
 PetscErrorCode PartitionSetUpRBFMatrix(Partition p, PetscInt dim, PetscReal coords[],PetscReal (*kernel_fn)(PetscReal,PetscReal));
 PetscErrorCode PartitionMatSetRHS(Partition p, PetscInt nfields, PetscReal fval[], Mat *B);
-PetscErrorCode PartitionSolveInterpolationCoefficients(PartitionOfUnity pu, Partition *partitions, DM swarm);
+PetscErrorCode PartitionSolveInterpolationCoefficients(PartitionOfUnity pu, Partition *partitions, DM swarm, const char *fieldname);
 
 #endif

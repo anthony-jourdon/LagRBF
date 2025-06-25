@@ -2,9 +2,8 @@
 #define __softname_interpolation_h
 
 #include <petsc.h>
-#include "partition_of_unity.h"
-#include "partition.h"
+#include "lagrangian_rbf.h"
 
-PetscErrorCode RBFInterpolation(PartitionOfUnity pu, Partition *partitions, DM swi, DM swd);
+PetscErrorCode RBFInterpolation(LagRBFCtx ctx, DM swi, DM swd, const char *fieldname);
 
 #endif
