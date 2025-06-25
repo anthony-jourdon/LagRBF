@@ -8,6 +8,7 @@ PetscErrorCode LagRBFCtxCreate(LagRBFCtx *ctx)
 
   PetscCall(PetscNew(&p));
   p->pu         = NULL;
+  p->mtype      = GEODYNAMICS; // Default model type
   p->partitions = NULL;
   p->n_ifields  = 0;
   p->n_pfields  = 0;

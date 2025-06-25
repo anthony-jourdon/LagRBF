@@ -5,8 +5,15 @@
 #include "partition_of_unity.h"
 #include "partition.h"
 
+typedef enum {
+  GEODYNAMICS = 0, // Geodynamics model
+  SURFACE, // Surface process model
+  CLIMATE
+} InterpModelType;
+
 struct _p_LagRBFCtx {
   PartitionOfUnity pu; // Partition of Unity context
+  InterpModelType  mtype; // Model type   
   Partition        *partitions; // Array of partitions structs
   PetscInt         n_ifields; // Number of fields to interpolate
   PetscInt         n_pfields; // Number of fields that are not resulting from interpolation
