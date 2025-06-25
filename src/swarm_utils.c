@@ -20,6 +20,73 @@ PetscErrorCode SwarmCreatePIC(PartitionOfUnity pu, DM *sw)
   PetscFunctionReturn(PETSC_SUCCESS);
 }
 
+PetscErrorCode SwarmOutputFieldPetscIS_FromName(DM sw, const char *field_name, const char *directory, const char *prefix)
+{
+  PetscViewer    viewer;
+  IS             is;
+  PetscInt       npoints;
+  const PetscInt *idx;
+  PetscDataType  type;
+  void           *data;
+  char           fname[PETSC_MAX_PATH_LEN],outputname[PETSC_MAX_PATH_LEN];
+  const char     *dm_name;
+  PetscFunctionBeginUser;
+
+  PetscCall(PetscObjectGetName((PetscObject)sw,&dm_name));
+  if (prefix) { PetscSNPrintf(fname, PETSC_MAX_PATH_LEN-1,"%s.%s_%s.pbis",prefix,dm_name,field_name); }
+  else        { PetscCall(PetscSNPrintf(fname, PETSC_MAX_PATH_LEN-1,"%s_%s.pbis",dm_name,field_name)); }
+  /* If directory is provided, prepend it to the filename */
+  if (directory) { PetscSNPrintf(outputname, PETSC_MAX_PATH_LEN-1,"%s/%s",directory,fname); }
+  else           { PetscSNPrintf(outputname, PETSC_MAX_PATH_LEN-1,"%s",fname); }
+
+  PetscCall(DMSwarmGetLocalSize(sw,&npoints));
+  PetscCall(DMSwarmGetField(sw,field_name,NULL,&type,&data));
+  idx = (const PetscInt *)data;
+
+  PetscCall(ISCreateGeneral(PetscObjectComm((PetscObject)sw), npoints, idx, PETSC_USE_POINTER, &is));
+  PetscCall(PetscObjectSetName((PetscObject)is, field_name));
+  /* Output */
+  PetscCall(PetscViewerCreate(PetscObjectComm((PetscObject)sw),&viewer));
+  PetscCall(PetscViewerSetType(viewer,PETSCVIEWERBINARY));
+  PetscCall(PetscViewerFileSetMode(viewer,FILE_MODE_WRITE));
+  PetscCall(PetscViewerFileSetName(viewer,outputname));
+  PetscCall(ISView(is,viewer));
+  PetscCall(PetscViewerDestroy(&viewer));
+  PetscCall(ISDestroy(&is));
+  PetscCall(DMSwarmRestoreField(sw,field_name,NULL,&type,&data));
+  PetscFunctionReturn(PETSC_SUCCESS);
+}
+/*
+TODO: A special case for fields that are not of type PETSC_REAL is required.
+*/
+PetscErrorCode SwarmOutputFieldPetscVec_FromName(DM sw, const char *field_name, const char *directory, const char *prefix)
+{
+  PetscViewer viewer;
+  Vec         dvec;
+  char        fname[PETSC_MAX_PATH_LEN],outputname[PETSC_MAX_PATH_LEN];
+  const char *dm_name;
+  PetscFunctionBeginUser;
+  PetscCall(PetscObjectGetName((PetscObject)sw,&dm_name));
+  if (prefix) { PetscSNPrintf(fname, PETSC_MAX_PATH_LEN-1,"%s.%s_%s.pbvec",prefix,dm_name,field_name); }
+  else        { PetscCall(PetscSNPrintf(fname, PETSC_MAX_PATH_LEN-1,"%s_%s.pbvec",dm_name,field_name)); }
+  /* If directory is provided, prepend it to the filename */
+  if (directory) { PetscSNPrintf(outputname, PETSC_MAX_PATH_LEN-1,"%s/%s",directory,fname); }
+  else           { PetscSNPrintf(outputname, PETSC_MAX_PATH_LEN-1,"%s",fname); }
+
+  /* Generate a global vector from fields */
+  PetscCall(DMSwarmCreateGlobalVectorFromField(sw, field_name, &dvec));
+  /* Output */
+  PetscCall(PetscViewerCreate(PetscObjectComm((PetscObject)sw),&viewer));
+  PetscCall(PetscViewerSetType(viewer,PETSCVIEWERBINARY));
+  PetscCall(PetscViewerFileSetMode(viewer,FILE_MODE_WRITE));
+  PetscCall(PetscViewerFileSetName(viewer,outputname));
+  PetscCall(VecView(dvec,viewer));
+  PetscCall(PetscViewerDestroy(&viewer));
+  /* Clean-up */
+  PetscCall(DMSwarmDestroyGlobalVectorFromField(sw, field_name, &dvec));
+  PetscFunctionReturn(PETSC_SUCCESS);
+}
+
 PetscErrorCode SwarmOutputCoordsPetscVec(DM sw, const char *directory, const char *prefix)
 {
   DMSwarmCellDM celldm;
@@ -80,8 +147,9 @@ PetscErrorCode SwarmOutputFieldsPetscVec(DM sw, const char *directory, const cha
   PetscFunctionReturn(PETSC_SUCCESS);
 }
 
-PetscErrorCode SwarmOutput(LagRBFCtx ctx, DM sw)
+PetscErrorCode SwarmOutput(LagRBFCtx ctx, DM sw, PetscInt nfields, const char *fields[])
 {
+  PetscInt         f;
   PetscBool        exists;
   static PetscBool beenhere=PETSC_FALSE;
   char             root[PETSC_MAX_PATH_LEN],outputdir[PETSC_MAX_PATH_LEN],pvdfname[PETSC_MAX_PATH_LEN],vtkfname[PETSC_MAX_PATH_LEN];
@@ -105,7 +173,25 @@ PetscErrorCode SwarmOutput(LagRBFCtx ctx, DM sw)
   beenhere = PETSC_TRUE;
 
   PetscCall(SwarmOutputCoordsPetscVec(sw,outputdir,stepprefix));
-  PetscCall(SwarmOutputFieldsPetscVec(sw,outputdir,stepprefix));
+  //PetscCall(SwarmOutputFieldsPetscVec(sw,outputdir,stepprefix));
+  for (f=0; f<nfields; f++) {
+    PetscDataType type;
+    void          *data;
+    PetscCall(DMSwarmGetField(sw,fields[f],NULL,&type,&data));
+    PetscCall(DMSwarmRestoreField(sw,fields[f],NULL,&type,&data));
+    switch (type) {
+    case PETSC_REAL:
+      PetscCall(SwarmOutputFieldPetscVec_FromName(sw,fields[f],outputdir,stepprefix));
+      break;
+    
+    case PETSC_INT:
+      PetscCall(SwarmOutputFieldPetscIS_FromName(sw,fields[f],outputdir,stepprefix));
+      break;
 
+    default:
+      SETERRQ(PETSC_COMM_WORLD,PETSC_ERR_ARG_UNKNOWN_TYPE,"Data type must be PETSC_REAL or PETSC_INT");
+      break;
+    }    
+  }
   PetscFunctionReturn(PETSC_SUCCESS);
 }
