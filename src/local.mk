@@ -6,6 +6,7 @@ liblagrangian-offline-y.c += $(call thisdir, \
 	partition_solve.c \
 	kernels_rbf.c \
 	io_utils.c \
+	geodynamics_fields.c \
 	swarm_utils.c \
 	swarm_interp.c \
 	swarm_data.c \
