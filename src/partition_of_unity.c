@@ -89,6 +89,7 @@ PetscErrorCode PUCreateDMDA(PartitionOfUnity pu)
     default:
       SETERRQ(PETSC_COMM_SELF,PETSC_ERR_ARG_OUTOFRANGE,"Dimension can only be 1, 2 or 3. Found: %" PetscInt_FMT,pu->dim);
   }
+  PetscCall(DMDASetElementType(da, DMDA_ELEMENT_Q1));
   PetscCall(PetscObjectSetName((PetscObject)da,pu->name));
   PetscCall(PetscSNPrintf(prefix, PETSC_MAX_PATH_LEN-1, "%s_",pu->name));
   PetscCall(DMSetOptionsPrefix(da,prefix));
@@ -104,7 +105,7 @@ PetscErrorCode PUCreateDMDA(PartitionOfUnity pu)
 PetscErrorCode PartitionOfUnityCreate(PartitionOfUnity *pu)
 {
   PartitionOfUnity p;
-  DM               da;
+  DM               da=NULL;
   PetscInt         d,s[3],n[3];
   PetscFunctionBeginUser;
   PetscPrintf(PETSC_COMM_WORLD,"[[ %s ]]\n",PETSC_FUNCTION_NAME);
@@ -172,7 +173,7 @@ PetscErrorCode PUGetDimension(PartitionOfUnity pu, PetscInt *dim)
 */
 PetscErrorCode PartitionOfUnityMeshView(PartitionOfUnity pu)
 {
-  DM                dap;
+  DM                dap=NULL;
   Vec               testvec;
   PetscViewer       viewer;
   PetscViewerFormat format;
