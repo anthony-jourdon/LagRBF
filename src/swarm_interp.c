@@ -15,9 +15,9 @@ PetscErrorCode SwarmInterpCreate(LagRBFCtx ctx, DM *sw)
   PetscCall(LagRBFGetPartitionOfUnity(ctx,&pu));
 
   PetscCall(SwarmCreatePIC(pu,&swarm));
-  PetscSNPrintf(dm_name, PETSC_MAX_PATH_LEN-1, "swarm_interp");
-  PetscObjectSetName((PetscObject)swarm,dm_name);
-  PetscSNPrintf(dm_prefix, PETSC_MAX_PATH_LEN-1, "%s_",dm_name);
+  PetscCall(PetscSNPrintf(dm_name, PETSC_MAX_PATH_LEN-1, "swarm_interp"));
+  PetscCall(PetscObjectSetName((PetscObject)swarm,dm_name));
+  PetscCall(PetscSNPrintf(dm_prefix, PETSC_MAX_PATH_LEN-1, "%s_",dm_name));
   PetscCall(DMSetOptionsPrefix(swarm,dm_prefix));
   PetscCall(DMSetFromOptions(swarm));
 
@@ -25,6 +25,7 @@ PetscErrorCode SwarmInterpCreate(LagRBFCtx ctx, DM *sw)
   PetscCall(DMSwarmRegisterPetscDatatypeField(swarm,"pidx",1,PETSC_INT));
   PetscCall(DMSwarmRegisterPetscDatatypeField(swarm,"weights",pu->npart,PETSC_REAL));
   PetscCall(DMSwarmRegisterPetscDatatypeField(swarm,"fields",ctx->n_ifields,PETSC_REAL));
+  //PetscCall(DMSwarmRegisterPetscDatatypeField(swarm,"velocity",pu->dim,PETSC_REAL));
   // May need to add another set of fields that need to be advected but not interpolated
   // PetscCall(DMSwarmRegisterPetscDatatypeField(swarm,"pfields",ctx->n_pfields,PETSC_REAL));
   PetscCall(DMSwarmFinalizeFieldRegister(swarm));
@@ -33,21 +34,20 @@ PetscErrorCode SwarmInterpCreate(LagRBFCtx ctx, DM *sw)
   PetscFunctionReturn(PETSC_SUCCESS);
 }
 
-static PetscErrorCode SwarmInterpSetUniformCoordinates(PartitionOfUnity pu, DM sw)
+PetscErrorCode SwarmInterpSetCoordinatesFromOptions(PartitionOfUnity pu, DM sw)
 {
-  DM         da;
-  PetscInt   *m;
+  DM         da=NULL;
+  PetscInt   m[]={0,0,1};
   PetscInt   d;
   PetscReal  O[]={0.0, 0.0, 0.0};
   PetscReal  L[]={1.0, 1.0, 1.0};
-  PetscBool  found;
+  PetscBool  found,spherical=PETSC_FALSE;
   const char *prefix;
   PetscFunctionBeginUser;
   
   PetscCall(PUGetDMDA(pu,&da));
   PetscCall(DMGetOptionsPrefix(sw,&prefix));
   d = pu->dim;
-  PetscCall(PetscMalloc1(d,&m));
   PetscCall(PetscOptionsGetIntArray(NULL,prefix,"-npi",m,&d,&found));
   PetscCheck(found,PETSC_COMM_WORLD,PETSC_ERR_ARG_WRONG,"Option -%snpi not found. User must provide the number of interpolation points in each dimension.",prefix);
   PetscCheck(d == pu->dim,PETSC_COMM_WORLD,PETSC_ERR_ARG_SIZ,"Option -%snpi must have %" PetscInt_FMT " values, found: %" PetscInt_FMT "",prefix,pu->dim,d);
@@ -55,9 +55,12 @@ static PetscErrorCode SwarmInterpSetUniformCoordinates(PartitionOfUnity pu, DM s
   PetscCheck(d == pu->dim,PETSC_COMM_WORLD,PETSC_ERR_ARG_SIZ,"Option -%sO must have %" PetscInt_FMT " values, found: %" PetscInt_FMT "",prefix,pu->dim,d);
   PetscCall(PetscOptionsGetRealArray(NULL,prefix,"-L",L,&d,&found));
   PetscCheck(d == pu->dim,PETSC_COMM_WORLD,PETSC_ERR_ARG_SIZ,"Option -%sL must have %" PetscInt_FMT " values, found: %" PetscInt_FMT "",prefix,pu->dim,d);
-  PetscCall(DMSwarmSetPointsUniformCoordinates(sw,O,L,m,INSERT_VALUES));
-
-  PetscFree(m);
+  PetscCall(PetscOptionsGetBool(NULL,prefix,"-spherical",&spherical,&found));
+  if (spherical) {
+    PetscCall(DMSwarmSetPointsSphericalCoordinates(sw,O,L,m,INSERT_VALUES));
+  } else {
+    PetscCall(DMSwarmSetPointsUniformCoordinates(sw,O,L,m,INSERT_VALUES));
+  }
   PetscFunctionReturn(PETSC_SUCCESS);
 }
 
@@ -175,7 +178,7 @@ PetscErrorCode SwarmInterpAssignUniquePointIndex(DM sw, PetscInt start_idx, Pets
   PetscMPIInt rank;
   MPI_Comm    comm;
   PetscFunctionBeginUser;
-  
+  PetscPrintf(PETSC_COMM_WORLD,"[[ %s ]]\n",PETSC_FUNCTION_NAME);
   PetscCall(PetscObjectGetComm((PetscObject)sw,&comm));
   PetscCall(MPI_Comm_rank(comm,&rank));
   PetscCall(DMSwarmGetLocalSize(sw,&npoints)); // rank local points
@@ -213,11 +216,21 @@ PetscErrorCode SwarmInterpSetUp(LagRBFCtx ctx, DM *sw)
     //PetscCall(SwarmInterpLoadCoordinates(pu,swarm));
     SETERRQ(PETSC_COMM_WORLD,PETSC_ERR_SUP,"Restart not implemented yet for Swarm Interpolation");
   } else {
-    PetscCall(SwarmInterpSetUniformCoordinates(ctx->pu,swarm));
+    PetscCall(SwarmInterpSetCoordinatesFromOptions(ctx->pu,swarm));
   }
   PetscCall(SwarmInterpSetWeights(ctx,swarm));
   PetscCall(DMSwarmGetLocalSize(swarm,&npoints));
   PetscCall(SwarmInterpAssignUniquePointIndex(swarm,0,npoints));
   *sw = swarm;
+  PetscFunctionReturn(PETSC_SUCCESS);
+}
+
+PetscErrorCode SwarmInterpAddMarkersFromOptions(LagRBFCtx ctx, DM sw)
+{
+  PartitionOfUnity pu;
+  PetscFunctionBeginUser;
+  PetscCall(LagRBFGetPartitionOfUnity(ctx,&pu));
+  PetscCall(SwarmInterpSetCoordinatesFromOptions(pu,sw));
+  PetscCall(SwarmInterpSetWeights(ctx,sw));
   PetscFunctionReturn(PETSC_SUCCESS);
 }
