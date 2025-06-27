@@ -9,4 +9,6 @@ PetscErrorCode SwarmOutputFieldPetscVec_FromName(DM sw, const char *field_name, 
 PetscErrorCode SwarmOutputCoordsPetscVec(DM sw, const char *directory, const char *prefix);
 PetscErrorCode SwarmOutputFieldsPetscVec(DM sw, const char *directory, const char *prefix);
 PetscErrorCode SwarmOutput(LagRBFCtx ctx, DM sw, PetscInt nfields, const char *fields[]);
+PetscErrorCode DMSwarmSetPointsSphericalCoordinates(DM sw, PetscReal min[], PetscReal max[], PetscInt npoints[], InsertMode mode);
+
 #endif
