@@ -19,6 +19,6 @@ def PetscVecWriteBlockSizeToFile(fname:str, v:np.ndarray):
 def PetscVecWrite(fname:str, v:np.ndarray):
   bs = PetscVecWriteBlockSizeToFile(fname+".info", v)
   if bs > 1:
-    v = np.reshape(v, v.shape[0] * bs)
+    v = np.reshape(v, (v.shape[0] * bs))
   PetscVecWriteToFile(fname, v)
   return
