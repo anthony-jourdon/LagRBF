@@ -23,7 +23,7 @@ def output_data(root:str):
 
 def main():
   root = os.path.dirname(__file__)
-  root = os.path.join(root, '../../output')
+  root = os.path.join(root, '../../output_spherical')
   timeseries = process_timeseries(os.path.join(root, 'timeseries_X.pvd'))
   nsteps = len(timeseries["time"])
   output_data(root)

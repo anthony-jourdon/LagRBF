@@ -132,7 +132,7 @@ PetscErrorCode PartitionMatSetRHS(Partition p, PetscInt nfields, PetscReal fval[
 
 static PetscErrorCode PartitionMatSetRHS_Columnwise(Partition p, PetscInt nfields, PetscReal fval[], Mat *B)
 {
-  Mat       RHS;
+  Mat       RHS = NULL;
   PetscInt  f,np,npoints;
   PetscInt  *idx;
   PetscReal *LA_rhs;

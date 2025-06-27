@@ -69,7 +69,7 @@ static PetscReal velocity_function(PetscReal x, PetscReal y, PetscInt dof)
 
 static PetscErrorCode CreateDataPoints(LagRBFCtx ctx, DM *sw)
 {
-  DM         swarm;
+  DM         swarm=NULL;
   PetscInt   dim,nn;
   PetscInt   *m;
   PetscReal  O[]={0.0, 0.0, 0.0};
@@ -243,7 +243,7 @@ static PetscErrorCode Test()
   PartitionOfUnity pu;
   Partition        *partitions;
   DM               swarm_interp,swarm_data;
-  PetscInt         k,d,nsteps,step;
+  PetscInt         k,d,nsteps,step,npoints_i;
   PetscReal        dt,overlap,radius,epsilon,box_length;
   PetscBool        exists;
   const char       output_dir[] = "output";
@@ -275,14 +275,19 @@ static PetscErrorCode Test()
     PetscCall(PartitionSetEpsilon(partitions[k],epsilon)); // set the epsilon for the RBF kernel
   } 
   PetscCall(PartitionsSetIndex(pu,partitions));
-  /* Set interpolation points */
-  PetscCall(SwarmInterpSetUp(ctx,&swarm_interp));
   /* Set data points */
   PetscCall(CreateDataPoints(ctx,&swarm_data));
   PetscCall(SwarmDataSetValues(swarm_data));
   PetscCall(SwarmOutput(ctx,swarm_data,1,data_output));
-
   PetscCall(PartitionSetUp_All(partitions,pu->npart,swarm_data));
+  /* Set interpolation points */
+  //PetscCall(SwarmInterpSetUp(ctx,&swarm_interp));
+  PetscCall(SwarmInterpCreate(ctx,&swarm_interp));
+  PetscCall(SwarmInterpSetCoordinatesFromOptions(ctx->pu,swarm_interp));
+  //PetscCall(SwarmInterpSetWeights(ctx,swarm_interp));
+  //PetscCall(DMSwarmGetLocalSize(swarm_interp,&npoints_i));
+  //PetscCall(SwarmInterpAssignUniquePointIndex(swarm_interp,0,npoints_i));
+  /* Interpolate */
   PetscCall(PartitionSolveInterpolationCoefficients(pu,partitions,swarm_data,"fields"));
   PetscCall(RBFInterpolation(ctx,swarm_interp,swarm_data,"fields"));
   /* Output */

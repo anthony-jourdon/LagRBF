@@ -102,7 +102,7 @@ PetscErrorCode RBFInterpolation(LagRBFCtx ctx, DM swi, DM swd, const char *field
   PetscReal        *coords_i,*coords_d,*weights,*values_i;
   const char       **coordFieldName_i,**coordFieldName_d,*cellFieldName_i;
   PetscFunctionBeginUser;
-
+  
   PetscCall(LagRBFGetPartitionOfUnity(ctx,&pu));
   PetscCall(LagRBFGetPartitions(ctx,&partitions));
   /* Interpolation points */
