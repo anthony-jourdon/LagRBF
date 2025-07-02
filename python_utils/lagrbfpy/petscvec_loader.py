@@ -19,11 +19,11 @@ def PetscVecLoadBlockSizeFromFile(fname):
     block_size = int(line.split()[1])
   return block_size
 
-def PetscVecLoad(fname, **kwargs):
+def PetscVecLoad(fname, order='C', **kwargs):
   v = PetscVecLoadFromFile(fname, **kwargs)
   try:
     bs = PetscVecLoadBlockSizeFromFile(fname + '.info')
-    v = np.reshape(v, (-1, bs))
+    v = np.reshape(v, (-1, bs), order=order)
   except FileNotFoundError:
     return v
   return v

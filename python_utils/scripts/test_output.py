@@ -42,7 +42,7 @@ def main():
       ]
       coor  = PetscVecLoad(fname[0])
       dim   = coor.shape[1]
-      field = PetscVecLoad(fname[1])
+      field = PetscVecLoad(fname[1], order='F')  # Column-Major Order
       pidx  = PetscISLoadFromFile(fname[2])
 
       v_adv = PetscVecLoad(fname[3])
