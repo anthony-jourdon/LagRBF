@@ -205,7 +205,7 @@ static PetscErrorCode PointAdvection_RungeKutta(LagRBFCtx ctx, DM swi, DM swd, c
   /* Store the initial coords */
   PetscCall(PetscArraycpy(x0,coords,npoints*dim));
   /* 
-    v_i structure: [ j * npoints * dim + np * dim + d ]
+    v_i structure: [ j * npoints * dim + d * npoints + np ]
     where 
     j is the current order index, 
     npoints is the number of points, np is the current point index, 
@@ -234,15 +234,15 @@ static PetscErrorCode PointAdvection_RungeKutta(LagRBFCtx ctx, DM swi, DM swd, c
       PetscPrintf(PETSC_COMM_WORLD,"j = %" PetscInt_FMT "\n",j);
       for (np=0; np<npoints; np++) {
         for (d=0; d<dim; d++) {
-          velocity[bs*np + d] += RK_coeffs[i][j] * v_i[j*npoints*dim + np*dim + d];
+          velocity[d*npoints + np] += RK_coeffs[i][j] * v_i[j*npoints*dim + d*npoints + np];
         }
-        PetscPrintf(PETSC_COMM_WORLD,"Point[%" PetscInt_FMT "]: u_j = [ %g, %g ]\n",np, v_i[j*npoints*dim + np*dim + 0],v_i[j*npoints*dim + np*dim + 1]);
+        PetscPrintf(PETSC_COMM_WORLD,"Point[%" PetscInt_FMT "]: u_j = [ %g, %g ]\n",np, v_i[j*npoints*dim + np],v_i[j*npoints*dim + npoints + np]);
       }
     }
     /* Compute the new coordinates */
     for (np=0; np<npoints; np++) {
       for (d=0; d<dim; d++) {
-        coords[dim*np + d] = x0[dim*np + d] + dt * velocity[bs*np + d];
+        coords[dim*np + d] = x0[dim*np + d] + dt * velocity[d*npoints + np];
       }
     }
     /* Restore fields */
@@ -273,7 +273,7 @@ static PetscErrorCode PointAdvection_RungeKutta(LagRBFCtx ctx, DM swi, DM swd, c
     PetscReal sum[] = {0.0, 0.0, 0.0};
     for (d=0; d<dim; d++) {
       for (i=0; i<ctx->int_order; i++) {
-        sum[d] += RK_weights[i] * v_i[i*npoints*dim + np*dim + d];
+        sum[d] += RK_weights[i] * v_i[i*npoints*dim + d*npoints + np];
       }
       coords[dim*np + d] = x0[dim*np + d] + dt * sum[d];
     }

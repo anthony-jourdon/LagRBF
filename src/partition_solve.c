@@ -122,6 +122,7 @@ PetscErrorCode PartitionMatSetRHS(Partition p, PetscInt nfields, PetscReal fval[
   for (np=0; np<npoints; np++) {
     for (f=0; f<nfields; f++) {
       LA_rhs[f*npoints + np] = fval[ idx[np]*nfields + f ]; // set the RHS values
+      //LA_rhs[f*npoints + np] = fval[ f*npoints + idx[np] ]; // set the RHS values
     }
   }
   PetscCall(MatDenseRestoreArray(RHS,&LA_rhs));
@@ -129,7 +130,7 @@ PetscErrorCode PartitionMatSetRHS(Partition p, PetscInt nfields, PetscReal fval[
   PetscCall(PetscLogEventEnd(LAGRBF_PartitionMatSetRHS,0,0,0,0));
   PetscFunctionReturn(PETSC_SUCCESS);
 }
-
+#if 0
 static PetscErrorCode PartitionMatSetRHS_Columnwise(Partition p, PetscInt nfields, PetscReal fval[], Mat *B)
 {
   Mat       RHS = NULL;
@@ -149,7 +150,7 @@ static PetscErrorCode PartitionMatSetRHS_Columnwise(Partition p, PetscInt nfield
   *B = RHS;
   PetscFunctionReturn(PETSC_SUCCESS);
 }
-
+#endif
 static PetscErrorCode PartitionSolveLocalCoefficients(Partition p, PetscInt nfields, PetscReal fval[])
 {
   Mat      A,B,X;

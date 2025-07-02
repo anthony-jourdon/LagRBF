@@ -43,7 +43,7 @@ PetscErrorCode PointwiseInterpolation_AVX256_2D(
     PetscInt f;
     PetscInt cidx = cellid_i[np]; // cell index for the particle p
     /* Initialize the interpolation value for the point p */
-    for (f=0; f<nfields; f++) { values_i[nfields*np + f] = 0.0; }
+    for (f=0; f<nfields; f++) { values_i[f*npoints_i + np] = 0.0; }
     /* Iterate over the partitions to which that point is connected */
     for (k=0; k<nen; k++) {
       Partition p;
@@ -127,7 +127,7 @@ PetscErrorCode PointwiseInterpolation_AVX256_2D(
       }
       /* Compute the global interpolation */
       for (f = 0; f < nfields; ++f) {
-        values_i[nfields*np + f] += interpolant[f] * weights[np * npart + puidx];
+        values_i[f*npoints_i + np] += interpolant[f] * weights[np * npart + puidx];
       }
       /* Restore the coefficients array */
       PetscCall(MatDenseRestoreArray(X,&coeffs));
@@ -174,7 +174,7 @@ PetscErrorCode PointwiseInterpolation_AVX256_3D(
     PetscInt f;
     PetscInt cidx = cellid_i[np]; // cell index for the particle p
     /* Initialize the interpolation value for the point p */
-    for (f=0; f<nfields; f++) { values_i[nfields*np + f] = 0.0; }
+    for (f=0; f<nfields; f++) { values_i[f*npoints_i + np] = 0.0; }
     /* Iterate over the partitions to which that point is connected */
     for (k=0; k<nen; k++) {
       Partition p;
@@ -268,7 +268,7 @@ PetscErrorCode PointwiseInterpolation_AVX256_3D(
       }
       /* Compute the global interpolation */
       for (f = 0; f < nfields; ++f) {
-        values_i[nfields*np + f] += interpolant[f] * weights[np * npart + puidx];
+        values_i[f*npoints_i + np] += interpolant[f] * weights[np * npart + puidx];
       }
       /* Restore the coefficients array */
       PetscCall(MatDenseRestoreArray(X,&coeffs));
