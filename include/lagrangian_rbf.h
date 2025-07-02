@@ -17,6 +17,7 @@ struct _p_LagRBFCtx {
   Partition        *partitions; // Array of partitions structs
   PetscInt         n_ifields; // Number of fields to interpolate
   PetscInt         n_pfields; // Number of fields that are not resulting from interpolation
+  PetscInt         int_order; // Integration order for advection scheme
   PetscInt         step; // Current step in the model
   PetscReal        time; // Current time in the model
   PetscReal        dt; // Time step size

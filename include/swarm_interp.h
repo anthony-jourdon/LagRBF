@@ -6,7 +6,7 @@
 PetscErrorCode SwarmInterpCreate(LagRBFCtx ctx, DM *sw);
 PetscErrorCode SwarmInterpSetWeights(LagRBFCtx ctx, DM sw);
 PetscErrorCode SwarmInterpSetUp(LagRBFCtx ctx, DM *sw);
-PetscErrorCode SwarmInterpSetCoordinatesFromOptions(PartitionOfUnity pu, DM sw);
+PetscErrorCode SwarmInterpSetCoordinatesFromOptions(PartitionOfUnity pu, DM sw, InsertMode mode);
 PetscErrorCode SwarmInterpAssignUniquePointIndex(DM sw, PetscInt start_idx, PetscInt end_idx);
-PetscErrorCode SwarmInterpAddMarkersFromOptions(LagRBFCtx ctx, DM sw);
+PetscErrorCode SwarmInterpAddMarkersFromOptions(LagRBFCtx ctx, DM sw, InsertMode mode);
 #endif

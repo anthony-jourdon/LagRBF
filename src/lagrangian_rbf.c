@@ -10,6 +10,7 @@ PetscErrorCode LagRBFCtxCreate(LagRBFCtx *ctx)
   p->pu         = NULL;
   p->mtype      = GEODYNAMICS; // Default model type
   p->partitions = NULL;
+  p->int_order  = 1;
   p->n_ifields  = 0;
   p->n_pfields  = 0;
   p->step       = 0;
@@ -64,6 +65,8 @@ PetscErrorCode LagRBFSetFromOptions(LagRBFCtx ctx)
   PetscSNPrintf(option_name, PETSC_MAX_PATH_LEN-1, "-n_interpolation_fields");
   PetscCall(PetscOptionsGetInt(NULL, NULL, option_name, &ctx->n_ifields, NULL));
   PetscCall(PetscOptionsGetString(NULL,NULL,"-output_path",ctx->output_dir,PETSC_MAX_PATH_LEN-1,NULL));
+  PetscSNPrintf(option_name, PETSC_MAX_PATH_LEN-1, "-advection_scheme");
+  PetscCall(PetscOptionsGetInt(NULL, NULL, option_name, &ctx->int_order, NULL));
   PetscFunctionReturn(PETSC_SUCCESS);
 }
 
