@@ -280,7 +280,7 @@ static PetscErrorCode AdvectionExplicit_RK4(
   for (np=0; np<npoints; np++) {
     PetscReal sum[] = {0.0, 0.0, 0.0};
     for (d=0; d<dim; d++) {
-      for (i=0; i<ctx->int_order; i++) {
+      for (i=0; i<ctx->adv_ctx->order; i++) {
         sum[d] += RK_weights[i] * v_i[i*npoints*dim + d*npoints + np];
       }
       coords[dim*np + d] = x0[dim*np + d] + dt/6.0 * sum[d];
@@ -351,7 +351,7 @@ static PetscErrorCode AdvectionExplicit_DormandPrince(
   PetscCall(DMSwarmRestoreField(swi,"v_adv",&v_bs,NULL,(void **)&v_i));
   PetscCall(DMSwarmRestoreField(swi,velocity_name,&bs,NULL,(void **)&velocity));
   PetscCall(DMSwarmRestoreField(swi,coorFieldName[0],NULL,NULL,(void **)&coords));
-  PetscCheck(v_bs == dim*ctx->int_order,PETSC_COMM_WORLD,PETSC_ERR_ARG_SIZ,"The advection velocity field should have %" PetscInt_FMT " dofs, found: %" PetscInt_FMT "",dim*ctx->int_order,v_bs);
+  PetscCheck(v_bs == dim*ctx->adv_ctx->order,PETSC_COMM_WORLD,PETSC_ERR_ARG_SIZ,"The advection velocity field should have %" PetscInt_FMT " dofs, found: %" PetscInt_FMT "",dim*ctx->adv_ctx->order,v_bs);
   
   for (i=0; i<6; i++) {
     //PetscPrintf(PETSC_COMM_WORLD,"i = %" PetscInt_FMT "\n",i);
@@ -520,9 +520,9 @@ static PetscErrorCode PointAdvection_RungeKutta(LagRBFCtx ctx, DM swi, DM swd, c
   PetscCall(DMSwarmRestoreField(swi,"v_adv",&v_bs,NULL,(void **)&v_i));
   PetscCall(DMSwarmRestoreField(swi,velocity_name,&bs,NULL,(void **)&velocity));
   PetscCall(DMSwarmRestoreField(swi,coorFieldName[0],NULL,NULL,(void **)&coords));
-  PetscCheck(v_bs == dim*ctx->int_order,PETSC_COMM_WORLD,PETSC_ERR_ARG_SIZ,"The advection velocity field should have %" PetscInt_FMT " dofs, found: %" PetscInt_FMT "",dim*ctx->int_order,v_bs);
+  PetscCheck(v_bs == dim*ctx->adv_ctx->order,PETSC_COMM_WORLD,PETSC_ERR_ARG_SIZ,"The advection velocity field should have %" PetscInt_FMT " dofs, found: %" PetscInt_FMT "",dim*ctx->adv_ctx->order,v_bs);
   /* Step 2: Runge-Kutta iterations */
-  for (i=1; i<ctx->int_order; i++) {
+  for (i=1; i<ctx->adv_ctx->order; i++) {
     //PetscPrintf(PETSC_COMM_WORLD,"RK step i = %" PetscInt_FMT "\n",i);
     /* Access fields */
     PetscCall(DMSwarmGetField(swi, coorFieldName[0], NULL, NULL, (void **)&coords));
@@ -574,7 +574,7 @@ static PetscErrorCode PointAdvection_RungeKutta(LagRBFCtx ctx, DM swi, DM swd, c
   for (np=0; np<npoints; np++) {
     PetscReal sum[] = {0.0, 0.0, 0.0};
     for (d=0; d<dim; d++) {
-      for (i=0; i<ctx->int_order; i++) {
+      for (i=0; i<ctx->adv_ctx->order; i++) {
         sum[d] += RK_weights[i] * v_i[i*npoints*dim + d*npoints + np];
       }
       coords[dim*np + d] = x0[dim*np + d] + dt * sum[d];
@@ -597,6 +597,7 @@ static PetscErrorCode Test()
   LagRBFCtx        ctx;
   PartitionOfUnity pu;
   Partition        *partitions;
+  AdvectionCtx     adv_ctx;
   DM               swarm_interp,swarm_data;
   PetscInt         k,d,nsteps,step,ndata,ninterp;
   PetscReal        dt,overlap,radius,epsilon,box_length,time;
@@ -657,6 +658,7 @@ static PetscErrorCode Test()
   /* Output */
   PetscCall(SwarmOutput(ctx,swarm_interp,2,output_fields));
 
+  PetscCall(LagRBFGetAdvectionCtx(ctx,&adv_ctx));
   dt = 1.0;
   nsteps = 10;
   PetscCall(PetscOptionsGetReal(NULL,NULL,"-dt",&dt,NULL));
@@ -674,7 +676,8 @@ static PetscErrorCode Test()
     /* Update weights */
     //PetscCall(SwarmInterpSetWeights(ctx,swarm_interp));
     /* Advect */
-    PetscCall(AdvectionExplicit_RK4(ctx,swarm_interp,swarm_data,"fields"));
+    //PetscCall(AdvectionExplicit_RK4(ctx,swarm_interp,swarm_data,"fields"));
+    adv_ctx->advection(ctx,swarm_interp,swarm_data);
     //PetscCall(AdvectionExplicit_DormandPrince(ctx,swarm_interp,swarm_data,"fields"));
     /* Interpolate */
     PetscCall(PartitionSolveInterpolationCoefficients(pu,partitions,swarm_data,"fields"));
