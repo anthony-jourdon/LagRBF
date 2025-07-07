@@ -8,14 +8,13 @@ PetscErrorCode LagRBFCtxCreate(LagRBFCtx *ctx)
 
   PetscCall(PetscNew(&p));
   p->pu         = NULL;
+  p->adv_ctx    = NULL; 
   p->mtype      = GEODYNAMICS; // Default model type
   p->partitions = NULL;
-  p->int_order  = 1;
   p->n_ifields  = 0;
   p->n_pfields  = 0;
   p->step       = 0;
   p->time       = 0.0;
-  p->dt         = 0.0;
   p->restart    = PETSC_FALSE;
   PetscCall(PetscSNPrintf(p->output_dir, PETSC_MAX_PATH_LEN-1, "output"));
 
@@ -60,13 +59,19 @@ PetscErrorCode LagRBF_PartitionCreate(LagRBFCtx ctx)
 
 PetscErrorCode LagRBFSetFromOptions(LagRBFCtx ctx)
 {
-  char option_name[PETSC_MAX_PATH_LEN];
+  PetscInt scheme;
+  char option_name[PETSC_MAX_PATH_LEN],velocity_name[PETSC_MAX_PATH_LEN];
   PetscFunctionBeginUser;
   PetscSNPrintf(option_name, PETSC_MAX_PATH_LEN-1, "-n_interpolation_fields");
   PetscCall(PetscOptionsGetInt(NULL, NULL, option_name, &ctx->n_ifields, NULL));
   PetscCall(PetscOptionsGetString(NULL,NULL,"-output_path",ctx->output_dir,PETSC_MAX_PATH_LEN-1,NULL));
-  PetscSNPrintf(option_name, PETSC_MAX_PATH_LEN-1, "-advection_scheme");
-  PetscCall(PetscOptionsGetInt(NULL, NULL, option_name, &ctx->int_order, NULL));
+  PetscSNPrintf(option_name, PETSC_MAX_PATH_LEN-1,"-advection_scheme");
+  scheme = 2; // Default to RK4
+  PetscCall(PetscOptionsGetInt(NULL, NULL, option_name,&scheme, NULL));
+  PetscSNPrintf(option_name, PETSC_MAX_PATH_LEN-1,"-velocity_name");
+  PetscSNPrintf(velocity_name, PETSC_MAX_PATH_LEN-1, "fields");
+  PetscCall(PetscOptionsGetString(NULL,NULL,option_name,velocity_name,PETSC_MAX_PATH_LEN-1,NULL));
+  PetscCall(LagRBF_AdvectionCtxCreate(ctx,(AdvectionScheme)scheme,velocity_name));
   PetscFunctionReturn(PETSC_SUCCESS);
 }
 
@@ -80,7 +85,7 @@ PetscErrorCode LagRBFSetStep(LagRBFCtx ctx, PetscInt step)
 PetscErrorCode LagRBFSetTimeStep(LagRBFCtx ctx, PetscReal dt)
 {
   PetscFunctionBeginUser;
-  ctx->dt = dt;
+  PetscCall(AdvectionSetTimeStep(ctx->adv_ctx, dt));
   PetscFunctionReturn(PETSC_SUCCESS);
 }
 
@@ -116,8 +121,12 @@ PetscErrorCode LagRBFGetStep(LagRBFCtx ctx, PetscInt *step)
 
 PetscErrorCode LagRBFGetTimeStep(LagRBFCtx ctx, PetscReal *dt)
 {
+  PetscReal time_step;
   PetscFunctionBeginUser;
-  if (dt) { *dt = ctx->dt; }
+  if (dt) { 
+    PetscCall(AdvectionGetTimeStep(ctx->adv_ctx, &time_step)); 
+    *dt = time_step; 
+  }
   PetscFunctionReturn(PETSC_SUCCESS);
 }
 
@@ -125,5 +134,13 @@ PetscErrorCode LagRBFGetTime(LagRBFCtx ctx, PetscReal *time)
 {
   PetscFunctionBeginUser;
   if (time) { *time = ctx->time; }
+  PetscFunctionReturn(PETSC_SUCCESS);
+}
+
+PetscErrorCode LagRBFGetAdvectionCtx(LagRBFCtx ctx, AdvectionCtx *adv_ctx)
+{
+  PetscFunctionBeginUser;
+  PetscCheck(ctx->adv_ctx, PETSC_COMM_SELF, PETSC_ERR_ARG_NULL, "Advection context is NULL. Call AdvectionCtxCreate() first.");
+  if (adv_ctx) { *adv_ctx = ctx->adv_ctx; }
   PetscFunctionReturn(PETSC_SUCCESS);
 }

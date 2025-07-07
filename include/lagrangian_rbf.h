@@ -4,6 +4,7 @@
 #include <petsc.h>
 #include "partition_of_unity.h"
 #include "partition.h"
+#include "advection/advection_ctx.h"
 
 typedef enum {
   GEODYNAMICS = 0, // Geodynamics model
@@ -14,13 +15,12 @@ typedef enum {
 struct _p_LagRBFCtx {
   PartitionOfUnity pu; // Partition of Unity context
   InterpModelType  mtype; // Model type   
+  AdvectionCtx     adv_ctx;  // Advection context
   Partition        *partitions; // Array of partitions structs
   PetscInt         n_ifields; // Number of fields to interpolate
   PetscInt         n_pfields; // Number of fields that are not resulting from interpolation
-  PetscInt         int_order; // Integration order for advection scheme
   PetscInt         step; // Current step in the model
   PetscReal        time; // Current time in the model
-  PetscReal        dt; // Time step size
   PetscBool        restart; // Flag to indicate if the interpolation points coordinates should be loaded from a file
   char             output_dir[PETSC_MAX_PATH_LEN]; // Directory to write output files
 };
@@ -42,4 +42,5 @@ PetscErrorCode LagRBFGetPartitions(LagRBFCtx ctx, Partition **partitions);
 PetscErrorCode LagRBFGetStep(LagRBFCtx ctx, PetscInt *step);
 PetscErrorCode LagRBFGetTimeStep(LagRBFCtx ctx, PetscReal *dt);
 PetscErrorCode LagRBFGetTime(LagRBFCtx ctx, PetscReal *time);
+PetscErrorCode LagRBFGetAdvectionCtx(LagRBFCtx ctx, AdvectionCtx *adv_ctx);
 #endif
