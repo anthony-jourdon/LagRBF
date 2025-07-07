@@ -1,0 +1,6 @@
+liblagrangian-offline-y.c += $(call thisdir, \
+  advection_ctx.c \
+  advection.c \
+  runge_kutta_1.c \
+  runge_kutta_4.c \
+)
