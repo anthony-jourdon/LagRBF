@@ -155,10 +155,11 @@ PetscErrorCode PointwiseInterpolation_AVX256_3D(
   PetscInt       k,np,dim,npart,nel,nen;
   const PetscInt *elidx;
   PetscReal      *interpolant;
+  
   __m256d        one,four,five;
   __m256d        *interpolant_vec;
   PetscFunctionBeginUser;
-
+  
   PetscCall(PUGetNPartitions(pu,&npart));
   PetscCall(PUGetDimension(pu,&dim));
   PetscCall(PUGetDMDA(pu,&da));
@@ -186,8 +187,6 @@ PetscErrorCode PointwiseInterpolation_AVX256_3D(
 
       puidx = elidx[nen*cidx + k];
       p     = partitions[puidx];
-      puidx = elidx[nen*cidx + k];
-      p     = partitions[puidx];
       PetscCall(PartitionGetDataPointsIdx(p,&ndata,&data_idx));
       if (ndata == 0) continue; // no data points in this partition, skip
       /* Get the coefficients of that partition */
@@ -197,11 +196,11 @@ PetscErrorCode PointwiseInterpolation_AVX256_3D(
       epsilon = _mm256_set1_pd(p->epsilon);
       /* Initialize the interpolant */
       for (f=0; f<nfields; f++) { interpolant_vec[f] = _mm256_setzero_pd(); }
-      /* Get the number of data points by chuck of 4 */
+      /* Get the number of data points by chunk of 4 */
       nd_aligned = (ndata / 4) * 4;
       for (nd=0; nd<nd_aligned; nd+=4) {
         __m256d dx,dy,dz,dist2,dist,u,mask,u2,u4,four_u,inner,rbf;
-        // Step 1: Compute RBF values for this chunck of 4 points
+        // Step 1: Compute RBF values for this chunk of 4 points
         dx = _mm256_set_pd(
           coords_d[3*data_idx[nd+3] + 0] - coords_i[3*np + 0],
           coords_d[3*data_idx[nd+2] + 0] - coords_i[3*np + 0],
@@ -220,9 +219,7 @@ PetscErrorCode PointwiseInterpolation_AVX256_3D(
           coords_d[3*data_idx[nd+1] + 2] - coords_i[3*np + 2],
           coords_d[3*data_idx[nd+0] + 2] - coords_i[3*np + 2]
         );
-        // Compute the squared distance
-        dist2  = _mm256_fmadd_pd(dx, dx, 
-          _mm256_fmadd_pd(dy, dy, _mm256_mul_pd(dz, dz)));          // dx*dx + dy*dy + dz*dz
+        dist2  = _mm256_fmadd_pd(dx, dx, _mm256_fmadd_pd(dy, dy, _mm256_mul_pd(dz, dz))); // dx*dx + dy*dy + dz*dz
         dist   = _mm256_sqrt_pd(dist2);                             // sqrt(dx*dx + dy*dy + dz*dz)
         u      = _mm256_sub_pd(one, _mm256_mul_pd(epsilon, dist));  // u = 1 - epsilon * dist
         mask   = _mm256_cmp_pd(u, _mm256_setzero_pd(), _CMP_GE_OQ); // mask for u >= 0
@@ -240,7 +237,7 @@ PetscErrorCode PointwiseInterpolation_AVX256_3D(
           interpolant_vec[f] = _mm256_fmadd_pd(rbf, coeff_v, interpolant_vec[f]);
         }
       }
-      /* Extract the chuck of 4 */
+      /* Extract the chunk of 4 */
       for (f=0; f<nfields; f++) {
         __m128d hi128,lo128,sum128,final;
         hi128  = _mm256_extractf128_pd(interpolant_vec[f], 1);
