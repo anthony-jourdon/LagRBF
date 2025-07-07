@@ -7,12 +7,16 @@
 PetscErrorCode SwarmInterpCreate(LagRBFCtx ctx, DM *sw)
 {
   PartitionOfUnity pu;
+  AdvectionCtx     adv_ctx;
   DM               swarm;
+  PetscInt         int_order;
   char             dm_name[PETSC_MAX_PATH_LEN],dm_prefix[PETSC_MAX_PATH_LEN];
   PetscFunctionBeginUser;
   PetscPrintf(PETSC_COMM_WORLD,"[[ %s ]]\n",PETSC_FUNCTION_NAME);
 
   PetscCall(LagRBFGetPartitionOfUnity(ctx,&pu));
+  PetscCall(LagRBFGetAdvectionCtx(ctx,&adv_ctx));
+  PetscCall(AdvectionGetIntegrationOrder(adv_ctx,&int_order));
 
   PetscCall(SwarmCreatePIC(pu,&swarm));
   PetscCall(PetscSNPrintf(dm_name, PETSC_MAX_PATH_LEN-1, "swarm_interp"));
@@ -25,8 +29,10 @@ PetscErrorCode SwarmInterpCreate(LagRBFCtx ctx, DM *sw)
   PetscCall(DMSwarmRegisterPetscDatatypeField(swarm,"pidx",1,PETSC_INT));
   PetscCall(DMSwarmRegisterPetscDatatypeField(swarm,"weights",pu->npart,PETSC_REAL));
   PetscCall(DMSwarmRegisterPetscDatatypeField(swarm,"fields",ctx->n_ifields,PETSC_REAL)); // fields to interpolate
-  PetscCall(DMSwarmRegisterPetscDatatypeField(swarm,"v_adv",pu->dim*ctx->int_order,PETSC_REAL)); // velocity field interpolated
-  PetscCall(DMSwarmRegisterPetscDatatypeField(swarm,"coor_init",pu->dim,PETSC_REAL)); // coordinates before advection
+  if (adv_ctx->scheme != RK1) {
+    PetscCall(DMSwarmRegisterPetscDatatypeField(swarm,"v_adv",pu->dim*int_order,PETSC_REAL)); // velocity field interpolated
+    PetscCall(DMSwarmRegisterPetscDatatypeField(swarm,"coor_init",pu->dim,PETSC_REAL)); // coordinates before advection
+  }
   // May need to add another set of fields that need to be advected but not interpolated
   // PetscCall(DMSwarmRegisterPetscDatatypeField(swarm,"pfields",ctx->n_pfields,PETSC_REAL));
   PetscCall(DMSwarmFinalizeFieldRegister(swarm));
