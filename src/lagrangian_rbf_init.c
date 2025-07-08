@@ -10,6 +10,7 @@ extern PetscLogEvent LAGRBF_PartitionSolveLocalCoefficients;
 extern PetscLogEvent LAGRBF_PartitionSolveInterpolationCoefficients;
 extern PetscLogEvent LAGRBF_AdvectionExplicit_RK1;
 extern PetscLogEvent LAGRBF_AdvectionExplicit_RK4;
+extern PetscLogEvent LAGRBF_AdvectionExplicit_DOPRI;
 
 static PetscErrorCode LagRBFWriteInitialInfo(void)
 {
@@ -46,6 +47,7 @@ PetscErrorCode LagRBFInitialize(int *argc,char ***args,const char file[],const c
   /* Advection */
   PetscCall(PetscLogEventRegister("AdvectionExplicit_RK1",LAGRBF_CLASSID,&LAGRBF_AdvectionExplicit_RK1));
   PetscCall(PetscLogEventRegister("AdvectionExplicit_RK4",LAGRBF_CLASSID,&LAGRBF_AdvectionExplicit_RK4));
+  PetscCall(PetscLogEventRegister("AdvectionExplicit_DOPRI",LAGRBF_CLASSID,&LAGRBF_AdvectionExplicit_DOPRI));
 
   PetscFunctionReturn(PETSC_SUCCESS);
 }
