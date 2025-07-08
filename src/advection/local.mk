@@ -3,4 +3,5 @@ liblagrangian-offline-y.c += $(call thisdir, \
   advection.c \
   runge_kutta_1.c \
   runge_kutta_4.c \
+  dormand_prince.c \
 )
