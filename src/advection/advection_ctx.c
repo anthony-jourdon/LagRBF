@@ -3,6 +3,7 @@
 #include "advection/advection_ctx.h"
 #include "advection/runge_kutta_1.h"
 #include "advection/runge_kutta_4.h"
+#include "advection/dormand_prince.h"
 
 const char *AdvectionSchemeNames[] = {
   "RK1", // First order Runge-Kutta
@@ -16,7 +17,7 @@ PetscErrorCode (*create_scheme[])(AdvectionCtx) = {
   Advection_RK1Create,
   NULL, // No RK2 implementation
   Advection_RK4Create,
-  NULL, // No DOPRI implementation
+  Advection_DOPRICreate,
   0
 };
 
@@ -120,5 +121,17 @@ PetscErrorCode LagRBF_AdvectionCtxCreate(LagRBFCtx ctx, AdvectionScheme scheme, 
   PetscCall(AdvectionCtxSetScheme(adv,scheme));
   PetscCall(AdvectionSetVelocityName(adv,velocity_name));
   ctx->adv_ctx = adv;
+  PetscFunctionReturn(PETSC_SUCCESS);
+}
+
+PetscErrorCode LagRBF_AdvectionCtxDestroy(LagRBFCtx ctx)
+{
+  AdvectionCtx adv = ctx->adv_ctx;
+  PetscFunctionBeginUser;
+  PetscCheck(ctx, PETSC_COMM_SELF, PETSC_ERR_ARG_NULL, "LagRBFCtx context is NULL");
+  if (adv) {
+    PetscCall(AdvectionCtxDestroy(&adv));
+    ctx->adv_ctx = NULL;
+  }
   PetscFunctionReturn(PETSC_SUCCESS);
 }

@@ -24,7 +24,7 @@ struct _p_AdvectionCtx {
 };
 
 PetscErrorCode LagRBF_AdvectionCtxCreate(LagRBFCtx ctx, AdvectionScheme scheme, const char *velocity_name);
-
+PetscErrorCode LagRBF_AdvectionCtxDestroy(LagRBFCtx ctx);
 /* Setters */
 PetscErrorCode AdvectionSetTimeStep(AdvectionCtx ctx, PetscReal dt);
 PetscErrorCode AdvectionSetVelocityName(AdvectionCtx ctx,const char *name);
