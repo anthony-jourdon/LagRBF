@@ -8,6 +8,8 @@
 #include "swarm_interp.h"
 #include "swarm_data.h"
 #include "interpolation.h"
+#include "advection/advection_ctx.h"
+//#include "advection/advection.h"
 
 //DMSwarmSetPointsSphericalCoordinates(DM sw, PetscReal min[], PetscReal max[], PetscInt npoints[], InsertMode mode)
 
@@ -57,7 +59,7 @@ static PetscReal discontinuous_cross_planes(PetscReal x, PetscReal y)
 static PetscErrorCode velocity_function(PetscReal coor[], PetscReal velocity[])
 {
   PetscReal r,theta;
-  PetscReal radial_u  = -0.2;
+  PetscReal radial_u  = 0.0;//-0.2;
   PetscReal angular_u = 0.5;
   PetscFunctionBeginUser;
   r     = PetscSqrtReal(coor[0]*coor[0] + coor[1]*coor[1]);
@@ -154,71 +156,6 @@ static PetscErrorCode SwarmInterp_AddMarkersCircleFromOptions_2D(PartitionOfUnit
 
   PetscCall(DMSwarmSetPointsSphericalCoordinates(sw,O,L,m,mode));
   //PetscCall(DMSwarmSetPointsUniformCoordinates(sw,O,L,m,INSERT_VALUES));
-#if 0  
-  npoints = 1;
-  for (d=0; d<dim; d++) {
-    /* count the number of points */ 
-    npoints *= m[d]; 
-    /* Compute a constant interval for coords */
-    if (m[d] > 1) {
-      dx[d] = (L[d] - O[d]) / ((PetscReal)(m[d] - 1));
-    } else {
-      dx[d] = 0.0;
-    }
-  }
-  /* Set the coordinates */
-  PetscMalloc1(npoints*dim,&coor);
-  for (j=0; j<m[1]; j++) {
-    for (i=0; i<m[0]; i++) {
-      PetscReal params[] = {0.0, 0.0};
-      PetscInt  ijk[2];
-      PetscBool point_inside = PETSC_TRUE;
-
-      ijk[0] = i;
-      ijk[1] = j;
-      /* Get the parameters r, theta (and phi if 3D) */
-      for (d=0; d<dim; d++) { params[d] = O[d] + ijk[d] * dx[d]; }
-      /* Compute the cartesian coordinates */
-      coor[npoints*dim    ] = params[0] * PetscCosReal(params[1]);
-      coor[npoints*dim + 1] = params[0] * PetscSinReal(params[1]);
-      //PetscPrintf(PETSC_COMM_WORLD,"Adding point (%g, %g)\n",coor[npoints*dim],coor[npoints*dim + 1]);
-    }
-  }
-  PetscPrintf(PETSC_COMM_WORLD,"Adding %" PetscInt_FMT " points to the swarm...\n",npoints);
-  PetscCall(DMSwarmSetPointCoordinates(sw,npoints,coor,PETSC_FALSE,INSERT_VALUES));
-  PetscCall(PetscFree(coor));
-#endif
-  PetscFunctionReturn(PETSC_SUCCESS);
-}
-
-static PetscErrorCode PointAdvection_Euler_Pointwise(DM sw, PetscReal dt, const char *velocity_name)
-{
-  DMSwarmCellDM  celldm;
-  PetscInt       p,dim,bs,npoints;
-  PetscReal      *coords,*velocity;
-  PetscLogDouble time[2];
-  const char     **coorFieldName;
-  PetscFunctionBeginUser;
-  PetscCall(PetscTime(&time[0]));
-  PetscPrintf(PETSC_COMM_WORLD,"[[ %s ]]\n",PETSC_FUNCTION_NAME);
-  PetscCall(DMGetDimension(sw,&dim));
-  PetscCall(DMSwarmGetLocalSize(sw,&npoints));
-  PetscCall(DMSwarmGetCellDMActive(sw, &celldm));
-  PetscCall(DMSwarmCellDMGetCoordinateFields(celldm, NULL, &coorFieldName));
-  PetscCall(DMSwarmGetField(sw, coorFieldName[0], NULL, NULL, (void **)&coords));
-  PetscCall(DMSwarmGetField(sw,velocity_name,&bs,NULL,(void **)&velocity));
-  for (p=0; p<npoints; p++) {
-    PetscInt d;
-    for (d=0; d<dim; d++) {
-      coords[dim*p + d] = coords[dim*p + d] + velocity[bs*p + d] * dt;
-    }
-  }
-  PetscCall(DMSwarmRestoreField(sw,velocity_name,&bs,NULL,(void **)&velocity));
-  PetscCall(DMSwarmRestoreField(sw,coorFieldName[0],NULL,NULL,(void **)&coords));
-  /* Update MPI rank and cell id */
-  PetscCall(DMSwarmMigrate(sw,PETSC_TRUE));
-  PetscCall(PetscTime(&time[1]));
-  PetscCall(PetscPrintf(PETSC_COMM_WORLD,"[[ %s ]] Advected %" PetscInt_FMT " points in %g seconds\n",PETSC_FUNCTION_NAME,npoints,time[1]-time[0]));
   PetscFunctionReturn(PETSC_SUCCESS);
 }
 
@@ -226,11 +163,12 @@ static PetscErrorCode Test()
 {
   Vec              test_vec;
   LagRBFCtx        ctx;
+  AdvectionCtx     adv_ctx;
   PartitionOfUnity pu;
   Partition        *partitions;
   DM               swarm_interp,swarm_data;
   PetscInt         k,d,nsteps,step,ndata,ninterp;
-  PetscReal        dt,b_dt,overlap,radius,epsilon,box_length;
+  PetscReal        dt,b_dt,overlap,radius,epsilon,box_length,time;
   PetscBool        exists,found;
   const char       *data_output[] = {"fields"};
   const char       *output_fields[] = {"fields","pidx"};
@@ -271,22 +209,26 @@ static PetscErrorCode Test()
   /* Output DMDA */
   PetscCall(PartitionOfUnityMeshView(pu));
 
-  /* Create interpolation points, only the DM is created, no points on it yet */
+  /* Create interpolation points */
   PetscCall(SwarmInterpCreate(ctx,&swarm_interp));
+  /* Set the first points, required to call at least once with INSERT_VALUES before ADD_VALUES */
   PetscCall(SwarmInterp_AddMarkersCircleFromOptions_2D(pu,swarm_interp,INSERT_VALUES));
   PetscCall(SwarmInterpSetWeights(ctx,swarm_interp));
 
+  PetscCall(LagRBFGetAdvectionCtx(ctx,&adv_ctx));
   nsteps = 10; // number of time steps for advection
   PetscCall(PetscOptionsGetInt(NULL,NULL,"-nsteps",&nsteps,NULL));
   PetscCall(PetscOptionsGetReal(NULL,NULL,"-dt",&dt,NULL));
   b_dt = -dt;
+  PetscCall(LagRBFSetTimeStep(ctx,b_dt));
   /* First we run backward */
   for (step=nsteps-1; step>=0; step--) {
     PetscCall(PetscPrintf(PETSC_COMM_WORLD,"[[ STEP: %" PetscInt_FMT " ]], time: %g\n",step,step*dt));
     /* Set step, dt, time */
     PetscCall(LagRBFSetStep(ctx,step));
-    PetscCall(LagRBFSetTimeStep(ctx,b_dt));
-    PetscCall(LagRBFSetTime(ctx,step*dt));
+    PetscCall(LagRBFGetTime(ctx,&time));
+    time += dt;
+    PetscCall(LagRBFSetTime(ctx,time));
     /* Add markers at "surface" and set their weights */
     //PetscCall(SwarmInterpAddMarkersFromOptions(ctx,swarm_interp));
     PetscCall(SwarmInterp_AddMarkersCircleFromOptions_2D(pu,swarm_interp,ADD_VALUES));
@@ -298,27 +240,33 @@ static PetscErrorCode Test()
     /* Output (for debugging) */
     //PetscCall(SwarmOutput(ctx,swarm_interp,1,data_output));
     /* Advect */
-    PetscCall(PointAdvection_Euler_Pointwise(swarm_interp,b_dt,"fields"));
+    adv_ctx->advection(ctx,swarm_interp,swarm_data);
   }
   /* Now we have all our markers we give them a unique index */
   PetscCall(DMSwarmGetLocalSize(swarm_interp,&ninterp));
   PetscCall(SwarmInterpAssignUniquePointIndex(swarm_interp,0,ninterp));
   /* Now we run forward */
+  time = 0.0;
+  PetscCall(LagRBFSetTime(ctx,time));
+  PetscCall(LagRBFGetTimeStep(ctx,&dt));
+  dt = PetscAbsReal(dt); // make sure dt is positive
+  PetscCall(LagRBFSetTimeStep(ctx,dt));
   for (step=0; step<nsteps; step++) {
     PetscCall(PetscPrintf(PETSC_COMM_WORLD,"[[ STEP: %" PetscInt_FMT " ]], time: %g\n",step,step*dt));
     /* Set step, dt, time */
     PetscCall(LagRBFSetStep(ctx,step));
-    PetscCall(LagRBFSetTimeStep(ctx,dt));
-    PetscCall(LagRBFSetTime(ctx,step*dt));
+    PetscCall(LagRBFGetTime(ctx,&time));
+    time += dt;
+    PetscCall(LagRBFSetTime(ctx,time));
     /* Set the weights for the interpolation points */
-    PetscCall(SwarmInterpSetWeights(ctx,swarm_interp));
+    //PetscCall(SwarmInterpSetWeights(ctx,swarm_interp));
     /* Interpolate */
     PetscCall(PartitionSolveInterpolationCoefficients(pu,partitions,swarm_data,"fields"));
     PetscCall(RBFInterpolation(ctx,swarm_interp,swarm_data,"fields"));
     /* Output */
     PetscCall(SwarmOutput(ctx,swarm_interp,2,output_fields));
     /* Advect */
-    PetscCall(PointAdvection_Euler_Pointwise(swarm_interp,dt,"fields"));
+    adv_ctx->advection(ctx,swarm_interp,swarm_data);
   }
   PetscCall(DMDestroy(&swarm_interp));
   PetscCall(DMDestroy(&swarm_data));
