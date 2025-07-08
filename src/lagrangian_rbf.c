@@ -31,6 +31,7 @@ PetscErrorCode LagRBFCtxDestroy(LagRBFCtx *ctx)
   if (!p)            { PetscFunctionReturn(PETSC_SUCCESS); }
   if (p->partitions) { PetscCall(PartitionDestroy(p->pu, &p->partitions)); }
   if (p->pu)         { PetscCall(PartitionOfUnityDestroy(&p->pu)); }
+  if (p->adv_ctx)    { PetscCall(LagRBF_AdvectionCtxDestroy(p)); }
   PetscCall(PetscFree(p));
   *ctx = NULL;
 
