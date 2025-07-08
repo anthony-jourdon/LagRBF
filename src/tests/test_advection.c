@@ -672,13 +672,7 @@ static PetscErrorCode Test()
     PetscCall(LagRBFSetStep(ctx,step));
     PetscCall(PetscPrintf(PETSC_COMM_WORLD,"[[ STEP: %" PetscInt_FMT " ]] dt = %g, time = %g\n",step,dt,time));
     /* Advect */
-    //PetscCall(PointAdvection_RungeKutta(ctx,swarm_interp,swarm_data,"fields"));
-    /* Update weights */
-    //PetscCall(SwarmInterpSetWeights(ctx,swarm_interp));
-    /* Advect */
-    //PetscCall(AdvectionExplicit_RK4(ctx,swarm_interp,swarm_data,"fields"));
     adv_ctx->advection(ctx,swarm_interp,swarm_data);
-    //PetscCall(AdvectionExplicit_DormandPrince(ctx,swarm_interp,swarm_data,"fields"));
     /* Interpolate */
     PetscCall(PartitionSolveInterpolationCoefficients(pu,partitions,swarm_data,"fields"));
     PetscCall(RBFInterpolation(ctx,swarm_interp,swarm_data,"fields"));
