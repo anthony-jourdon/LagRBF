@@ -24,7 +24,7 @@ PetscErrorCode AdvectionExplicit_Scalar(
   PetscFunctionReturn(PETSC_SUCCESS);
 }
 
-//#if defined(__AVX__)
+#if defined(__AVX__)
 #include <immintrin.h>
 
 PetscErrorCode AdvectionExplicit_AVX256_2D(
@@ -180,7 +180,7 @@ PetscErrorCode AdvectionExplicit_AVX256(
   PetscPrintf(PETSC_COMM_WORLD,"[[ %s ]]: Advected %" PetscInt_FMT " points in %g seconds\n",PETSC_FUNCTION_NAME,npoints,time[1]-time[0]);
   PetscFunctionReturn(PETSC_SUCCESS);
 }
-//#endif
+#endif
 
 PetscErrorCode AdvectionExplicit(
   PetscReal *coords, 
