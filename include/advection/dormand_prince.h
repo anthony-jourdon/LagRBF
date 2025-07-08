@@ -11,4 +11,8 @@ typedef struct {
   PetscReal error;
 } DoPriCtx;
 
+PetscErrorCode AdvectionEvaluateError_DOPRI(AdvectionCtx ctx, DM swi);
+PetscErrorCode AdvectionExplicit_DOPRI(LagRBFCtx ctx, DM swi, DM swd);
+PetscErrorCode Advection_DOPRICreate(AdvectionCtx adv_ctx);
+
 #endif
