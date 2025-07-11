@@ -17,7 +17,8 @@ PetscErrorCode PartitionCreate_PartitionToCellInverseMapping(PartitionOfUnity pu
   PetscInt       iel,k,nel,nen,nidx;
   const PetscInt *elidx;
   PetscFunctionBeginUser;
-
+  PetscPrintf(PETSC_COMM_WORLD,"[[ %s ]]\n",PETSC_FUNCTION_NAME);
+  
   PetscCall(PUGetDMDA(pu,&dap));
   PetscCall(DMDAGetElements(dap,&nel,&nen,&elidx));
 
