@@ -18,4 +18,4 @@ lagrangian-offline-drivers-y.c += $(call thisdir, \
 )
 
 # include subdirectories
-include $(call incsubdirs, tests advection)
+include $(call incsubdirs, tests advection readers)
