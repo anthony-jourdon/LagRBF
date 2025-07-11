@@ -9,7 +9,7 @@ const char *AdvectionSchemeNames[] = {
   "RK1", // First order Runge-Kutta
   "RK2", // Second order Runge-Kutta
   "RK4", // Fourth order Runge-Kutta
-  "DOPRI", // Dormand-Prince 5(4) method
+  "DOPRI", // Dormand-Prince 4(5) method
   NULL
 };
 
