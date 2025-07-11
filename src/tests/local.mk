@@ -3,4 +3,5 @@ lagrangian-offline-tests-y.c += $(call thisdir, \
 	test_info.c \
 	test_advection.c \
 	test_adv_bwd_fwd.c \
+	test_readers.c \
 )
