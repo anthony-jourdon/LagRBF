@@ -35,6 +35,9 @@ PetscErrorCode LagRBFInitialize(int *argc,char ***args,const char file[],const c
   PetscCall(PetscLogDefaultBegin());
   PetscCall(LagRBFWriteInitialInfo());
 
+  /* Register the class */
+  PetscCall(PetscClassIdRegister("Lagrangian RBF", &LAGRBF_CLASSID));
+
   /* Interpolation */
   PetscCall(PetscLogEventRegister("PointwiseInterpolation_Scalar",LAGRBF_CLASSID,&LAGRBF_PointwiseInterpolation_Scalar));
   PetscCall(PetscLogEventRegister("PointwiseInterpolation_AVX256",LAGRBF_CLASSID,&LAGRBF_PointwiseInterpolation_AVX256));
