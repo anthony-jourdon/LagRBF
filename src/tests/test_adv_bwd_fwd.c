@@ -1,3 +1,5 @@
+static const char help[] = "Test to add particles running time backward followed by forward advection.\n\n";
+
 #include <petsc.h>
 #include "lagrangian_rbf_init.h"
 #include "lagrangian_rbf.h"
@@ -277,8 +279,7 @@ static PetscErrorCode Test()
 int main(int argc, char *argv[])
 {
   PetscFunctionBeginUser;
-  //PetscCall(PetscInitialize(&argc,&argv,NULL,NULL));
-  PetscCall(LagRBFInitialize(&argc,&argv,NULL,NULL));
+  PetscCall(LagRBFInitialize(&argc,&argv,0,help));
 
   PetscCall(Test());
 
