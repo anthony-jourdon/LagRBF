@@ -1,3 +1,6 @@
 liblagrangian-offline-y.c += $(call thisdir, \
-  stag_hdf5.c \
+	reader_utils.c \
 )
+
+# include subdirectories
+include $(call incsubdirs, stagYY)
