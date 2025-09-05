@@ -9,6 +9,14 @@ class XDMFDataFilter:
     self.process_xdmf()
     return
   
+  def __str__(self):
+    s = "XDMFDataFilter class:\n"
+    s += f"  XDMF File: {self.xdmfile}\n"
+    s += f"  Timeseries:\n{self.timeseries}\n"
+    s += f"  Field Names:\n{self.fieldnames}\n"
+    s += f"  Filenames:\n{self.filenames}\n"
+    return s
+
   def get_timeseries(self) -> list:
     if self.timeseries is None:
       raise ValueError("Timeseries not processed. Call process_xdmf() first.")
