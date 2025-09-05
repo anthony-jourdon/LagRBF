@@ -187,7 +187,7 @@ PetscErrorCode SwarmInterpAssignUniquePointIndex(DM sw, PetscInt start_idx, Pets
   PetscFunctionBeginUser;
   PetscPrintf(PETSC_COMM_WORLD,"[[ %s ]]\n",PETSC_FUNCTION_NAME);
   PetscCall(PetscObjectGetComm((PetscObject)sw,&comm));
-  PetscCall(MPI_Comm_rank(comm,&rank));
+  PetscCallMPI(MPI_Comm_rank(comm,&rank));
   PetscCall(DMSwarmGetLocalSize(sw,&npoints)); // rank local points
   PetscCall(DMSwarmGetField(sw, "pidx", NULL, NULL, (void **)&pidx));
   /* find max pid presently in the system */
@@ -196,13 +196,13 @@ PetscErrorCode SwarmInterpAssignUniquePointIndex(DM sw, PetscInt start_idx, Pets
     PetscInt mp_idx = pidx[p]; 
     if ( mp_idx > max_local ) { max_local = mp_idx; }
   }
-  PetscCall(MPI_Allreduce(&max_local,&max,1,MPI_LONG,MPI_MAX,comm));
+  PetscCallMPI(MPI_Allreduce(&max_local,&max,1,MPI_LONG,MPI_MAX,comm));
   /*PetscPrintf(comm,"[[ %s ]] : max_pid = %" PetscInt_FMT "\n",PETSC_FUNCTION_NAME,max);*/
   max += 1;
 
   /* give particles a unique identifier */
   np_local = end_idx - start_idx;
-  PetscCall(MPI_Scan(&np_local,&np_global,1,MPI_LONG,MPI_SUM,comm));
+  PetscCallMPI(MPI_Scan(&np_local,&np_global,1,MPI_LONG,MPI_SUM,comm));
   //printf("rank %d : np_local = %" PetscInt_FMT ", np_global = %" PetscInt_FMT "\n",(int)rank,np_local,np_global);
   for (p=start_idx; p<end_idx; p++) {
     pidx[p] = max + (np_global-np_local) + (long int)(p-start_idx);
