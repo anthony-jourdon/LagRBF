@@ -10,6 +10,7 @@ PetscErrorCode PUCreate(PartitionOfUnity *pu)
   PetscCall(PetscNew(&p));
   PetscCall(PetscSNPrintf(p->name, PETSC_MAX_PATH_LEN-1,"pu_mesh"));
   p->dap = NULL;
+  p->das = NULL;
   p->dim = 0;
   p->n = NULL;
   p->npart = 0;
@@ -103,21 +104,122 @@ PetscErrorCode PUCreateDMDA(PartitionOfUnity pu)
   PetscFunctionReturn(PETSC_SUCCESS);
 }
 
+PetscErrorCode PUCreateDMDALocal(PartitionOfUnity pu)
+{
+  VecScatter scatter;
+  IS         is;
+  DM         dap,das,cdap,cdas;
+  Vec        dap_coor,dap_nat_coor;
+  Vec        das_coor;
+  PetscInt   *natural_gidx;
+  PetscInt   M[3],start_el[3],size_el[3];
+  PetscInt   start_node[] = {0,0,0};
+  PetscInt   size_node[]  = {1,1,1};
+  PetscInt   i,j,k,d,dim,npoints,stencil_width,cnt;
+  PetscFunctionBeginUser;
+
+  /* Get parallel DMDA */
+  PetscCall(PUGetDMDA(pu,&dap));
+  PetscCall(DMDAGetInfo(dap,&dim,&M[0],&M[1],&M[2],NULL,NULL,NULL,NULL,&stencil_width,NULL,NULL,NULL,NULL));
+  /* Get the (rank-local) element corners and sizes */
+  PetscCall(DMDAGetElementsCorners(dap,&start_el[0],&start_el[1],&start_el[2]));
+  PetscCall(DMDAGetElementsSizes(dap,&size_el[0],&size_el[1],&size_el[2]));
+  /* Compute the new extent of elements => halo of 1 element around the parallel non-overlapping elements decomposition */
+  npoints = 1;
+  for (d=0; d<dim; d++) {
+    /* If not on the boundary, expand the element indices */
+    if (start_el[d] > 0)                   { start_el[d] -= 1; }
+    if (start_el[d] + size_el[d] < M[d]-1) { size_el[d]  += 1; }
+    /* Convert in node extent */
+    start_node[d] = start_el[d];
+    size_node[d]  = size_el[d] + 1;
+    /* Count how much nodes in total */
+    npoints      *= size_node[d];
+  }
+  /* Set the number of partitions on that rank */
+  pu->npart = npoints;
+
+  /* Create a new sequential DMDA of the halo size, each rank owns its own DMDA */
+  switch (dim) {
+    case 1:
+      PetscCall(DMDACreate1d(PETSC_COMM_SELF,DM_BOUNDARY_NONE,size_node[0],1,stencil_width,NULL,&das));
+      break;
+
+    case 2:
+      PetscCall(DMDACreate2d(PETSC_COMM_SELF,DM_BOUNDARY_NONE,DM_BOUNDARY_NONE,DMDA_STENCIL_BOX,size_node[0],size_node[1],PETSC_DECIDE,PETSC_DECIDE,1,stencil_width,NULL,NULL,&das));
+      break;
+
+    case 3:
+      PetscCall(DMDACreate3d(PETSC_COMM_SELF,DM_BOUNDARY_NONE,DM_BOUNDARY_NONE,DM_BOUNDARY_NONE,DMDA_STENCIL_BOX,size_node[0],size_node[1],size_node[2],PETSC_DECIDE,PETSC_DECIDE,PETSC_DECIDE,1,stencil_width,NULL,NULL,NULL,&das));
+      break;
+
+    default:
+      SETERRQ(PETSC_COMM_SELF,PETSC_ERR_ARG_OUTOFRANGE,"Dimension can only be 1, 2 or 3. Found: %" PetscInt_FMT,dim);
+  }
+  PetscCall(DMDASetElementType(das, DMDA_ELEMENT_Q1));
+  PetscCall(DMSetUp(das));
+
+  /* Create the map of natural global indices between the parallel DMDA and the sequential DMDA */
+  PetscMalloc1(dim*npoints,&natural_gidx);
+  cnt = 0;
+  for (k=0; k<size_node[2]; k++) {
+    for (j=0; j<size_node[1]; j++) {
+      for (i=0; i<size_node[0]; i++) {
+        /* Compute the global index in natural order */
+        PetscInt gidx = (i+start_node[0]) + (j+start_node[1])*M[0] + (k+start_node[2])*M[0]*M[1];
+        for (d=0; d<dim; d++) {
+          natural_gidx[dim*cnt + d] = gidx*dim + d; // Each node has 'dim' coordinates
+        }
+        cnt++;
+      }
+    }
+  }
+  /* Create the Index Set to communicate between the parallel DMDA and the sequential DMDA */
+  PetscCall(ISCreateGeneral(PETSC_COMM_SELF,dim*npoints,natural_gidx,PETSC_OWN_POINTER,&is));
+
+  /* Get the parallel DMDA coordinates */
+  PetscCall(DMGetCoordinateDM(dap,&cdap));
+  PetscCall(DMGetCoordinates(dap,&dap_coor));
+  /* Create a vector to hold the coordinates in natural order */
+  PetscCall(DMDACreateNaturalVector(cdap,&dap_nat_coor));
+  /* Fill it */
+  PetscCall(DMDAGlobalToNaturalBegin(cdap,dap_coor,INSERT_VALUES,dap_nat_coor));
+  PetscCall(DMDAGlobalToNaturalEnd(cdap,dap_coor,INSERT_VALUES,dap_nat_coor));
+  
+  /* Get the coordinate DM for the sequential DMDA */
+  PetscCall(DMGetCoordinateDM(das,&cdas));
+  /* Create the vector to hold the coordinates for the sequential DMDA, sequential so natural = global */
+  PetscCall(DMCreateGlobalVector(cdas,&das_coor));
+
+  /* Scatter the coordinates to the sequential DMDA */
+  PetscCall(VecScatterCreate(dap_nat_coor,is,das_coor,NULL,&scatter));
+  PetscCall(VecScatterBegin(scatter,dap_nat_coor,das_coor,INSERT_VALUES,SCATTER_FORWARD));
+  PetscCall(VecScatterEnd(scatter,dap_nat_coor,das_coor,INSERT_VALUES,SCATTER_FORWARD));
+
+  /* Set the coordinates */
+  PetscCall(DMSetCoordinates(das, das_coor));
+
+  /* Clean up */
+  PetscCall(VecScatterDestroy(&scatter));
+  PetscCall(ISDestroy(&is));
+  PetscCall(VecDestroy(&das_coor));
+  PetscCall(VecDestroy(&dap_nat_coor));
+
+  pu->das = das;
+
+  PetscFunctionReturn(PETSC_SUCCESS);
+}
+
 PetscErrorCode PartitionOfUnityCreate(PartitionOfUnity *pu)
 {
   PartitionOfUnity p;
-  DM               da=NULL;
-  PetscInt         d,s[3],n[3];
   PetscFunctionBeginUser;
   PetscPrintf(PETSC_COMM_WORLD,"[[ %s ]]\n",PETSC_FUNCTION_NAME);
   PetscCall(PUCreate(&p));
   PetscCall(PUSetFromOptions(p));
   PetscCall(PUCreateDMDA(p));
-  /* set the total number of partitions (local) */
-  PetscCall(PUGetDMDA(p,&da));
-  PetscCall(DMDAGetCorners(da,&s[0],&s[1],&s[2],&n[0],&n[1],&n[2]));
-  p->npart = 1; // Initialize
-  for (d=0; d<p->dim; d++) { p->npart *= n[d]; }
+  /* Create the local DMDA to hold partitions */
+  PetscCall(PUCreateDMDALocal(p));
 
   *pu = p;
   PetscFunctionReturn(PETSC_SUCCESS);
@@ -130,6 +232,7 @@ PetscErrorCode PartitionOfUnityDestroy(PartitionOfUnity *pu)
 
   if (!p) { PetscFunctionReturn(PETSC_SUCCESS); }
   if (p->dap) { PetscCall(DMDestroy(&p->dap)); }
+  if (p->das) { PetscCall(DMDestroy(&p->das)); }
   if (p->n)   { PetscCall(PetscFree(p->n)); }
   if (p->O)   { PetscCall(PetscFree(p->O)); }
   if (p->L)   { PetscCall(PetscFree(p->L)); }
@@ -145,6 +248,15 @@ PetscErrorCode PUGetDMDA(PartitionOfUnity pu, DM *dap)
   PetscCheck(pu,PETSC_COMM_SELF,PETSC_ERR_ARG_NULL,"Partition of Unity structure is NULL. Call PartitionOfUnityCreate() first.");
   PetscCheck(pu->dap,PETSC_COMM_SELF,PETSC_ERR_ARG_WRONGSTATE,"Partition of Unity mesh not created yet. Call PUCreateDMDA() first.");
   if (dap) { *dap = pu->dap; }
+  PetscFunctionReturn(PETSC_SUCCESS);
+}
+
+PetscErrorCode PUGetDMDALocal(PartitionOfUnity pu, DM *das)
+{
+  PetscFunctionBeginUser;
+  PetscCheck(pu,PETSC_COMM_SELF,PETSC_ERR_ARG_NULL,"Partition of Unity structure is NULL. Call PartitionOfUnityCreate() first.");
+  PetscCheck(pu->das,PETSC_COMM_SELF,PETSC_ERR_ARG_WRONGSTATE,"Partition of Unity local mesh not created yet. Call PUCreateDMDALocal() first.");
+  if (das) { *das = pu->das; }
   PetscFunctionReturn(PETSC_SUCCESS);
 }
 
