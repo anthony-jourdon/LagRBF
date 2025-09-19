@@ -13,14 +13,14 @@
 */
 PetscErrorCode PartitionCreate_PartitionToCellInverseMapping(PartitionOfUnity pu, Partition *partition)
 {
-  DM             dap;
+  DM             das;
   PetscInt       iel,k,nel,nen,nidx;
   const PetscInt *elidx;
   PetscFunctionBeginUser;
   PetscPrintf(PETSC_COMM_WORLD,"[[ %s ]]\n",PETSC_FUNCTION_NAME);
 
-  PetscCall(PUGetDMDA(pu,&dap));
-  PetscCall(DMDAGetElements(dap,&nel,&nen,&elidx));
+  PetscCall(PUGetDMDALocal(pu,&das));
+  PetscCall(DMDAGetElements(das,&nel,&nen,&elidx));
 
   /* Count the number of cells connected to each partition */
   for (iel=0; iel<nel; iel++) {
@@ -164,9 +164,7 @@ PetscErrorCode PartitionCreate(PartitionOfUnity pu, Partition **partition)
   PetscCall(PUGetNPartitions(pu,&npart));
   PetscCall(PetscCalloc1(npart,&p));
   for (n=0; n<npart; n++) { PetscCall(PartitionCreate_SinglePartition(&p[n])); }
-  /* Create the inverse map connecting partition to cells 
-  TODO: Fix SEGV in parallel
-  */
+  /* Create the inverse map connecting partition to cells */
   PetscCall(PartitionCreate_PartitionToCellInverseMapping(pu,p));
   *partition = p;
   PetscFunctionReturn(PETSC_SUCCESS);
