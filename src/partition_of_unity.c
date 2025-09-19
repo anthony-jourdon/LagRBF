@@ -69,21 +69,22 @@ PetscErrorCode PULoadFromFile(PartitionOfUnity pu, const char filename[])
 
 PetscErrorCode PUCreateDMDA(PartitionOfUnity pu)
 {
-  DM   da;
-  char prefix[PETSC_MAX_PATH_LEN];
+  DM       da;
+  PetscInt stencil_width=1;
+  char     prefix[PETSC_MAX_PATH_LEN];
   PetscFunctionBeginUser;
 
   switch (pu->dim) {
     case 1:
-    PetscCall(DMDACreate1d(PETSC_COMM_WORLD,DM_BOUNDARY_NONE,pu->n[0],1,1,NULL,&da));
+    PetscCall(DMDACreate1d(PETSC_COMM_WORLD,DM_BOUNDARY_NONE,pu->n[0],1,stencil_width,NULL,&da));
     break;
 
     case 2:
-    PetscCall(DMDACreate2d(PETSC_COMM_WORLD,DM_BOUNDARY_NONE,DM_BOUNDARY_NONE,DMDA_STENCIL_BOX,pu->n[0],pu->n[1],PETSC_DECIDE,PETSC_DECIDE,1,1,NULL,NULL,&da));
+    PetscCall(DMDACreate2d(PETSC_COMM_WORLD,DM_BOUNDARY_NONE,DM_BOUNDARY_NONE,DMDA_STENCIL_BOX,pu->n[0],pu->n[1],PETSC_DECIDE,PETSC_DECIDE,1,stencil_width,NULL,NULL,&da));
     break;
 
     case 3: 
-    PetscCall(DMDACreate3d(PETSC_COMM_WORLD,DM_BOUNDARY_NONE,DM_BOUNDARY_NONE,DM_BOUNDARY_NONE,DMDA_STENCIL_BOX,pu->n[0],pu->n[1],pu->n[2],PETSC_DECIDE,PETSC_DECIDE,PETSC_DECIDE,1,1,NULL,NULL,NULL,&da));
+    PetscCall(DMDACreate3d(PETSC_COMM_WORLD,DM_BOUNDARY_NONE,DM_BOUNDARY_NONE,DM_BOUNDARY_NONE,DMDA_STENCIL_BOX,pu->n[0],pu->n[1],pu->n[2],PETSC_DECIDE,PETSC_DECIDE,PETSC_DECIDE,1,stencil_width,NULL,NULL,NULL,&da));
     break;
 
     default:
