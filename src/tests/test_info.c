@@ -488,7 +488,7 @@ static PetscErrorCode Test_Parallel()
   PetscCall(DMDAGetElementType(da,&etype));
   PetscPrintf(PETSC_COMM_SELF,"Element type: %s\n",etype == DMDA_ELEMENT_P1 ? "P1" : etype == DMDA_ELEMENT_Q1 ? "Q1" : "Unknown");
 
-  PetscCall(DMDACreateRedundantSubDMDA(da,rank,&seq_da));
+  PetscCall(DMDACreateRedundantSubDMDA(pu,rank,&seq_da));
 
   /* Elements */
   PetscCall(PrintElements(seq_da,rank));
@@ -613,6 +613,34 @@ static PetscErrorCode Test_Parallel_2()
   PetscFunctionReturn(PETSC_SUCCESS);
 }
 
+static PetscErrorCode Test_3()
+{
+  PartitionOfUnity pu;
+  DM               dap,das;
+  PetscBool        exists;
+  MPI_Comm         comm;
+  int              rank,size;
+  const char       output_dir[] = "output_sw2";
+  PetscFunctionBeginUser;
+
+  PetscCall(TestDirectory(output_dir,'w',&exists));
+  if (!exists) { PetscCall(CreateDirectory(output_dir)); }
+
+  PetscCall(PartitionOfUnityCreate(&pu));
+  PetscCall(PUGetDMDA(pu,&dap));
+  PetscCall(PUGetDMDALocal(pu,&das));
+
+  PetscCall(PetscObjectGetComm((PetscObject)dap,&comm));
+  PetscCallMPI(MPI_Comm_rank(comm,&rank));
+  PetscCallMPI(MPI_Comm_size(comm,&size));
+
+  PetscCall(ViewSeqDMDA(das, rank));
+  PetscCall(PartitionOfUnityMeshView(pu));
+
+  PetscCall(PartitionOfUnityDestroy(&pu));
+  PetscFunctionReturn(PETSC_SUCCESS);
+}
+
 int main(int argc, char *argv[])
 {
   PetscFunctionBeginUser;
@@ -620,7 +648,8 @@ int main(int argc, char *argv[])
 
   //PetscCall(Test());
   //PetscCall(Test_Parallel());
-  PetscCall(Test_Parallel_2());
+  //PetscCall(Test_Parallel_2());
+  PetscCall(Test_3());
 
   PetscCall(PetscFinalize());
   
