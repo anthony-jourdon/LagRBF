@@ -616,6 +616,7 @@ static PetscErrorCode Test_Parallel_2()
 static PetscErrorCode Test_3()
 {
   PartitionOfUnity pu;
+  Partition        *partitions;
   DM               dap,das;
   PetscBool        exists;
   MPI_Comm         comm;
@@ -634,9 +635,25 @@ static PetscErrorCode Test_3()
   PetscCallMPI(MPI_Comm_rank(comm,&rank));
   PetscCallMPI(MPI_Comm_size(comm,&size));
 
+  PetscCall(PartitionCreate(pu,&partitions));
+
+  for (int n=0; n<pu->npart; n++) {
+    Partition p = partitions[n];
+    PetscInt ncells;
+    PetscInt *map;
+    PartitionGetMap(p,&ncells,&map);
+    PetscPrintf(PETSC_COMM_SELF,
+      "Rank[%d]: Partition[%" PetscInt_FMT "]: ncells=%" PetscInt_FMT "\n",
+      rank,n,ncells);
+    for (int k=0; k<ncells; k++) {
+      PetscPrintf(PETSC_COMM_SELF,"  Rank[%d]: map[%" PetscInt_FMT "] = %" PetscInt_FMT "\n",rank,k,map[k]);
+    }
+  }
+
+
   PetscCall(ViewSeqDMDA(das, rank));
   PetscCall(PartitionOfUnityMeshView(pu));
-
+  PetscCall(PartitionDestroy(pu,&partitions));
   PetscCall(PartitionOfUnityDestroy(&pu));
   PetscFunctionReturn(PETSC_SUCCESS);
 }
