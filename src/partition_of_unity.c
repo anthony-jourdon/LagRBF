@@ -9,13 +9,14 @@ PetscErrorCode PUCreate(PartitionOfUnity *pu)
 
   PetscCall(PetscNew(&p));
   PetscCall(PetscSNPrintf(p->name, PETSC_MAX_PATH_LEN-1,"pu_mesh"));
-  p->dap = NULL;
-  p->das = NULL;
-  p->dim = 0;
-  p->n = NULL;
+  p->dap   = NULL;
+  p->das   = NULL;
+  p->dim   = 0;
+  p->n     = NULL;
   p->npart = 0;
-  p->O = NULL;
-  p->L = NULL;
+  p->ptos  = NULL;
+  p->O     = NULL;
+  p->L     = NULL;
 
   *pu = p;
   PetscFunctionReturn(PETSC_SUCCESS);
@@ -113,9 +114,11 @@ PetscErrorCode PUCreateDMDALocal(PartitionOfUnity pu)
   Vec        das_coor;
   PetscInt   *natural_gidx;
   PetscInt   M[3],start_el[3],size_el[3];
+  PetscInt   par_start_el[] = {0,0,0};
+  PetscInt   par_size_el[]  = {1,1,1};
   PetscInt   start_node[] = {0,0,0};
   PetscInt   size_node[]  = {1,1,1};
-  PetscInt   i,j,k,d,dim,npoints,stencil_width,cnt;
+  PetscInt   i,j,k,d,dim,npoints,stencil_width,cnt,par_nel;
   PetscFunctionBeginUser;
 
   /* Get parallel DMDA */
@@ -124,8 +127,13 @@ PetscErrorCode PUCreateDMDALocal(PartitionOfUnity pu)
   /* Get the (rank-local) element corners and sizes */
   PetscCall(DMDAGetElementsCorners(dap,&start_el[0],&start_el[1],&start_el[2]));
   PetscCall(DMDAGetElementsSizes(dap,&size_el[0],&size_el[1],&size_el[2]));
+  for (d=0; d<dim; d++) {
+    par_start_el[d] = start_el[d];
+    par_size_el[d]  = size_el[d];
+  }
   /* Compute the new extent of elements => halo of 1 element around the parallel non-overlapping elements decomposition */
   npoints = 1;
+  par_nel = 1;
   for (d=0; d<dim; d++) {
     /* If not on the boundary, expand the element indices */
     if (start_el[d] > 0)                   { start_el[d] -= 1; }
@@ -135,9 +143,23 @@ PetscErrorCode PUCreateDMDALocal(PartitionOfUnity pu)
     size_node[d]  = size_el[d] + 1;
     /* Count how much nodes in total */
     npoints      *= size_node[d];
+    /* Count how much elements in the parallel non-overlapping mesh */
+    par_nel      *= par_size_el[d];
   }
   /* Set the number of partitions on that rank */
   pu->npart = npoints;
+  /* Create the map between the parallel and sequential DMDA elements */
+  PetscCall(PetscMalloc1(par_nel,&pu->ptos));
+  for (k=0; k<par_size_el[2]; k++) {
+    for (j=0; j<par_size_el[1]; j++) {
+      for (i=0; i<par_size_el[0]; i++) {
+        PetscInt par_eidx,seq_eidx;
+        par_eidx = i + j*par_size_el[0] + k*par_size_el[0]*par_size_el[1];
+        seq_eidx = (i + start_el[0]) + (j + start_el[1])*size_el[0] + (k + start_el[2])*size_el[0]*size_el[1];
+        pu->ptos[par_eidx] = seq_eidx;
+      }
+    }
+  }
 
   /* Create a new sequential DMDA of the halo size, each rank owns its own DMDA */
   switch (dim) {
@@ -231,11 +253,12 @@ PetscErrorCode PartitionOfUnityDestroy(PartitionOfUnity *pu)
   PetscFunctionBeginUser;
 
   if (!p) { PetscFunctionReturn(PETSC_SUCCESS); }
-  if (p->dap) { PetscCall(DMDestroy(&p->dap)); }
-  if (p->das) { PetscCall(DMDestroy(&p->das)); }
-  if (p->n)   { PetscCall(PetscFree(p->n)); }
-  if (p->O)   { PetscCall(PetscFree(p->O)); }
-  if (p->L)   { PetscCall(PetscFree(p->L)); }
+  if (p->dap)  { PetscCall(DMDestroy(&p->dap)); }
+  if (p->das)  { PetscCall(DMDestroy(&p->das)); }
+  if (p->n)    { PetscCall(PetscFree(p->n)); }
+  if (p->O)    { PetscCall(PetscFree(p->O)); }
+  if (p->L)    { PetscCall(PetscFree(p->L)); }
+  if (p->ptos) { PetscCall(PetscFree(p->ptos)); }
   PetscCall(PetscFree(p));
   *pu = NULL;
 
@@ -273,6 +296,15 @@ PetscErrorCode PUGetDimension(PartitionOfUnity pu, PetscInt *dim)
   PetscFunctionBeginUser;
   PetscCheck(pu,PETSC_COMM_SELF,PETSC_ERR_ARG_NULL,"Partition of Unity structure is NULL. Call PartitionOfUnityCreate() first.");
   if (dim) { *dim = pu->dim; }
+  PetscFunctionReturn(PETSC_SUCCESS);
+}
+
+PetscErrorCode PUGetGlobalToLocalElementMap(PartitionOfUnity pu, PetscInt **ptos)
+{
+  PetscFunctionBeginUser;
+  PetscCheck(pu,PETSC_COMM_SELF,PETSC_ERR_ARG_NULL,"Partition of Unity structure is NULL. Call PartitionOfUnityCreate() first.");
+  PetscCheck(pu->ptos,PETSC_COMM_SELF,PETSC_ERR_ARG_WRONGSTATE,"Partition of Unity parallel to sequential element map not created yet.");
+  if (ptos) { *ptos = pu->ptos; }
   PetscFunctionReturn(PETSC_SUCCESS);
 }
 
