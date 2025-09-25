@@ -6,4 +6,5 @@ lagrangian-offline-tests-y.c += $(call thisdir, \
 	test_readers_stag.c \
 	test_adv_stag.c \
 	test_adv_analytical_convection.c \
+	test_parallel.c \
 )
