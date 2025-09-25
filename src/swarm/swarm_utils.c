@@ -1,0 +1,248 @@
+#include <petsc.h>
+#include <petsc/private/dmswarmimpl.h>
+#include "lagrangian_rbf.h"
+#include "partition_of_unity.h"
+#include "swarm/swarm_utils.h"
+#include "io_utils.h"
+
+PetscErrorCode SwarmCopyBlockData_Real(
+  DM         swarm,
+  PetscInt   nblocks, 
+  PetscInt   blocks_to_copy[],
+  const char *field_name,
+  PetscReal  **copied_blocks
+)
+{
+  PetscDataType dtype;
+  PetscInt      bs,npoints,np,b;
+  PetscReal     *data,*copied;
+  PetscFunctionBeginUser;
+  
+  PetscCall(DMSwarmGetLocalSize(swarm,&npoints));
+  PetscCall(DMSwarmGetField(swarm,field_name,&bs,&dtype,(void **)&data));
+  PetscCheck(dtype == PETSC_REAL,PetscObjectComm((PetscObject)swarm),PETSC_ERR_ARG_WRONG,"Field %s is not of type PETSC_REAL",field_name);
+  PetscCheck(nblocks <= bs,PetscObjectComm((PetscObject)swarm),PETSC_ERR_ARG_OUTOFRANGE,"Cannot copy %" PetscInt_FMT " blocks from field %s with block size %" PetscInt_FMT, nblocks, field_name, bs);
+
+  PetscMalloc1(npoints*nblocks,&copied);
+  for (np=0; np<npoints; np++) {
+    for (b=0; b<nblocks; b++) {
+      PetscInt block_id = blocks_to_copy[b];
+      /* copy point */
+      copied[nblocks*np + b] = data[bs*np + block_id];
+    }
+  }
+  /* User is left responsible for freeing the memory */
+  *copied_blocks = copied;
+  PetscCall(DMSwarmRestoreField(swarm,field_name,&bs,&dtype,(void **)&data));
+  PetscFunctionReturn(PETSC_SUCCESS);
+}
+
+PetscErrorCode SwarmCreatePIC(PartitionOfUnity pu, DM *sw)
+{
+  DM       da,swarm;
+  PetscInt dim;
+  PetscFunctionBeginUser;
+  PetscCall(PUGetDMDA(pu,&da));
+  PetscCall(DMGetDimension(da, &dim));
+  PetscCall(DMCreate(PetscObjectComm((PetscObject)da), &swarm));
+  PetscCall(DMSetType(swarm, DMSWARM));
+  PetscCall(DMSetDimension(swarm, dim));
+  PetscCall(DMSwarmSetType(swarm, DMSWARM_PIC));
+  PetscCall(DMSwarmSetCellDM(swarm, da));
+  *sw = swarm;
+  PetscFunctionReturn(PETSC_SUCCESS);
+}
+
+static PetscErrorCode PointSetSphericalToCartesianCoordinate(PetscReal params[], PetscReal coords[])
+{
+  PetscFunctionBeginUser;
+  coords[0] = params[0] * PetscSinReal(params[1]) * PetscCosReal(params[2]);
+  coords[1] = params[0] * PetscSinReal(params[1]) * PetscSinReal(params[2]);
+  coords[2] = params[0] * PetscCosReal(params[1]);
+  PetscFunctionReturn(PETSC_SUCCESS);
+}
+
+static PetscErrorCode PointSetPolarToCartesianCoordinate(PetscReal params[], PetscReal coords[])
+{
+  PetscFunctionBeginUser;
+  coords[0] = params[0] * PetscCosReal(params[1]);
+  coords[1] = params[0] * PetscSinReal(params[1]);
+  coords[2] = 0.0; /* z-coordinate is zero in polar coordinates */
+  PetscFunctionReturn(PETSC_SUCCESS);
+}
+
+/*@
+  DMSwarmSetPointsSphericalCoordinates - Set point coordinates in a `DMSWARM` on a regular (ijk) spherical grid
+
+  Collective
+
+  Input Parameters:
++ sw      - the `DMSWARM`
+. min     - minimum coordinate values in the r, theta, phi directions (array of length dim)
+. max     - maximum coordinate values in the r, theta, phi directions (array of length dim)
+. npoints - number of points in each spatial direction (array of length dim)
+- mode    - indicates whether to append points to the swarm (`ADD_VALUES`), or over-ride existing points (`INSERT_VALUES`)
+
+  Notes:
+  When using mode = `INSERT_VALUES`, this method will reset the number of particles in the `DMSWARM`
+  to be `npoints[0]` x `npoints[1]` (2D) or `npoints[0]` x `npoints[1]` x `npoints[2]` (3D). When using mode = `ADD_VALUES`,
+  new points will be appended to any already existing in the `DMSWARM`
+
+@*/
+PetscErrorCode DMSwarmSetPointsSphericalCoordinates(DM sw, PetscReal min[], PetscReal max[], PetscInt npoints[], InsertMode mode)
+{
+  DMSwarmCellDM     celldm;
+  DM                da = NULL;
+  Vec               pos = NULL;
+  PetscSF           sfcell = NULL;
+  const PetscSFNode *LA_sfcell;
+  PetscInt          d,i,j,k,p,Nfc,dim,n_estimate,n_found,n_new_est,n_curr;
+  PetscInt          _npoints[] = {0, 0, 1};
+  PetscInt          *swarm_cellid;
+  PetscReal         O[] = {PETSC_MAX_REAL, PETSC_MAX_REAL, PETSC_MAX_REAL};
+  PetscReal         L[] = {PETSC_MIN_REAL, PETSC_MIN_REAL, PETSC_MIN_REAL};
+  PetscReal         dx[3];
+  PetscReal         *_pos,*swarm_coor;
+  const PetscReal   *_coor;
+  PetscErrorCode    (*coordFn)(PetscReal*, PetscReal*) = NULL;
+  const char        **coordFields,*cellid;
+
+  PetscFunctionBeginUser;
+  PetscPrintf(PETSC_COMM_WORLD,"[[ %s ]]\n",PETSC_FUNCTION_NAME);
+  DMSWARMPICVALID(sw);
+  PetscCall(DMSwarmGetCellDMActive(sw,&celldm));
+  PetscCall(DMSwarmCellDMGetCoordinateFields(celldm, &Nfc, &coordFields));
+  PetscCheck(Nfc == 1, PetscObjectComm((PetscObject)sw), PETSC_ERR_SUP, "We only support a single coordinate field right now, not %" PetscInt_FMT, Nfc);
+
+  PetscCall(DMSwarmCellDMGetDM(celldm,&da));
+  PetscCall(DMGetLocalBoundingBox(da,O,L));
+  PetscCall(DMGetCoordinateDim(da, &dim));
+
+  switch (dim) {
+    case 2:
+      coordFn = PointSetPolarToCartesianCoordinate;  
+      break;
+    
+    case 3:
+      coordFn = PointSetSphericalToCartesianCoordinate;
+      break;
+    
+    default:
+      SETERRQ(PetscObjectComm((PetscObject)sw), PETSC_ERR_ARG_OUTOFRANGE, "Dimension can only be 2 or 3. Found: %" PetscInt_FMT, dim);
+      break;
+  }
+
+  for (d=0; d<dim; d++) {
+    if (npoints[d] > 1) {
+      dx[d] = (max[d] - min[d]) / ((PetscReal)(npoints[d] - 1));
+    } else {
+      dx[d] = 0.0;
+    }
+    _npoints[d] = npoints[d];
+  }
+
+  /* determine number of points living in the bounding box */
+  n_estimate = 0;
+  for (k=0; k<_npoints[2]; k++) {
+    for (j=0; j<_npoints[1]; j++) {
+      for (i=0; i<_npoints[0]; i++) {
+        PetscReal params[] = {0.0, 0.0, 0.0};
+        PetscReal xp[] = {0.0, 0.0, 0.0};
+        PetscInt  ijk[3];
+        PetscBool point_inside = PETSC_TRUE;
+
+        ijk[0] = i;
+        ijk[1] = j;
+        ijk[2] = k;
+        /* Get the parameters r, theta (and phi if 3D) */
+        for (d=0; d<dim; d++) { params[d] = min[d] + ijk[d] * dx[d]; }
+        /* Compute the cartesian coordinates */
+        PetscCall(coordFn(params, xp)); 
+        /* Check if the points is in the DMDA */
+        for (d=0; d<dim; d++) {
+          if (xp[d] < O[d]) point_inside = PETSC_FALSE;
+          if (xp[d] > L[d]) point_inside = PETSC_FALSE;
+        }
+        if (point_inside) n_estimate++;
+      }
+    }
+  }
+
+  /* create candidate list */
+  PetscCall(VecCreate(PETSC_COMM_SELF, &pos));
+  PetscCall(VecSetSizes(pos, dim * n_estimate, PETSC_DECIDE));
+  PetscCall(VecSetBlockSize(pos, dim));
+  PetscCall(VecSetFromOptions(pos));
+  PetscCall(VecGetArray(pos, &_pos));
+
+  n_estimate = 0;
+  for (k=0; k<_npoints[2]; k++) {
+    for (j=0; j<_npoints[1]; j++) {
+      for (i=0; i<_npoints[0]; i++) {
+        PetscReal params[] = {0.0, 0.0, 0.0};
+        PetscReal xp[] = {0.0, 0.0, 0.0};
+        PetscInt  ijk[3];
+        PetscBool point_inside = PETSC_TRUE;
+
+        ijk[0] = i;
+        ijk[1] = j;
+        ijk[2] = k;
+        /* Get the parameters r, theta (and phi if 3D) */
+        for (d=0; d<dim; d++) { params[d] = min[d] + ijk[d] * dx[d]; }
+        /* Compute the cartesian coordinates */
+        PetscCall(coordFn(params, xp));
+        /* Check if the points is in the DMDA */
+        for (d=0; d<dim; d++) {
+          if (xp[d] < O[d]) point_inside = PETSC_FALSE;
+          if (xp[d] > L[d]) point_inside = PETSC_FALSE;
+        }
+        if (point_inside) {
+          for (d=0; d<dim; d++) _pos[dim * n_estimate + d] = xp[d];
+          n_estimate++;
+        }
+      }
+    }
+  }
+  PetscCall(VecRestoreArray(pos,&_pos));
+
+  /* locate points */
+  PetscCall(DMLocatePoints(da,pos,DM_POINTLOCATION_NONE,&sfcell));
+  PetscCall(PetscSFGetGraph(sfcell,NULL,NULL,NULL,&LA_sfcell));
+  n_found = 0;
+  for (p=0; p<n_estimate; p++) {
+    if (LA_sfcell[p].index != DMLOCATEPOINT_POINT_NOT_FOUND) n_found++;
+  }
+
+  /* adjust size */
+  if (mode == ADD_VALUES) {
+    PetscCall(DMSwarmGetLocalSize(sw,&n_curr));
+    n_new_est = n_curr + n_found;
+    PetscCall(DMSwarmSetLocalSizes(sw,n_new_est,-1));
+  }
+  if (mode == INSERT_VALUES) {
+    n_curr    = 0;
+    n_new_est = n_found;
+    PetscCall(DMSwarmSetLocalSizes(sw,n_new_est,-1));
+  }
+
+  /* initialize new coords, cell owners, pid */
+  PetscCall(DMSwarmCellDMGetCellID(celldm,&cellid));
+  PetscCall(VecGetArrayRead(pos,&_coor));
+  PetscCall(DMSwarmGetField(sw,coordFields[0],NULL,NULL,(void **)&swarm_coor));
+  PetscCall(DMSwarmGetField(sw,cellid,NULL,NULL,(void **)&swarm_cellid));
+  n_found = 0;
+  for (p = 0; p < n_estimate; p++) {
+    if (LA_sfcell[p].index != DMLOCATEPOINT_POINT_NOT_FOUND) {
+      for (d=0; d<dim; d++) swarm_coor[dim * (n_curr + n_found) + d] = PetscRealPart(_coor[dim * p + d]);
+      swarm_cellid[n_curr + n_found] = LA_sfcell[p].index;
+      n_found++;
+    }
+  }
+  PetscCall(DMSwarmRestoreField(sw, cellid, NULL, NULL, (void **)&swarm_cellid));
+  PetscCall(DMSwarmRestoreField(sw, coordFields[0], NULL, NULL, (void **)&swarm_coor));
+  PetscCall(VecRestoreArrayRead(pos, &_coor));
+
+  PetscCall(PetscSFDestroy(&sfcell));
+  PetscCall(VecDestroy(&pos));
+  PetscFunctionReturn(PETSC_SUCCESS);
+}
