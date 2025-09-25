@@ -6,11 +6,12 @@ static const char help[] = "Test to add particles running time backward followed
 #include "kernels_rbf.h"
 #include "partition_solve.h"
 #include "io_utils.h"
-#include "swarm_utils.h"
+#include "swarm/swarm_utils.h"
 #include "swarm_interp.h"
 #include "swarm_data.h"
 #include "interpolation.h"
 #include "advection/advection_ctx.h"
+#include "swarm/swarm_output.h"
 //#include "advection/advection.h"
 
 //DMSwarmSetPointsSphericalCoordinates(DM sw, PetscReal min[], PetscReal max[], PetscInt npoints[], InsertMode mode)
@@ -207,7 +208,7 @@ static PetscErrorCode Test()
   PetscCall(PartitionSetUp_All(partitions,pu->npart,swarm_data));
   PetscCall(DMSwarmGetLocalSize(swarm_data,&ndata));
   /* Output data */
-  PetscCall(SwarmOutput(ctx,swarm_data,1,data_output));
+  PetscCall(SwarmOutput(ctx,swarm_data,1,data_output,PETSC_FALSE));
   /* Output DMDA */
   PetscCall(PartitionOfUnityMeshView(pu));
 
@@ -240,7 +241,7 @@ static PetscErrorCode Test()
     PetscCall(PartitionSolveInterpolationCoefficients(pu,partitions,swarm_data,"fields"));
     PetscCall(RBFInterpolation(ctx,swarm_interp,swarm_data,"fields"));
     /* Output (for debugging) */
-    //PetscCall(SwarmOutput(ctx,swarm_interp,1,data_output));
+    //PetscCall(SwarmOutput(ctx,swarm_interp,1,data_output,PETSC_FALSE));
     /* Advect */
     adv_ctx->advection(ctx,swarm_interp,swarm_data);
   }
@@ -266,7 +267,7 @@ static PetscErrorCode Test()
     PetscCall(PartitionSolveInterpolationCoefficients(pu,partitions,swarm_data,"fields"));
     PetscCall(RBFInterpolation(ctx,swarm_interp,swarm_data,"fields"));
     /* Output */
-    PetscCall(SwarmOutput(ctx,swarm_interp,2,output_fields));
+    PetscCall(SwarmOutput(ctx,swarm_interp,2,output_fields,PETSC_TRUE));
     /* Advect */
     adv_ctx->advection(ctx,swarm_interp,swarm_data);
   }

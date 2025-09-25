@@ -3,9 +3,10 @@
 #include "kernels_rbf.h"
 #include "partition_solve.h"
 #include "io_utils.h"
-#include "swarm_utils.h"
+#include "swarm/swarm_utils.h"
 #include "swarm_interp.h"
 #include "swarm_data.h"
+#include "swarm/swarm_output.h"
 
 static PetscErrorCode ViewUniquePointIdentifier(DM sw)
 {
@@ -97,6 +98,7 @@ static PetscErrorCode Test()
   PetscReal        overlap,radius,epsilon;
   PetscBool        exists;
   const char       output_dir[] = "output";
+  const char       *output_data[] = {"fields"};
   PetscFunctionBeginUser;
 
   PetscCall(TestDirectory(output_dir,'w',&exists));
@@ -129,9 +131,7 @@ static PetscErrorCode Test()
   /* Output */
   PetscCall(PartitionOfUnityMeshView(pu));
   /* output swarm data */
-  PetscCall(SwarmOutputCoordsPetscVec(swarm_data,output_dir,NULL));
-  PetscCall(SwarmOutputFieldsPetscVec(swarm_data,output_dir,NULL));
-  
+  PetscCall(SwarmOutput(ctx,swarm_data,1,output_data,PETSC_FALSE));
 
   PetscCall(DMDestroy(&swarm_interp));
   PetscCall(DMDestroy(&swarm_data));
@@ -284,267 +284,6 @@ static PetscErrorCode PrintCoords(DM da, int rank)
   PetscFunctionReturn(PETSC_SUCCESS);
 }
 
-static PetscErrorCode DMDACreateRedundantSubDMDA(PartitionOfUnity pu, int rank, DM *sub_da)
-{
-  IS       is;
-  DM       da,cda,seq_da,seq_cda;
-  Vec      da_natural_coords,da_coords;
-  Vec      seq_coords,seq_natural_coords;
-  VecScatter scatter;
-  PetscInt M[3],m[3];
-  PetscInt sel[3],nel[3];
-  PetscInt snodes[3],nnodes[3];
-  PetscInt i,j,k,d,idx,npoints,nproc=1;
-  PetscInt *natural_gidx;
-  PetscFunctionBeginUser;
-  PetscPrintf(PETSC_COMM_SELF,"Rank[%d]: [[ %s ]]\n",rank,PETSC_FUNCTION_NAME);
-
-  /* Get the parallel DMDA */
-  PetscCall(PUGetDMDA(pu,&da));
-
-  /* Get the element corners and sizes */
-  PetscCall(DMDAGetElementsCorners(da,&sel[0],&sel[1],&sel[2]));
-  PetscCall(DMDAGetElementsSizes(da,&nel[0],&nel[1],&nel[2]));
-  PetscCall(PetscArrayzero(snodes,3));
-  PetscCall(PetscArrayzero(nnodes,3));
-  /* Compute the new extent of elements => halo of 1 element around the parallel non-overlapping elements decomposition */
-  npoints = 1;
-  for (d=0; d<pu->dim; d++) {
-    if (sel[d] > 0) sel[d] -= 1;
-    if (sel[d] + nel[d] < pu->n[d]-1) nel[d] += 1;
-    snodes[d] = sel[d];
-    nnodes[d] = nel[d] + 1;
-    npoints *= nnodes[d];
-  }
-
-  PetscPrintf(PETSC_COMM_SELF,
-    "Rank[%d]: new element corner = (%" PetscInt_FMT ", %" PetscInt_FMT ", %" PetscInt_FMT "), new element size = (%" PetscInt_FMT ", %" PetscInt_FMT ", %" PetscInt_FMT ")\n",
-    rank,sel[0],sel[1],sel[2],nel[0],nel[1],nel[2]);
-  PetscPrintf(PETSC_COMM_SELF,
-    "Rank[%d]: new nodes corner = (%" PetscInt_FMT ", %" PetscInt_FMT ", %" PetscInt_FMT "), new nodes size = (%" PetscInt_FMT ", %" PetscInt_FMT ", %" PetscInt_FMT ")\n",
-    rank,snodes[0],snodes[1],snodes[2],nnodes[0],nnodes[1],nnodes[2]);
-
-  /* Create a rank-local DMDA of the size of the ghosted parallel DMDA */
-  PetscCall(DMDACreate2d(PETSC_COMM_SELF,DM_BOUNDARY_NONE,DM_BOUNDARY_NONE,DMDA_STENCIL_BOX,nnodes[0],nnodes[1],nproc,nproc,1,1,NULL,NULL,&seq_da));
-  PetscCall(DMDASetElementType(seq_da, DMDA_ELEMENT_Q1));
-  PetscCall(DMSetUp(seq_da));
-
-  DMDAGetInfo(da,NULL,&M[0],&M[1],&M[2],NULL,NULL,NULL,NULL,NULL,NULL,NULL,NULL,NULL);
-  DMDAGetInfo(seq_da,NULL,&m[0],&m[1],&m[2],NULL,NULL,NULL,NULL,NULL,NULL,NULL,NULL,NULL);
-  
-  PetscPrintf(PETSC_COMM_SELF,
-    "Rank[%d]: parallel DMDA size = (%" PetscInt_FMT ", %" PetscInt_FMT ", %" PetscInt_FMT ")\n",
-    rank,M[0],M[1],M[2]);
-  PetscPrintf(PETSC_COMM_SELF,
-    "Rank[%d]: sequential DMDA size = (%" PetscInt_FMT ", %" PetscInt_FMT ", %" PetscInt_FMT ")\n",
-    rank,m[0],m[1],m[2]);
-
-  /* Create the map of natural global indices between the parallel DMDA and the sequential DMDA */
-  PetscMalloc1(pu->dim*npoints,&natural_gidx);
-  idx = 0;
-  for (j=0; j<nnodes[1]; j++) {
-    for (i=0; i<nnodes[0]; i++) {
-      /*
-      PetscPrintf(PETSC_COMM_SELF,
-        "Rank[%d]: (i,j)=(%" PetscInt_FMT ", %" PetscInt_FMT ")\n"
-        "         (i+sx,j+sy)=(%" PetscInt_FMT ", %" PetscInt_FMT ")\n"
-        "         nidx = %" PetscInt_FMT ", gidx = %" PetscInt_FMT "\n",
-        rank,i,j,
-        i+snodes[0],j+snodes[1],
-        j*nnodes[0] + i, (i+snodes[0]) + (j+snodes[1])*M[0]);
-      */
-      natural_gidx[2*idx  ] = ((i+snodes[0]) + (j+snodes[1])*M[0])*2;     // x coord
-      natural_gidx[2*idx+1] = ((i+snodes[0]) + (j+snodes[1])*M[0])*2 + 1; // y coord
-      idx++;
-    }
-  }
-  PetscPrintf(PETSC_COMM_SELF,
-    "Rank[%d]: npoints: %" PetscInt_FMT ", 2*npoints: %" PetscInt_FMT "\n",
-    rank,idx,2*idx);
-
-  /* Get the parallel DMDA global coords */
-  PetscCall(DMGetCoordinateDM(da,&cda));
-  PetscCall(DMGetCoordinates(da,&da_coords));
-  /* Create a vector to hold coordinates in natural indices */
-  PetscCall(DMDACreateNaturalVector(cda,&da_natural_coords));
-  /* Fill it */
-  PetscCall(DMDAGlobalToNaturalBegin(cda,da_coords,INSERT_VALUES,da_natural_coords));
-  PetscCall(DMDAGlobalToNaturalEnd(cda,da_coords,INSERT_VALUES,da_natural_coords));
-
-  /* Create the Index Set to communicate between the parallel DMDA and the sequential DMDA */
-  PetscCall(ISCreateGeneral(PETSC_COMM_SELF,2*npoints,natural_gidx,PETSC_OWN_POINTER,&is));
-  
-  /* Get the coordinate DM for the sequential DMDA */
-  PetscCall(DMGetCoordinateDM(seq_da,&seq_cda));
-  /* Create the natural vector for the sequential DMDA */
-  PetscCall(DMDACreateNaturalVector(seq_cda,&seq_natural_coords));
-  /* 
-  Create a global vector that will be used to set coordinates 
-  Given that we are on a sequential DMDA, I am not sure that the natural and global ordering are actually different
-  */
-  PetscCall(DMCreateGlobalVector(seq_cda,&seq_coords));
-
-  /* Scatter the coordinates to the sequential DMDA */
-  PetscCall(VecScatterCreate(da_natural_coords,is,seq_natural_coords,NULL,&scatter));
-  PetscCall(VecScatterBegin(scatter,da_natural_coords,seq_natural_coords,INSERT_VALUES,SCATTER_FORWARD));
-  PetscCall(VecScatterEnd(scatter,da_natural_coords,seq_natural_coords,INSERT_VALUES,SCATTER_FORWARD));
-
-  /* From natural to global ordering on the sequential DMDA */
-  PetscCall(DMDANaturalToGlobalBegin(seq_cda,seq_natural_coords,INSERT_VALUES,seq_coords));
-  PetscCall(DMDANaturalToGlobalEnd(seq_cda,seq_natural_coords,INSERT_VALUES,seq_coords));
-  /* Set the coordinates */
-  PetscCall(DMSetCoordinates(seq_da,seq_coords));
-
-  /* Cleanup */
-  PetscCall(VecDestroy(&da_natural_coords));
-  PetscCall(VecDestroy(&seq_natural_coords));
-  PetscCall(VecDestroy(&seq_coords));
-  PetscCall(VecScatterDestroy(&scatter));
-  PetscCall(ISDestroy(&is));
-
-  *sub_da = seq_da;
-  PetscFunctionReturn(PETSC_SUCCESS);
-}
-
-
-
-static PetscErrorCode PartitionCreate_LocalToGlobalPartitionToCellInverseMapping(PartitionOfUnity pu, DM seq_da, Partition *partition)
-{
-  DM             dap;
-  PetscInt       iel,k,nel,nen,nidx;
-  const PetscInt *elidx;
-  PetscFunctionBeginUser;
-  PetscPrintf(PETSC_COMM_WORLD,"[[ %s ]]\n",PETSC_FUNCTION_NAME);
-
-  PetscCall(PUGetDMDA(pu,&dap));
-  /* Get elements of the parallel DMDA */
-  PetscCall(DMDAGetElements(dap,&nel,&nen,&elidx));
-  /* Get elements of the sequential DMDA */
-  PetscCall(DMDAGetElements(seq_da,&nel,&nen,&elidx));
-
-  /* Count the number of cells connected to each partition */
-  for (iel=0; iel<nel; iel++) {
-    for (k=0; k<nen; k++) {
-      nidx = elidx[nen*iel + k]; // Partition index from the cell index
-      partition[nidx]->ncells++; // count the number of elements that contain the vertex
-    }
-  }
-  for (k=0; k<pu->npart; k++) {
-    /* Allocate the inverse map */
-    PetscCall(PetscMalloc1(partition[k]->ncells,&partition[k]->map));
-    /* Reset the counter */
-    partition[k]->ncells = 0;
-  }
-  /* Fill the inverse map */
-  for (iel=0; iel<nel; iel++) {
-    for (k=0; k<nen; k++) {
-      nidx = elidx[nen*iel + k]; // partition index from the cell index
-      partition[nidx]->map[ partition[nidx]->ncells ] = iel; // store the element index
-      partition[nidx]->ncells++; // increment the counter
-    }
-  }
-  PetscFunctionReturn(PETSC_SUCCESS);
-}
-
-static PetscErrorCode TEST_PartitionCreate(PartitionOfUnity pu, Partition **partition)
-{
-  Partition *p;
-  PetscInt  n,npart;
-  PetscFunctionBeginUser;
-  PetscPrintf(PETSC_COMM_WORLD,"[[ %s ]]\n",PETSC_FUNCTION_NAME);
-
-  PetscCall(PUGetNPartitions(pu,&npart));
-  PetscCall(PetscCalloc1(npart,&p));
-  for (n=0; n<npart; n++) { PetscCall(PartitionCreate_SinglePartition(&p[n])); }
-  /* Create the inverse map connecting partition to cells 
-  TODO: Fix SEGV in parallel
-  */
-  //PetscCall(PartitionCreate_PartitionToCellInverseMapping(pu,p));
-  *partition = p;
-  PetscFunctionReturn(PETSC_SUCCESS);
-}
-
-static PetscErrorCode Test_Parallel()
-{
-  PartitionOfUnity pu;
-  Partition        *partitions;
-  DM               da,seq_da;
-  DMDAElementType  etype;
-  PetscInt         nel,nen;
-  PetscInt         s[3],n[3];
-  const PetscInt   *elidx;
-  MPI_Comm         comm;
-  int              rank,size;
-  PetscFunctionBeginUser;
-  /* TEST here the decomposition of the domain */
-  PetscCall(PartitionOfUnityCreate(&pu));
-  PetscCall(PUGetDMDA(pu,&da));
-
-  PetscCall(PetscObjectGetComm((PetscObject)da,&comm));
-  PetscCallMPI(MPI_Comm_rank(comm,&rank));
-  PetscCallMPI(MPI_Comm_size(comm,&size));
-
-  /* Check element type */
-  PetscCall(DMDAGetElementType(da,&etype));
-  PetscPrintf(PETSC_COMM_SELF,"Element type: %s\n",etype == DMDA_ELEMENT_P1 ? "P1" : etype == DMDA_ELEMENT_Q1 ? "Q1" : "Unknown");
-
-  PetscCall(DMDACreateRedundantSubDMDA(pu,rank,&seq_da));
-
-  /* Elements */
-  PetscCall(PrintElements(seq_da,rank));
-#if 0
-  /* Set the number of local partitions */
-  PetscCall(DMDAGetCorners(seq_da,&s[0],&s[1],&s[2],&n[0],&n[1],&n[2]));
-  pu->npart = 1; // Initialize
-  for (int d=0; d<pu->dim; d++) { pu->npart *= n[d]; }
-
-  PetscCall(TEST_PartitionCreate(pu,&partitions));
-#endif
-
-#if 0
-  /* Nodes */
-  PetscCall(PrintNodesPetscOrdering(da,rank));
-  /* Elements */
-  PetscCall(PrintElements(da,rank));
-  /* Local to global mapping */
-  PetscCall(PrintIS(da,rank));
-  /* Neighbors */
-  PetscCall(PrintNeighborsRanks(da,rank));
-  /* Sequential DMDA coords */ 
-  PetscCall(PrintCoords(seq_da,rank));
-#endif
-
-#if 0
-  /* Elements of the parallel DMDA */
-  PetscCall(DMDAGetElements(da,&nel,&nen,&elidx));
-  PetscCall(DMDAGetCorners(seq_da,&seq_sx,&seq_sy,NULL,&seq_lx,&seq_ly,NULL));
-
-  for (int iel=0; iel<nel; iel++) {
-    PetscPrintf(PETSC_COMM_SELF,
-      "Rank[%d]: Element[%" PetscInt_FMT "] (",rank,iel);
-    for (int k=0; k<nen; k++) {
-      PetscInt nidx = elidx[nen*iel + k];
-      PetscPrintf(PETSC_COMM_SELF,"%" PetscInt_FMT " ",nidx);
-    }
-    PetscPrintf(PETSC_COMM_SELF,")\n");
-  }
-  for (int j=0; j<seq_ly; j++) {
-    for (int i=0; i<seq_lx; i++) {
-      PetscInt nidx_local = i + j*seq_lx;
-      PetscPrintf(PETSC_COMM_SELF,
-        "Rank[%d]: seq local (%" PetscInt_FMT ", %" PetscInt_FMT "): %" PetscInt_FMT "\n",
-        rank,i,j,nidx_local);
-    }
-  }
-#endif
-  PetscCall(DMDARestoreElements(da,&nel,&nen,&elidx));
-
-
-  PetscCall(PartitionOfUnityDestroy(&pu));
-  PetscCall(DMDestroy(&seq_da));
-  PetscFunctionReturn(PETSC_SUCCESS);
-}
-
 static PetscErrorCode ViewSeqDMDA(DM da, int rank)
 {
   PetscViewer       viewer;
@@ -565,59 +304,14 @@ static PetscErrorCode ViewSeqDMDA(DM da, int rank)
   PetscFunctionReturn(PETSC_SUCCESS);
 }
 
-static PetscErrorCode Test_Parallel_2()
-{
-  PartitionOfUnity pu;
-  DM               da,dae,seq_da;
-  PetscInt         stencil_width=1;
-  PetscInt         snodes[3],lnodes[3],sghost[3],lghost[3],sel[3],nel[3];
-  PetscInt         seq_snodes[3],seq_lnodes[3],seq_sel[3],seq_nel[3];
-  PetscBool        exists;
-  MPI_Comm         comm;
-  int              rank,size;
-  const char       output_dir[] = "output_sw2";
-  PetscFunctionBeginUser;
-
-  PetscCall(TestDirectory(output_dir,'w',&exists));
-  if (!exists) { PetscCall(CreateDirectory(output_dir)); }
-
-  PetscCall(PartitionOfUnityCreate(&pu));
-  PetscCall(PUGetDMDA(pu,&da));
-
-  PetscCall(PetscObjectGetComm((PetscObject)da,&comm));
-  PetscCallMPI(MPI_Comm_rank(comm,&rank));
-  PetscCallMPI(MPI_Comm_size(comm,&size));
-
-  PetscCall(DMDAGetCorners(da,&snodes[0],&snodes[1],&snodes[2],&lnodes[0],&lnodes[1],&lnodes[2]));
-  PetscPrintf(PETSC_COMM_SELF,
-    "Rank[%d]: Nodes corner = (%" PetscInt_FMT ", %" PetscInt_FMT ", %" PetscInt_FMT "), size = (%" PetscInt_FMT ", %" PetscInt_FMT ", %" PetscInt_FMT ")\n",
-    rank,snodes[0],snodes[1],snodes[2],lnodes[0],lnodes[1],lnodes[2]);
-  PetscCall(DMDAGetGhostCorners(da,&sghost[0],&sghost[1],&sghost[2],&lghost[0],&lghost[1],&lghost[2]));
-  PetscPrintf(PETSC_COMM_SELF,
-    "Rank[%d]: Nodes ghost corner = (%" PetscInt_FMT ", %" PetscInt_FMT ", %" PetscInt_FMT "), size = (%" PetscInt_FMT ", %" PetscInt_FMT ", %" PetscInt_FMT ")\n",
-    rank,sghost[0],sghost[1],sghost[2],lghost[0],lghost[1],lghost[2]);
-
-  PetscCall(DMDAGetElementsCorners(da,&sel[0],&sel[1],&sel[2]));
-  PetscCall(DMDAGetElementsSizes(da,&nel[0],&nel[1],&nel[2]));
-  PetscPrintf(PETSC_COMM_SELF,
-    "Rank[%d]: Elements corner = (%" PetscInt_FMT ", %" PetscInt_FMT ", %" PetscInt_FMT "), size = (%" PetscInt_FMT ", %" PetscInt_FMT ", %" PetscInt_FMT ")\n",
-    rank,sel[0],sel[1],sel[2],nel[0],nel[1],nel[2]);
-
-  PetscCall(DMDACreateRedundantSubDMDA(pu,rank,&seq_da));
-
-  PetscCall(PrintCoords(seq_da,rank));
-  PetscCall(ViewSeqDMDA(seq_da, rank));
-  
-
-  PetscCall(PartitionOfUnityDestroy(&pu));
-  PetscFunctionReturn(PETSC_SUCCESS);
-}
-
 static PetscErrorCode Test_3()
 {
   PartitionOfUnity pu;
   Partition        *partitions;
   DM               dap,das;
+  PetscInt         *ptos;
+  const PetscInt   *elidx;
+  PetscInt         nel,nen;
   PetscBool        exists;
   MPI_Comm         comm;
   int              rank,size;
@@ -648,6 +342,14 @@ static PetscErrorCode Test_3()
     for (int k=0; k<ncells; k++) {
       PetscPrintf(PETSC_COMM_SELF,"  Rank[%d]: map[%" PetscInt_FMT "] = %" PetscInt_FMT "\n",rank,k,map[k]);
     }
+  }
+  
+  PetscCall(PUGetGlobalToLocalElementMap(pu,&ptos));
+  PetscCall(DMDAGetElements(dap,&nel,&nen,&elidx));
+  for (int i=0; i<nel; i++) {
+    PetscPrintf(PETSC_COMM_SELF,
+      "Rank[%d] parallel el[%d] = seq el[%" PetscInt_FMT "]\n",
+      rank,i,ptos[i]);
   }
 
 

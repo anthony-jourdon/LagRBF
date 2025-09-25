@@ -4,10 +4,11 @@
 #include "kernels_rbf.h"
 #include "partition_solve.h"
 #include "io_utils.h"
-#include "swarm_utils.h"
+#include "swarm/swarm_utils.h"
 #include "swarm_interp.h"
 #include "swarm_data.h"
 #include "interpolation.h"
+#include "swarm/swarm_output.h"
 
 #include <immintrin.h>
 
@@ -924,6 +925,7 @@ static PetscErrorCode Test()
   PetscReal        overlap,radius,epsilon,box_length;
   PetscBool        exists;
   const char       output_dir[] = "output";
+  const char       *output_data[] = {"fields"};
   PetscFunctionBeginUser;
 
   PetscCall(TestDirectory(output_dir,'w',&exists));
@@ -965,11 +967,9 @@ static PetscErrorCode Test()
   /* Output */
   //PetscCall(PartitionOfUnityMeshView(pu));
   /* output swarm data */
-  PetscCall(SwarmOutputCoordsPetscVec(swarm_data,output_dir,NULL));
-  PetscCall(SwarmOutputFieldsPetscVec(swarm_data,output_dir,NULL));
+  PetscCall(SwarmOutput(ctx,swarm_data,1,output_data,PETSC_FALSE));
   /* output interpolation points */
-  PetscCall(SwarmOutputCoordsPetscVec(swarm_interp,output_dir,NULL));
-  PetscCall(SwarmOutputFieldsPetscVec(swarm_interp,output_dir,NULL));
+  PetscCall(SwarmOutput(ctx,swarm_interp,1,output_data,PETSC_TRUE));
 
   PetscCall(DMDestroy(&swarm_interp));
   PetscCall(DMDestroy(&swarm_data));

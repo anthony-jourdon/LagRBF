@@ -4,10 +4,11 @@
 #include "kernels_rbf.h"
 #include "partition_solve.h"
 #include "io_utils.h"
-#include "swarm_utils.h"
+#include "swarm/swarm_utils.h"
 #include "swarm_interp.h"
 #include "swarm_data.h"
 #include "interpolation.h"
+#include "swarm/swarm_output.h"
 
 static PetscReal triple_gaussians(PetscReal x, PetscReal y)
 {
@@ -637,7 +638,7 @@ static PetscErrorCode Test()
   PetscCall(PartitionSetUp_All(partitions,pu->npart,swarm_data));
   PetscCall(DMSwarmGetLocalSize(swarm_data,&ndata));
   /* Output data */
-  //PetscCall(SwarmOutput(ctx,swarm_data,1,data_output));
+  //PetscCall(SwarmOutput(ctx,swarm_data,1,data_output,PETSC_FALSE));
   /* Output DMDA */
   PetscCall(PartitionOfUnityMeshView(pu));
 
@@ -656,7 +657,7 @@ static PetscErrorCode Test()
   PetscCall(PartitionSolveInterpolationCoefficients(pu,partitions,swarm_data,"fields"));
   PetscCall(RBFInterpolation(ctx,swarm_interp,swarm_data,"fields"));
   /* Output */
-  PetscCall(SwarmOutput(ctx,swarm_interp,2,output_fields));
+  PetscCall(SwarmOutput(ctx,swarm_interp,2,output_fields,PETSC_TRUE));
 
   PetscCall(LagRBFGetAdvectionCtx(ctx,&adv_ctx));
   dt = 1.0;
@@ -677,7 +678,7 @@ static PetscErrorCode Test()
     PetscCall(PartitionSolveInterpolationCoefficients(pu,partitions,swarm_data,"fields"));
     PetscCall(RBFInterpolation(ctx,swarm_interp,swarm_data,"fields"));
     /* Output */
-    PetscCall(SwarmOutput(ctx,swarm_interp,2,output_fields));
+    PetscCall(SwarmOutput(ctx,swarm_interp,2,output_fields,PETSC_TRUE));
   }
   PetscCall(DMDestroy(&swarm_interp));
   PetscCall(DMDestroy(&swarm_data));

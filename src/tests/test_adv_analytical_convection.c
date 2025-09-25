@@ -6,11 +6,12 @@ static const char help[] = "Test to add particles running time backward followed
 #include "kernels_rbf.h"
 #include "partition_solve.h"
 #include "io_utils.h"
-#include "swarm_utils.h"
+#include "swarm/swarm_utils.h"
 #include "swarm_interp.h"
 #include "swarm_data.h"
 #include "interpolation.h"
 #include "advection/advection_ctx.h"
+#include "swarm/swarm_output.h"
 
 static double halton_sequence(int index, int base)
 {
@@ -253,7 +254,7 @@ static PetscErrorCode Test()
   PetscCall(CreateDataPoints(ctx,&swarm_data));
   PetscCall(DataPointsSetVariables(swarm_data));
   /* Output data */
-  PetscCall(SwarmOutput(ctx,swarm_data,1,data_output));
+  PetscCall(SwarmOutput(ctx,swarm_data,1,data_output,PETSC_FALSE));
   /* Output DMDA */
   PetscCall(PartitionOfUnityMeshView(pu));
 
@@ -289,7 +290,7 @@ static PetscErrorCode Test()
     PetscCall(RBFInterpolation(ctx,swarm_interp,swarm_data,"fields"));
     /* Output */
     if (step % output_frequency == 0) {
-      PetscCall(SwarmOutput(ctx,swarm_interp,2,output_fields));
+      PetscCall(SwarmOutput(ctx,swarm_interp,2,output_fields,PETSC_TRUE));
     }
     /* Advect */
     adv_ctx->advection(ctx,swarm_interp,swarm_data);

@@ -7,12 +7,13 @@ static const char help[] = "Test to interpolate and advect particles from StagYY
 #include "lagrangian_rbf_init.h"
 #include "lagrangian_rbf.h"
 #include "io_utils.h"
-#include "swarm_utils.h"
+#include "swarm/swarm_utils.h"
 #include "swarm_data.h"
 #include "swarm_interp.h"
 #include "interpolation.h"
 #include "partition_solve.h"
 #include "advection/advection_ctx.h"
+#include "swarm/swarm_output.h"
 
 typedef struct {
   PetscInt nfiles;
@@ -296,8 +297,8 @@ static PetscErrorCode Test()
     PetscCall(PartitionSolveInterpolationCoefficients(pu,partitions,swarm_data,"fields"));
     PetscCall(RBFInterpolation(ctx,swarm_interp,swarm_data,"fields"));
     /* Output */
-    PetscCall(SwarmOutput(ctx,swarm_interp,2,output_fields));
-    PetscCall(SwarmOutput(ctx,swarm_data,1,output_data));
+    PetscCall(SwarmOutput(ctx,swarm_interp,2,output_fields,PETSC_TRUE));
+    PetscCall(SwarmOutput(ctx,swarm_data,1,output_data,PETSC_FALSE));
     /* Advect */
     PetscCall(LagRBFGetTime(ctx,&time));
     while (time < next_time) {

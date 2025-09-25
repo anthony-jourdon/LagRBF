@@ -7,8 +7,9 @@ static const char help[] = "Test to read HDF5 files.\n\n";
 #include "lagrangian_rbf_init.h"
 #include "lagrangian_rbf.h"
 #include "io_utils.h"
-#include "swarm_utils.h"
+#include "swarm/swarm_utils.h"
 #include "swarm_data.h"
+#include "swarm/swarm_output.h"
 
 static PetscErrorCode StagReshapeVelocity(PetscInt dim, StagFieldInfo fdata, PetscReal *velocity)
 {
@@ -168,7 +169,7 @@ static PetscErrorCode Test()
 
     PetscCall(SwarmDataSetFields(swarm_data, cinfo, field_data));
     /* Output data */
-    PetscCall(SwarmOutput(ctx,swarm_data,1,fields));
+    PetscCall(SwarmOutput(ctx,swarm_data,1,fields,PETSC_FALSE));
 
   }
 
