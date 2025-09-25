@@ -24,17 +24,20 @@ PetscErrorCode PointwiseInterpolation_Scalar(
 {
   DM             da;
   PetscInt       k,np,dim,npart,nel,nen;
+  PetscInt       *gtol_elidx;
   const PetscInt *elidx;
   PetscReal      *interpolant;
   PetscLogDouble time[2];
+  long int       npoints_local,npoints_global;
   PetscFunctionBeginUser;
   /* Logging */
   PetscCall(PetscTime(&time[0]));
   PetscCall(PetscLogEventBegin(LAGRBF_PointwiseInterpolation_Scalar,0,0,0,0));
 
   PetscCall(PUGetNPartitions(pu,&npart));
+  PetscCall(PUGetGlobalToLocalElementMap(pu,&gtol_elidx));
   PetscCall(PUGetDimension(pu,&dim));
-  PetscCall(PUGetDMDA(pu,&da));
+  PetscCall(PUGetDMDALocal(pu,&da));
   PetscCall(DMDAGetElements(da,&nel,&nen,&elidx));
   /* Allocate memory for the interpolant */
   PetscCall(PetscCalloc1(nfields,&interpolant));
@@ -47,11 +50,13 @@ PetscErrorCode PointwiseInterpolation_Scalar(
     for (k=0; k<nen; k++) {
       Partition p;
       Mat       X;
-      PetscInt  nd,puidx,ndata;
+      PetscInt  nd,puidx,ndata,local_cidx;
       PetscInt  *data_idx;
       PetscReal *coeffs;
 
-      puidx = elidx[nen*cidx + k];
+      /* Get the partition index */
+      local_cidx = gtol_elidx[cidx];
+      puidx = elidx[nen*local_cidx + k];
       p     = partitions[puidx];
       PetscCall(PartitionGetDataPointsIdx(p,&ndata,&data_idx));
       if (ndata == 0) continue; // no data points in this partition, skip
@@ -87,7 +92,10 @@ PetscErrorCode PointwiseInterpolation_Scalar(
 
   PetscCall(PetscLogEventEnd(LAGRBF_PointwiseInterpolation_Scalar,0,0,0,0));
   PetscCall(PetscTime(&time[1]));
-  PetscCall(PetscPrintf(PETSC_COMM_WORLD,"[[ %s ]] interpolated %" PetscInt_FMT " points in %g seconds\n",PETSC_FUNCTION_NAME,npoints_i,time[1]-time[0]));
+  /* Need to perform a reduction to gather the total number of points */
+  npoints_local = (long int)npoints_i;
+  PetscCallMPI(MPI_Allreduce(&npoints_local,&npoints_global,1,MPI_LONG,MPI_SUM,PETSC_COMM_WORLD));
+  PetscCall(PetscPrintf(PETSC_COMM_WORLD,"[[ %s ]] interpolated %ld points in %g seconds\n",PETSC_FUNCTION_NAME,npoints_global,time[1]-time[0]));
 
   PetscFunctionReturn(PETSC_SUCCESS);
 }
@@ -126,7 +134,7 @@ PetscErrorCode RBFInterpolation(LagRBFCtx ctx, DM swi, DM swd, const char *field
   PetscCall(DMSwarmGetField(swd, coordFieldName_d[0], NULL, NULL, (void **)&coords_d));
 
   /* Perform the interpolation */
-#if defined(__AVX__)
+#if 0 //defined(__AVX__)
   PetscCall(PointwiseInterpolation_AVX256(pu,partitions,nfields,npoints_i,cellid_i,coords_i,coords_d,weights,values_i));
 #else
   PetscCall(PointwiseInterpolation_Scalar(pu,partitions,nfields,npoints_i,cellid_i,coords_i,coords_d,weights,values_i));
