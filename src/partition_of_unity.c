@@ -5,10 +5,15 @@
 PetscErrorCode PUCreate(PartitionOfUnity *pu)
 {
   PartitionOfUnity p;
+  MPI_Comm         comm = PETSC_COMM_WORLD;
+  int              rank;
   PetscFunctionBeginUser;
+
+  PetscCallMPI(MPI_Comm_rank(comm,&rank));
 
   PetscCall(PetscNew(&p));
   PetscCall(PetscSNPrintf(p->name, PETSC_MAX_PATH_LEN-1,"pu_mesh"));
+  PetscCall(PetscSNPrintf(p->sname, PETSC_MAX_PATH_LEN-1,"pu_mesh_%d",rank));
   p->dap   = NULL;
   p->das   = NULL;
   p->dim   = 0;
@@ -118,9 +123,9 @@ PetscErrorCode PUCreateDMDALocal(PartitionOfUnity pu)
   PetscInt   par_size_el[]  = {1,1,1};
   PetscInt   start_node[] = {0,0,0};
   PetscInt   size_node[]  = {1,1,1};
+  PetscInt   local_start_el[] = {0,0,0};
   PetscInt   i,j,k,d,dim,npoints,stencil_width,cnt,par_nel;
   PetscFunctionBeginUser;
-
   /* Get parallel DMDA */
   PetscCall(PUGetDMDA(pu,&dap));
   PetscCall(DMDAGetInfo(dap,&dim,&M[0],&M[1],&M[2],NULL,NULL,NULL,NULL,&stencil_width,NULL,NULL,NULL,NULL));
@@ -136,8 +141,12 @@ PetscErrorCode PUCreateDMDALocal(PartitionOfUnity pu)
   par_nel = 1;
   for (d=0; d<dim; d++) {
     /* If not on the boundary, expand the element indices */
-    if (start_el[d] > 0)                   { start_el[d] -= 1; }
-    if (start_el[d] + size_el[d] < M[d]-1) { size_el[d]  += 1; }
+    if (start_el[d] > 0)                   { start_el[d] -= 1; } // Not on the lower boundary, expand lower bound
+    if (start_el[d] + size_el[d] < M[d]-1) { size_el[d]  += 1; } // Not on the upper boundary after expanding the start, expand size
+    /* Add one more if after expansion we are still not on the boundary ==> subdomain surrounded on both sides in d direction */
+    if (start_el[d] > 0 && start_el[d] + size_el[d] < M[d]-1) { size_el[d]  += 1; } // Not on the lower and upper boundary, expand size again
+    /* Starting element of the parallel DMDA in the sequential DMDA */
+    local_start_el[d] = par_start_el[d] - start_el[d];
     /* Convert in node extent */
     start_node[d] = start_el[d];
     size_node[d]  = size_el[d] + 1;
@@ -155,7 +164,7 @@ PetscErrorCode PUCreateDMDALocal(PartitionOfUnity pu)
       for (i=0; i<par_size_el[0]; i++) {
         PetscInt par_eidx,seq_eidx;
         par_eidx = i + j*par_size_el[0] + k*par_size_el[0]*par_size_el[1];
-        seq_eidx = (i + start_el[0]) + (j + start_el[1])*size_el[0] + (k + start_el[2])*size_el[0]*size_el[1];
+        seq_eidx = (i + local_start_el[0]) + (j + local_start_el[1])*size_el[0] + (k + local_start_el[2])*size_el[0]*size_el[1];
         pu->ptos[par_eidx] = seq_eidx;
       }
     }
@@ -179,6 +188,7 @@ PetscErrorCode PUCreateDMDALocal(PartitionOfUnity pu)
       SETERRQ(PETSC_COMM_SELF,PETSC_ERR_ARG_OUTOFRANGE,"Dimension can only be 1, 2 or 3. Found: %" PetscInt_FMT,dim);
   }
   PetscCall(DMDASetElementType(das, DMDA_ELEMENT_Q1));
+  PetscCall(PetscObjectSetName((PetscObject)das,pu->sname));
   PetscCall(DMSetUp(das));
 
   /* Create the map of natural global indices between the parallel DMDA and the sequential DMDA */
@@ -316,24 +326,43 @@ PetscErrorCode PUGetGlobalToLocalElementMap(PartitionOfUnity pu, PetscInt **ptos
     -pu_mesh_view vtk:pu_mesh.vts:VTK_VTS:write
   See PetscOptionsCreateViewer() manual page for more details.
 */
-PetscErrorCode PartitionOfUnityMeshView(PartitionOfUnity pu)
+static PetscErrorCode PartitionOfUnity_DMDAView(DM da)
 {
-  DM                dap=NULL;
-  Vec               testvec;
   PetscViewer       viewer;
   PetscViewerFormat format;
-  const char        *prefix;
+  Vec               testvec;
+  const char        *dm_name;
+  char              prefix[PETSC_MAX_PATH_LEN];
   PetscFunctionBeginUser;
 
-  PetscCall(PUGetDMDA(pu,&dap));
-  PetscCall(PetscObjectGetOptionsPrefix((PetscObject)dap,&prefix));
-  PetscCall(PetscOptionsCreateViewer(PETSC_COMM_WORLD,NULL,prefix,"-view",&viewer,&format,NULL));
+  PetscCall(PetscObjectGetName((PetscObject)da,&dm_name));
+  PetscCall(PetscSNPrintf(prefix,PETSC_MAX_PATH_LEN-1,"%s_",dm_name));
+  PetscCall(PetscOptionsCreateViewer(PetscObjectComm((PetscObject)da),NULL,prefix,"-view",&viewer,&format,NULL));
   /* Create a vec just to print out the mesh */
-  PetscCall(DMCreateGlobalVector(dap,&testvec));
+  PetscCall(DMCreateGlobalVector(da,&testvec));
   PetscCall(VecSet(testvec,1.0));
   PetscCall(VecView(testvec,viewer));
   PetscCall(VecDestroy(&testvec));
   PetscCall(PetscViewerDestroy(&viewer));
+  PetscFunctionReturn(PETSC_SUCCESS);
+}
 
+/* Output the parallel DMDA */
+PetscErrorCode PartitionOfUnityMeshView(PartitionOfUnity pu)
+{
+  DM dap=NULL;
+  PetscFunctionBeginUser;
+  PetscCall(PUGetDMDA(pu,&dap));
+  PetscCall(PartitionOfUnity_DMDAView(dap));
+  PetscFunctionReturn(PETSC_SUCCESS);
+}
+
+/* Output sequential DMDAs */
+PetscErrorCode PartitionOfUnityMeshView_Seq(PartitionOfUnity pu)
+{
+  DM         das=NULL;
+  PetscFunctionBeginUser;
+  PetscCall(PUGetDMDALocal(pu,&das));
+  PetscCall(PartitionOfUnity_DMDAView(das));
   PetscFunctionReturn(PETSC_SUCCESS);
 }
