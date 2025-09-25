@@ -1,6 +1,6 @@
 #include <petsc.h>
 #include "lagrangian_rbf.h"
-#include "swarm_utils.h"
+#include "swarm/swarm_utils.h"
 #include "kernels_rbf.h"
 #include "swarm_interp.h"
 
@@ -36,6 +36,7 @@ PetscErrorCode SwarmInterpCreate(LagRBFCtx ctx, DM *sw)
   // May need to add another set of fields that need to be advected but not interpolated
   // PetscCall(DMSwarmRegisterPetscDatatypeField(swarm,"pfields",ctx->n_pfields,PETSC_REAL));
   PetscCall(DMSwarmFinalizeFieldRegister(swarm));
+  PetscCall(DMSetUp(swarm));
 
   *sw = swarm;
   PetscFunctionReturn(PETSC_SUCCESS);
@@ -77,6 +78,7 @@ static PetscErrorCode SwarmInterpLoadCoordinates(PartitionOfUnity pu, DM sw)
   PetscFunctionReturn(PETSC_SUCCESS);
 }
 
+#if 0
 /* For mpi implementation, test:
   - Get the total number of points in the swarm (the global size over all ranks)
   - Allocate the weights array with the total size
@@ -85,7 +87,6 @@ static PetscErrorCode SwarmInterpLoadCoordinates(PartitionOfUnity pu, DM sw)
   - Communicate the local sums to all ranks with MPI_Allreduce
   - Normalize the weights by dividing each local weight by the global sum of weights for that point
 */
-
 static PetscErrorCode SwarmInterpSetWeights_SEQ(LagRBFCtx ctx, DM sw)
 {
   PartitionOfUnity pu;
@@ -169,12 +170,106 @@ static PetscErrorCode SwarmInterpSetWeights_SEQ(LagRBFCtx ctx, DM sw)
   PetscCall(PetscFree(sum_w));
   PetscFunctionReturn(PETSC_SUCCESS);
 }
+#endif
+/*
+  To compute the weights in theory we would need to compute at each point:
+    w_j = phi(||x - c_j||) / (sum_{k=1}^{N} phi(||x - c_k||)) 
+  where:
+    - w_j is the weight for partition j
+    - phi is the RBF kernel function
+    - x is the coordinate of the point
+    - c_j is the center of partition j
+    - N is the total number of partitions
+  But in practice, because the kernel has compact support i.e., 
+  phi(r) = 0 for r > R (R is the support radius),
+  we only need to compute the weights for the partitions 
+  whose centers are within the support radius of the point.
+  Except if one discretizes the domain agressively, we should only need the nodes in the local DMDA
+  and thus no communication should be needed.
+*/
+static PetscErrorCode SwarmInterpSetWeights_MPI(LagRBFCtx ctx, DM sw)
+{
+  PartitionOfUnity pu;
+  Partition        *partitions;
+  DMSwarmCellDM    celldm;
+  DM               das,cdas;
+  Vec              coords;
+  PetscReal        *pcoords,*weights,*LA_coords;
+  PetscInt         dim,npart,npoints,nn,np,n,puidx;
+  const char      **coordFields;
+  PetscFunctionBeginUser;
+
+  /* Get data structures */
+  PetscCall(LagRBFGetPartitionOfUnity(ctx,&pu));
+  PetscCall(LagRBFGetPartitions(ctx,&partitions));
+  /* Get the rank-local DMDA (overlapping between processes) */
+  PetscCall(PUGetDMDALocal(pu,&das));
+  PetscCall(DMGetDimension(das,&dim));
+  /* Get partitions centre coordinates (DMDA's nodes) */
+  PetscCall(DMGetCoordinateDM(das,&cdas));
+  PetscCall(DMGetCoordinates(das,&coords));
+  PetscCall(VecGetArray(coords,&LA_coords));
+  /* Get the number of nodes in the local DMDA */
+  PetscCall(PUGetNPartitions(pu,&npart));
+  /* Interpolation points */
+  PetscCall(DMSwarmGetLocalSize(sw,&npoints)); // rank local points
+  PetscCall(DMSwarmGetCellDMActive(sw,&celldm));
+  /* Setup for coords */
+  PetscCall(DMSwarmCellDMGetCoordinateFields(celldm, NULL, &coordFields));
+  PetscCall(DMSwarmGetField(sw, coordFields[0], NULL, NULL, (void **)&pcoords));
+  /* Weights */
+  PetscCall(DMSwarmGetField(sw, "weights", &nn, NULL, (void **)&weights));
+  PetscCheck(nn == npart, PETSC_COMM_WORLD, PETSC_ERR_ARG_SIZ, "The size of weigths must equal the number of partitions of unity: %" PetscInt_FMT ", found: %" PetscInt_FMT "",npart,nn);
+
+  for (np=0; np<npoints; np++) {
+    PetscReal sum_w = 0.0;
+    /* Loop over partitions */
+    for (n=0; n<npart; n++) {
+      Partition p = partitions[n]; // current partition
+      PetscInt  d;
+      PetscReal epsilon,dist;
+      PetscReal *pu_centre;
+      
+      PetscCall(PartitionGetIndex(p,&puidx));
+      PetscCall(PartitionGetEpsilon(p,&epsilon));
+      pu_centre = &LA_coords[dim*puidx];
+      dist = 0.0;
+      for (d=0; d<dim; d++) { 
+        dist += (pcoords[dim*np + d] - pu_centre[d]) * (pcoords[dim*np + d] - pu_centre[d]); 
+      }
+      dist = PetscSqrtReal(dist);
+      /* Compute the weight */
+      weights[np*npart + puidx] = KernelWendlandC2(dist,epsilon);
+      sum_w += weights[np*npart + puidx];
+    }
+    /* Normalize weights */
+    for (n=0; n<npart; n++) {
+      Partition p = partitions[n]; // current partition
+
+      PetscCall(PartitionGetIndex(p,&puidx));
+      if (sum_w > 0.0) {
+        /* Normalize the weights */
+        weights[np*npart + puidx] /= sum_w;
+      } else {
+        /* If the sum of weights is zero, set the weight to zero */
+        weights[np*npart + puidx] = 0.0;
+      }
+    }
+  }
+
+  PetscCall(DMSwarmRestoreField(sw,"weights",NULL,NULL,(void **)&weights));
+  PetscCall(DMSwarmRestoreField(sw,coordFields[0],NULL,NULL,(void **)&pcoords));
+  PetscCall(VecRestoreArray(coords,&LA_coords));
+
+  PetscFunctionReturn(PETSC_SUCCESS);
+}
 
 PetscErrorCode SwarmInterpSetWeights(LagRBFCtx ctx, DM sw)
 {
   PetscFunctionBeginUser;
   /* For now we only support sequential */
-  PetscCall(SwarmInterpSetWeights_SEQ(ctx,sw));
+  //PetscCall(SwarmInterpSetWeights_SEQ(ctx,sw));
+  PetscCall(SwarmInterpSetWeights_MPI(ctx,sw));
   PetscFunctionReturn(PETSC_SUCCESS);
 }
 
