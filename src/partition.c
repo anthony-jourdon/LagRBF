@@ -100,7 +100,7 @@ PetscErrorCode PartitionsSetIndex(PartitionOfUnity pu, Partition *partitions)
   DM da;
   PetscFunctionBeginUser;
   PetscCall(PetscPrintf(PETSC_COMM_WORLD,"[[ %s ]]\n",PETSC_FUNCTION_NAME));
-  PetscCall(PUGetDMDA(pu,&da));
+  PetscCall(PUGetDMDALocal(pu,&da));
   switch (pu->dim) {
     case 1:
       PetscCall(PartitionsSetIndex_1D(da, partitions));
@@ -187,9 +187,9 @@ PetscErrorCode PartitionDestroy(PartitionOfUnity pu, Partition **partition)
 
 PetscErrorCode PartitionFillDataPointsIdx(Partition p, DM swarm)
 {
-  PetscInt      iel,offset,cellidx,ncells;
-  PetscInt     *map=NULL;
-  PetscInt     *point_count,**point_idx;
+  PetscInt iel,offset,cellidx,ncells;
+  PetscInt *map=NULL;
+  PetscInt *point_count,**point_idx;
   PetscFunctionBeginUser;
   /* Get number of cells connected to that partition and their indices */
   ncells = -1; // Initialize to an invalid value
@@ -239,6 +239,8 @@ PetscErrorCode PartitionSetUp_All(Partition *partitions, PetscInt npart, DM swar
   PetscReal     *coords,*values;
   const char    **coordFieldsName;
   PetscFunctionBeginUser;
+  PetscPrintf(PETSC_COMM_WORLD,"[[ %s ]]\n",PETSC_FUNCTION_NAME);
+
   PetscCheck(swarm,PETSC_COMM_SELF,PETSC_ERR_ARG_NULL,"Swarm is NULL. Create the data swarm first.");
   /* Swarm */
   PetscCall(DMSwarmSortGetAccess(swarm));
