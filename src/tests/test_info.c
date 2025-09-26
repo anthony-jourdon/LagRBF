@@ -4,7 +4,7 @@
 #include "partition_solve.h"
 #include "io_utils.h"
 #include "swarm/swarm_utils.h"
-#include "swarm_interp.h"
+#include "swarm/swarm_interp.h"
 #include "swarm_data.h"
 #include "swarm/swarm_output.h"
 

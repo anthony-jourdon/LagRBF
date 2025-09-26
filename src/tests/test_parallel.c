@@ -7,7 +7,7 @@ static const char help[] = "Testing functionalities in parallel.\n\n";
 #include "partition_solve.h"
 #include "io_utils.h"
 #include "swarm/swarm_utils.h"
-#include "swarm_interp.h"
+#include "swarm/swarm_interp.h"
 #include "swarm_data.h"
 #include "interpolation.h"
 #include "advection/advection_ctx.h"
@@ -106,6 +106,15 @@ static PetscErrorCode SetAnalyticalConvectionVelocity(PetscReal coor[], PetscRea
   PetscFunctionReturn(PETSC_SUCCESS);
 }
 
+static PetscErrorCode circle_gaussian(PetscReal coor[], PetscReal r, PetscReal *value)
+{
+  PetscReal x,y;
+  PetscFunctionBeginUser;
+  x = coor[0]; y = coor[1];
+  *value = 0.5*PetscExpReal(-3.0*pow(PetscSqrtReal(x*x + y*y) - r, 2));
+  PetscFunctionReturn(PETSC_SUCCESS);
+}
+
 /* 
   Create the swarm data.
   Brute force: 
@@ -155,8 +164,8 @@ static PetscErrorCode CreateSwarmData_BruteForce(LagRBFCtx ctx, DM *sw)
 static PetscErrorCode SwarmDataSetValues(DM swarm, PetscReal Radius[], PetscInt ncells)
 {
   DMSwarmCellDM celldm;
-  PetscInt      p,dim,npoints;
-  PetscReal     *coords,*velocity;
+  PetscInt      p,dim,npoints,bs;
+  PetscReal     *coords,*fields;
   const char    **coorFieldName;
   PetscFunctionBeginUser;
   
@@ -166,21 +175,22 @@ static PetscErrorCode SwarmDataSetValues(DM swarm, PetscReal Radius[], PetscInt 
   PetscCall(DMSwarmCellDMGetCoordinateFields(celldm, NULL, &coorFieldName));
   /* Access fields */
   PetscCall(DMSwarmGetField(swarm, coorFieldName[0], NULL, NULL, (void **)&coords));
-  PetscCall(DMSwarmGetField(swarm, "fields", NULL, NULL, (void **)&velocity));
+  PetscCall(DMSwarmGetField(swarm, "fields", &bs, NULL, (void **)&fields));
   for (p=0; p<npoints; p++) {
     /* We will assume that the velocity is the ndim first field dof */
-    PetscCall(SetAnalyticalConvectionVelocity(&coords[dim*p],Radius,ncells,&velocity[dim*p]));
+    PetscCall(SetAnalyticalConvectionVelocity(&coords[dim*p],Radius,ncells,&fields[bs*p]));
+    PetscCall(circle_gaussian(&coords[dim*p],1.5,&fields[bs*p + 2]));
   }
   /* Restore fields */
   PetscCall(DMSwarmRestoreField(swarm, coorFieldName[0], NULL, NULL, (void **)&coords));
-  PetscCall(DMSwarmRestoreField(swarm, "fields", NULL, NULL, (void **)&velocity));
+  PetscCall(DMSwarmRestoreField(swarm, "fields", NULL, NULL, (void **)&fields));
   
   PetscFunctionReturn(PETSC_SUCCESS);
 }
 
 static PetscErrorCode CreateSwarmData(LagRBFCtx ctx, DM *sw)
 {
-  DM         swarm;
+  DM         swarm=NULL;
   PetscInt   d,dim,nn,npoints,ncells;
   PetscInt   m[]={120,10,1};
   PetscReal  Radius[]={1.0, 2.0};
@@ -218,43 +228,15 @@ static PetscErrorCode CreateSwarmData(LagRBFCtx ctx, DM *sw)
 /* Not optimized for parallel i.e., every rank does the same work... */
 static PetscErrorCode CreateSwarmInterp(LagRBFCtx ctx, DM *sw)
 {
-  PartitionOfUnity pu;
-  DM          dap,swarm;
+  DM          swarm;
   PetscInt    d,nn,dim,npoints,npoints_i;
   PetscInt    nip[] = {100,100,1};
   PetscReal   Radius[] = {1.0,2.0};
   PetscReal   *coords;
   const char  *prefix;
-  char         dm_name[PETSC_MAX_PATH_LEN],dm_prefix[PETSC_MAX_PATH_LEN];
   PetscFunctionBeginUser;
-  /* Create interpolation points */
-   PetscCall(LagRBFGetPartitionOfUnity(ctx,&pu));
-  PetscCall(PUGetDMDA(pu,&dap));
-  PetscCall(PUGetDimension(pu,&dim));
-  PetscCall(DMCreate(PetscObjectComm((PetscObject)dap), &swarm)); // COMM_WORLD
-  PetscCall(DMSetType(swarm, DMSWARM));
-  PetscCall(DMSetDimension(swarm, dim));
-  PetscCall(DMSwarmSetType(swarm, DMSWARM_PIC)); // This sets automatically the migrate type: DMSWARM_MIGRATE_DMCELLNSCATTER
-  PetscCall(DMSwarmSetCellDM(swarm, dap));
-  PetscSNPrintf(dm_name, PETSC_MAX_PATH_LEN-1, "swarm_interp");
-  PetscObjectSetName((PetscObject)swarm,dm_name);
-  PetscSNPrintf(dm_prefix, PETSC_MAX_PATH_LEN-1, "%s_",dm_name);
-  PetscCall(DMSetOptionsPrefix(swarm,dm_prefix));
-  PetscCall(DMSetFromOptions(swarm));
-  
-  PetscCall(DMSwarmInitializeFieldRegister(swarm));
-  PetscCall(DMSwarmRegisterPetscDatatypeField(swarm,"pidx",1,PETSC_INT));
-  PetscCall(DMSwarmRegisterPetscDatatypeField(swarm,"weights",pu->npart,PETSC_REAL));
-  PetscCall(DMSwarmRegisterPetscDatatypeField(swarm,"fields",ctx->n_ifields,PETSC_REAL)); // fields to interpolate
-  if (ctx->adv_ctx->scheme != RK1) {
-    PetscCall(DMSwarmRegisterPetscDatatypeField(swarm,"v_adv",pu->dim*ctx->adv_ctx->order,PETSC_REAL)); // velocity field interpolated
-    PetscCall(DMSwarmRegisterPetscDatatypeField(swarm,"coor_init",pu->dim,PETSC_REAL)); // coordinates before advection
-  }
-  // May need to add another set of fields that need to be advected but not interpolated
-  // PetscCall(DMSwarmRegisterPetscDatatypeField(swarm,"pfields",ctx->n_pfields,PETSC_REAL));
-  PetscCall(DMSwarmFinalizeFieldRegister(swarm));
-  PetscCall(DMSetUp(swarm));
-
+  PetscCall(SwarmInterpCreate(ctx, &swarm));
+  PetscCall(DMGetDimension(swarm,&dim));
   /* Add points */
   PetscCall(DMGetOptionsPrefix(swarm,&prefix));
   nn = 2;
@@ -488,9 +470,9 @@ static PetscErrorCode Test()
   PetscCall(PartitionSolveInterpolationCoefficients(pu,partitions,swarm_data,"fields"));
   PetscCall(RBFInterpolation(ctx,swarm_interp,swarm_data,"fields"));
 
-  PetscCall(SwarmOutput(ctx,swarm_interp,2,output_fields,PETSC_TRUE));
+  PetscCall(SwarmOutput(ctx,swarm_interp,2,output_fields,PETSC_FALSE));
   //PetscCall(DMSwarmPrint(ctx, swarm_interp));
-#if 1
+#if 0
   PetscCall(LagRBFGetAdvectionCtx(ctx,&adv_ctx));
   PetscCall(PetscOptionsGetInt(NULL,NULL,"-output_frequency",&output_frequency,NULL));
   nsteps = 10;
@@ -528,12 +510,121 @@ static PetscErrorCode Test()
   PetscFunctionReturn(PETSC_SUCCESS);
 }
 
+static PetscErrorCode Test_advection()
+{
+  LagRBFCtx        ctx;
+  PartitionOfUnity pu;
+  AdvectionCtx     adv_ctx;
+  Partition        *partitions;
+  DM               swarm_data,swarm_interp;
+  PetscInt         k,d,nsteps,step,global_npart,output_frequency=1;
+  PetscInt         M[3];
+  PetscReal        overlap,radius,epsilon,box_length,dt,time;
+  PetscBool        exists;
+  const char       *data_output[] = {"fields"};
+  const char       *output_fields[] = {"fields","pidx","velocity"};
+  PetscFunctionBeginUser;
+
+  PetscCall(LagRBFCtxCreate(&ctx));
+  PetscCall(LagRBFSetFromOptions(ctx));
+  PetscCall(TestDirectory(ctx->output_dir,'w',&exists));
+  if (!exists) { PetscCall(CreateDirectory(ctx->output_dir)); }
+  //p->output_dir
+  ctx->mtype = GEODYNAMICS; // Set the model type
+  PetscCall(LagRBF_PartitionOfUnityCreate(ctx));
+  PetscCall(LagRBF_PartitionCreate(ctx));
+
+  PetscCall(LagRBFGetPartitionOfUnity(ctx,&pu));
+  PetscCall(LagRBFGetPartitions(ctx,&partitions));
+
+  DMDAGetInfo(pu->dap,NULL,&M[0],&M[1],&M[2],NULL,NULL,NULL,NULL,NULL,NULL,NULL,NULL,NULL);
+  global_npart = 1;
+  for (d=0; d<pu->dim; d++) global_npart *= M[d];
+  /* Set epsilon parameter */
+  box_length = 0.0;
+  for (d=0; d<pu->dim; d++) {
+    box_length = PetscMax(box_length,(pu->L[d] - pu->O[d]));
+  }
+  overlap = 1.5*box_length;
+  radius  = overlap / PetscPowReal(global_npart,1.0/pu->dim);
+  epsilon = 1.0 / radius;
+  for (k=0; k<pu->npart; k++) { 
+    PetscCall(PartitionSetEpsilon(partitions[k],epsilon)); // set the epsilon for the RBF kernel
+  } 
+  PetscCall(PartitionsSetIndex(pu,partitions));
+  //PetscCall(PrintDMDAInfo(ctx));
+  //PetscCall(PrintPartitionMap(ctx));
+  PetscCall(CreateSwarmData(ctx, &swarm_data));
+  PetscCall(SwarmOutput(ctx, swarm_data, 1, data_output, PETSC_FALSE));
+
+  PetscCall(PartitionSetUp_All(partitions, pu->npart, swarm_data));
+
+  PetscCall(CreateSwarmInterp(ctx, &swarm_interp));
+  /* Interpolate */
+  PetscCall(PartitionSolveInterpolationCoefficients(pu,partitions,swarm_data,"fields"));
+  PetscCall(RBFInterpolation(ctx,swarm_interp,swarm_data,"fields"));
+  /* Copy the first dim fields into "velocity" */
+  {
+    PetscInt  npoints;
+    PetscReal *interp_fields,*velocity;
+    PetscCall(DMSwarmGetLocalSize(swarm_interp,&npoints));
+    PetscCall(DMSwarmGetField(swarm_interp, "fields", NULL, NULL, (void **)&interp_fields));
+    PetscCall(DMSwarmGetField(swarm_interp, "velocity", NULL, NULL, (void **)&velocity));
+    PetscCall(CopyContiguousBlockData_Real(velocity,interp_fields,npoints,pu->dim,ctx->n_ifields,0));
+    PetscCall(DMSwarmRestoreField(swarm_interp, "fields", NULL, NULL, (void **)&interp_fields));
+    PetscCall(DMSwarmRestoreField(swarm_interp, "velocity", NULL, NULL, (void **)&velocity));
+  }
+  PetscCall(SwarmOutput(ctx,swarm_interp,3,output_fields,PETSC_FALSE));
+  PetscCall(LagRBFGetAdvectionCtx(ctx,&adv_ctx));
+  PetscCall(PetscOptionsGetInt(NULL,NULL,"-output_frequency",&output_frequency,NULL));
+  nsteps = 10;
+  PetscCall(PetscOptionsGetInt(NULL,NULL,"-nsteps",&nsteps,NULL));
+  dt = 1.0e-2;
+  PetscCall(PetscOptionsGetReal(NULL,NULL,"-dt",&dt,NULL));
+  time = 0.0;
+  PetscCall(LagRBFSetTime(ctx,time));
+  PetscCall(LagRBFSetTimeStep(ctx,dt));
+  for (step=1; step<nsteps; step++) {
+    PetscCall(LagRBFSetStep(ctx,step));
+    PetscCall(PetscPrintf(PETSC_COMM_WORLD,"[[ STEP: %" PetscInt_FMT " ]], time: %g\n",step,time));
+    /* Interpolate */
+    PetscCall(PartitionSolveInterpolationCoefficients(pu,partitions,swarm_data,"fields"));
+    PetscCall(RBFInterpolation(ctx,swarm_interp,swarm_data,"fields"));
+    /* Copy the first dim fields into "velocity" */
+    {
+      PetscInt  npoints;
+      PetscReal *interp_fields,*velocity;
+      PetscCall(DMSwarmGetLocalSize(swarm_interp,&npoints));
+      PetscCall(DMSwarmGetField(swarm_interp, "fields", NULL, NULL, (void **)&interp_fields));
+      PetscCall(DMSwarmGetField(swarm_interp, "velocity", NULL, NULL, (void **)&velocity));
+      PetscCall(CopyContiguousBlockData_Real(velocity, interp_fields,npoints,pu->dim,ctx->n_ifields,0));
+      PetscCall(DMSwarmRestoreField(swarm_interp, "fields", NULL, NULL, (void **)&interp_fields));
+      PetscCall(DMSwarmRestoreField(swarm_interp, "velocity", NULL, NULL, (void **)&velocity));
+    }
+    /* Output */
+    if (step % output_frequency == 0) {
+      PetscCall(SwarmOutput(ctx,swarm_interp,3,output_fields,PETSC_FALSE));
+    }
+    /* Advect */
+    adv_ctx->advection(ctx,swarm_interp,swarm_data);
+    LagRBFGetTimeStep(ctx,&dt);  
+    time += dt;
+    PetscCall(LagRBFSetTime(ctx,time));
+  }
+  /* Free memory */
+  PetscCall(DMDestroy(&swarm_interp));
+  PetscCall(DMDestroy(&swarm_data));
+  PetscCall(LagRBFCtxDestroy(&ctx));
+  PetscFunctionReturn(PETSC_SUCCESS);
+}
+
 int main(int argc, char *argv[])
 {
   PetscFunctionBeginUser;
   PetscCall(LagRBFInitialize(&argc,&argv,0,help));
 
-  PetscCall(Test());
+  //PetscCall(Test());
+  PetscCall(Test_advection());
 
   PetscCall(PetscFinalize());
   

@@ -7,7 +7,7 @@ static const char help[] = "Test to add particles running time backward followed
 #include "partition_solve.h"
 #include "io_utils.h"
 #include "swarm/swarm_utils.h"
-#include "swarm_interp.h"
+#include "swarm/swarm_interp.h"
 #include "swarm_data.h"
 #include "interpolation.h"
 #include "advection/advection_ctx.h"

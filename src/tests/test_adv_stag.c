@@ -9,7 +9,7 @@ static const char help[] = "Test to interpolate and advect particles from StagYY
 #include "io_utils.h"
 #include "swarm/swarm_utils.h"
 #include "swarm_data.h"
-#include "swarm_interp.h"
+#include "swarm/swarm_interp.h"
 #include "interpolation.h"
 #include "partition_solve.h"
 #include "advection/advection_ctx.h"
