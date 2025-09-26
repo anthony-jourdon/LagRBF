@@ -7,7 +7,6 @@ liblagrangian-offline-y.c += $(call thisdir, \
 	kernels_rbf.c \
 	io_utils.c \
 	geodynamics_fields.c \
-	swarm_interp.c \
 	swarm_data.c \
 	interpolation.c \
 	interpolation_avx.c \
