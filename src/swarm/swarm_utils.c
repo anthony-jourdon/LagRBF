@@ -5,19 +5,22 @@
 #include "swarm/swarm_utils.h"
 #include "io_utils.h"
 
-PetscErrorCode CopyContiguousBlockData_Real(
-  PetscReal dest[],     // destination array
-  PetscReal source[],   // source array
-  PetscInt  npoints,    // number of points
-  PetscInt  nblocks,    // number of blocks to copy
-  PetscInt  bs,         // block size of the source array
-  PetscInt  start_block // starting block index in the source array
+PetscErrorCode CopyContiguousBlockData_Generic(
+  void      *dest,        // destination array
+  void      *source,      // source array
+  PetscInt  npoints,     // number of points
+  PetscInt  nblocks,     // number of blocks to copy
+  PetscInt  bs,          // block size of the source array
+  PetscInt  start_block, // starting block index in the source array
+  size_t    typesize     // size of the data type (e.g., sizeof(PetscReal) or sizeof(PetscInt))
 )
 {
   PetscInt np;
+  unsigned char *d = (unsigned char *)dest;
+  unsigned char *s = (unsigned char *)source;
   PetscFunctionBeginUser;
   for (np=0; np<npoints; np++) {
-    PetscArraycpy(&dest[nblocks*np],&source[bs*np + start_block],nblocks);
+    memcpy(&d[nblocks*np*typesize], &s[(bs*np + start_block)*typesize], nblocks*typesize);
   }
   PetscFunctionReturn(PETSC_SUCCESS);
 }

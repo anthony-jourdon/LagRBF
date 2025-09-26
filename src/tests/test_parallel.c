@@ -570,7 +570,8 @@ static PetscErrorCode Test_advection()
     PetscCall(DMSwarmGetLocalSize(swarm_interp,&npoints));
     PetscCall(DMSwarmGetField(swarm_interp, "fields", NULL, NULL, (void **)&interp_fields));
     PetscCall(DMSwarmGetField(swarm_interp, "velocity", NULL, NULL, (void **)&velocity));
-    PetscCall(CopyContiguousBlockData_Real(velocity,interp_fields,npoints,pu->dim,ctx->n_ifields,0));
+    //PetscCall(CopyContiguousBlockData_Real(velocity,interp_fields,npoints,pu->dim,ctx->n_ifields,0));
+    PetscCall(CopyContiguousBlockData(velocity, interp_fields, npoints, pu->dim, ctx->n_ifields, 0));
     PetscCall(DMSwarmRestoreField(swarm_interp, "fields", NULL, NULL, (void **)&interp_fields));
     PetscCall(DMSwarmRestoreField(swarm_interp, "velocity", NULL, NULL, (void **)&velocity));
   }
@@ -597,7 +598,8 @@ static PetscErrorCode Test_advection()
       PetscCall(DMSwarmGetLocalSize(swarm_interp,&npoints));
       PetscCall(DMSwarmGetField(swarm_interp, "fields", NULL, NULL, (void **)&interp_fields));
       PetscCall(DMSwarmGetField(swarm_interp, "velocity", NULL, NULL, (void **)&velocity));
-      PetscCall(CopyContiguousBlockData_Real(velocity, interp_fields,npoints,pu->dim,ctx->n_ifields,0));
+      //PetscCall(CopyContiguousBlockData_Real(velocity, interp_fields,npoints,pu->dim,ctx->n_ifields,0));
+      PetscCall(CopyContiguousBlockData(velocity, interp_fields, npoints, pu->dim, ctx->n_ifields, 0));
       PetscCall(DMSwarmRestoreField(swarm_interp, "fields", NULL, NULL, (void **)&interp_fields));
       PetscCall(DMSwarmRestoreField(swarm_interp, "velocity", NULL, NULL, (void **)&velocity));
     }
