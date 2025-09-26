@@ -22,6 +22,7 @@ struct _p_LagRBFCtx {
   PetscInt         step; // Current step in the model
   PetscReal        time; // Current time in the model
   PetscBool        restart; // Flag to indicate if the interpolation points coordinates should be loaded from a file
+  PetscBool        advection; // Flag to indicate if advection is activated
   char             output_dir[PETSC_MAX_PATH_LEN]; // Directory to write output files
 };
 

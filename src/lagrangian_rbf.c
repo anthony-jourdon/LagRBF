@@ -16,6 +16,7 @@ PetscErrorCode LagRBFCtxCreate(LagRBFCtx *ctx)
   p->step       = 0;
   p->time       = 0.0;
   p->restart    = PETSC_FALSE;
+  p->advection  = PETSC_FALSE;
   PetscCall(PetscSNPrintf(p->output_dir, PETSC_MAX_PATH_LEN-1, "output"));
 
   *ctx = p;
@@ -66,11 +67,15 @@ PetscErrorCode LagRBFSetFromOptions(LagRBFCtx ctx)
   PetscSNPrintf(option_name, PETSC_MAX_PATH_LEN-1, "-n_interpolation_fields");
   PetscCall(PetscOptionsGetInt(NULL, NULL, option_name, &ctx->n_ifields, NULL));
   PetscCall(PetscOptionsGetString(NULL,NULL,"-output_path",ctx->output_dir,PETSC_MAX_PATH_LEN-1,NULL));
+  /* Check if advection is required, if not return */
+  PetscCall(PetscOptionsGetBool(NULL,NULL,"-advection",&ctx->advection,NULL));
+  if (!ctx->advection) { PetscFunctionReturn(PETSC_SUCCESS); }
+  /* Advection specific options */
   PetscSNPrintf(option_name, PETSC_MAX_PATH_LEN-1,"-advection_scheme");
-  scheme = 2; // Default to RK4
+  scheme = 3; // Default to DOPRI
   PetscCall(PetscOptionsGetInt(NULL, NULL, option_name,&scheme, NULL));
   PetscSNPrintf(option_name, PETSC_MAX_PATH_LEN-1,"-velocity_name");
-  PetscSNPrintf(velocity_name, PETSC_MAX_PATH_LEN-1, "fields");
+  PetscSNPrintf(velocity_name, PETSC_MAX_PATH_LEN-1, "velocity");
   PetscCall(PetscOptionsGetString(NULL,NULL,option_name,velocity_name,PETSC_MAX_PATH_LEN-1,NULL));
   PetscCall(LagRBF_AdvectionCtxCreate(ctx,(AdvectionScheme)scheme,velocity_name));
   PetscFunctionReturn(PETSC_SUCCESS);
