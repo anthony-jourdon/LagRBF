@@ -3,7 +3,7 @@
 #include "advection/advection.h"
 #include "advection/runge_kutta_1.h"
 #include "lagrangian_rbf.h"
-#include "swarm_interp.h"
+#include "swarm/swarm_interp.h"
 
 PetscLogEvent LAGRBF_AdvectionExplicit_RK1;
 
@@ -13,7 +13,7 @@ PetscErrorCode AdvectionExplicit_RK1(LagRBFCtx ctx, DM swi, DM swd)
   AdvectionCtx  adv;
   PetscInt      dim,npoints;
   PetscReal     dt;
-  PetscReal     *coords,*velocity;
+  PetscReal     *x0,*coords,*velocity;
   const char    *velocity_name,**coorFieldName;
   PetscFunctionBeginUser;
   PetscCall(PetscLogEventBegin(LAGRBF_AdvectionExplicit_RK1,0,0,0,0));
@@ -30,8 +30,12 @@ PetscErrorCode AdvectionExplicit_RK1(LagRBFCtx ctx, DM swi, DM swd)
   /* Access fields */
   PetscCall(DMSwarmGetField(swi, coorFieldName[0],NULL, NULL,(void **)&coords));
   PetscCall(DMSwarmGetField(swi, velocity_name,   NULL, NULL,(void **)&velocity));
+  /* Store initial values */
+  PetscCall(PetscMalloc1(npoints*dim,&x0));
+  PetscCall(PetscArraycpy(x0,coords,npoints*dim));
   /* Advect */
-  PetscCall(AdvectionExplicit(coords,coords,velocity,dt,npoints,dim));
+  PetscCall(AdvectionExplicit(coords,x0,velocity,dt,npoints,dim));
+  PetscCall(PetscFree(x0));
   /* Restore fields */
   PetscCall(DMSwarmRestoreField(swi, coorFieldName[0], NULL, NULL, (void **)&coords));
   PetscCall(DMSwarmRestoreField(swi, velocity_name,    NULL, NULL, (void **)&velocity));

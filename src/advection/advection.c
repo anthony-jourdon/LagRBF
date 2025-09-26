@@ -1,5 +1,6 @@
 #include <petsc.h>
 #include "advection/advection_ctx.h"
+#include "swarm/swarm_utils.h"
 
 PetscErrorCode AdvectionExplicit_Scalar(
   PetscReal *coords, 
@@ -10,17 +11,21 @@ PetscErrorCode AdvectionExplicit_Scalar(
   PetscInt dim
 )
 {
-  PetscInt np,d;
+  PetscInt       np,d;
   PetscLogDouble time[2];
+  long int       npoints_local,npoints_global;
   PetscFunctionBeginUser;
   PetscCall(PetscTime(&time[0]));
+  if (coords == x0) { SETERRQ(PETSC_COMM_WORLD, PETSC_ERR_ARG_WRONG, "coords and x0 point to same memory"); }
   for (np=0; np<npoints; np++) {
     for (d=0; d<dim; d++) {
-      coords[dim*np + d] = x0[dim*np + d] + dt * velocity[d*npoints + np];
+      coords[dim*np + d] = x0[dim*np + d] + dt * velocity[dim*np + d];
     }
   }
   PetscCall(PetscTime(&time[1]));
-  PetscPrintf(PETSC_COMM_WORLD,"[[ %s ]]: Advected %" PetscInt_FMT " points in %g seconds\n",PETSC_FUNCTION_NAME,npoints,time[1]-time[0]);
+  npoints_local = (long int)npoints;
+  PetscCallMPI(MPI_Allreduce(&npoints_local,&npoints_global,1,MPI_LONG,MPI_SUM,PETSC_COMM_WORLD));
+  PetscPrintf(PETSC_COMM_WORLD,"[[ %s ]]: Advected %ld points in %g seconds\n",PETSC_FUNCTION_NAME,npoints_global,time[1]-time[0]);
   PetscFunctionReturn(PETSC_SUCCESS);
 }
 
@@ -192,7 +197,7 @@ PetscErrorCode AdvectionExplicit(
 )
 {
   PetscFunctionBeginUser;
-#if defined(__AVX__)
+#if 0 //defined(__AVX__)
   PetscCall(AdvectionExplicit_AVX256(coords, x0, velocity, dt, npoints, dim));
 #else
   PetscCall(AdvectionExplicit_Scalar(coords, x0, velocity, dt, npoints, dim));
@@ -204,7 +209,7 @@ PetscErrorCode AdvectionSetInitialValues(AdvectionCtx ctx, DM swi)
 {
   DMSwarmCellDM  celldm;
   PetscInt       dim,npoints;
-  PetscReal      *coords,*velocity,*x0,*v_i;
+  PetscReal      *coords,*velocity,*x0,*v0;
   const char     *velocity_name,**coorFieldName;
   PetscFunctionBeginUser;
   /* 1st order advection does not require to store initial values */
@@ -219,15 +224,15 @@ PetscErrorCode AdvectionSetInitialValues(AdvectionCtx ctx, DM swi)
   PetscCall(DMSwarmGetField(swi, coorFieldName[0], NULL, NULL, (void **)&coords));
   PetscCall(DMSwarmGetField(swi, velocity_name,    NULL, NULL, (void **)&velocity));
   PetscCall(DMSwarmGetField(swi, "coor_init",      NULL, NULL, (void **)&x0));
-  PetscCall(DMSwarmGetField(swi, "v_adv",          NULL, NULL, (void **)&v_i));
+  PetscCall(DMSwarmGetField(swi, "v_adv_0",        NULL, NULL, (void **)&v0));
   /* Store the initial coords */
   PetscCall(PetscArraycpy(x0,coords,npoints*dim));
-  /* Store the velocity at initial coords: v_0 = v(x0) */
-  PetscCall(PetscArraycpy(v_i,velocity,npoints*dim));
+  /* Store the velocity at initial coords: v0 = v(x0) */
+  PetscCall(PetscArraycpy(v0,velocity,npoints*dim));
   /* Restore fields */
   PetscCall(DMSwarmRestoreField(swi, coorFieldName[0], NULL, NULL, (void **)&coords));
   PetscCall(DMSwarmRestoreField(swi, velocity_name,    NULL, NULL, (void **)&velocity));
   PetscCall(DMSwarmRestoreField(swi, "coor_init",      NULL, NULL, (void **)&x0));
-  PetscCall(DMSwarmRestoreField(swi, "v_adv",          NULL, NULL, (void **)&v_i));
+  PetscCall(DMSwarmRestoreField(swi, "v_adv_0",        NULL, NULL, (void **)&v0));
   PetscFunctionReturn(PETSC_SUCCESS);
 }
