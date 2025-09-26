@@ -17,12 +17,7 @@ PetscErrorCode CopyContiguousBlockData_Real(
   PetscInt np;
   PetscFunctionBeginUser;
   for (np=0; np<npoints; np++) {
-    PetscInt b;
-    for (b=0; b<nblocks; b++) {
-      /* copy point */
-      dest[nblocks*np + b] = source[(start_block + bs)*np + (start_block + b)];
-    }
-    //PetscArraycpy(&dest[nblocks*np],&source[np*start_block],nblocks);
+    PetscArraycpy(&dest[nblocks*np],&source[bs*np + start_block],nblocks);
   }
   PetscFunctionReturn(PETSC_SUCCESS);
 }
