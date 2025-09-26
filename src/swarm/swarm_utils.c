@@ -5,35 +5,46 @@
 #include "swarm/swarm_utils.h"
 #include "io_utils.h"
 
-PetscErrorCode SwarmCopyBlockData_Real(
-  DM         swarm,
-  PetscInt   nblocks, 
-  PetscInt   blocks_to_copy[],
-  const char *field_name,
-  PetscReal  **copied_blocks
+PetscErrorCode CopyContiguousBlockData_Real(
+  PetscReal dest[],     // destination array
+  PetscReal source[],   // source array
+  PetscInt  npoints,    // number of points
+  PetscInt  nblocks,    // number of blocks to copy
+  PetscInt  bs,         // block size of the source array
+  PetscInt  start_block // starting block index in the source array
 )
 {
-  PetscDataType dtype;
-  PetscInt      bs,npoints,np,b;
-  PetscReal     *data,*copied;
+  PetscInt np;
   PetscFunctionBeginUser;
-  
-  PetscCall(DMSwarmGetLocalSize(swarm,&npoints));
-  PetscCall(DMSwarmGetField(swarm,field_name,&bs,&dtype,(void **)&data));
-  PetscCheck(dtype == PETSC_REAL,PetscObjectComm((PetscObject)swarm),PETSC_ERR_ARG_WRONG,"Field %s is not of type PETSC_REAL",field_name);
-  PetscCheck(nblocks <= bs,PetscObjectComm((PetscObject)swarm),PETSC_ERR_ARG_OUTOFRANGE,"Cannot copy %" PetscInt_FMT " blocks from field %s with block size %" PetscInt_FMT, nblocks, field_name, bs);
+  for (np=0; np<npoints; np++) {
+    PetscInt b;
+    for (b=0; b<nblocks; b++) {
+      /* copy point */
+      dest[nblocks*np + b] = source[(start_block + bs)*np + (start_block + b)];
+    }
+    //PetscArraycpy(&dest[nblocks*np],&source[np*start_block],nblocks);
+  }
+  PetscFunctionReturn(PETSC_SUCCESS);
+}
 
-  PetscMalloc1(npoints*nblocks,&copied);
+PetscErrorCode CopyArbitraryBlockData_Real(
+  PetscReal dest[],          // destination array
+  PetscReal source[],        // source array
+  PetscInt  npoints,         // number of points
+  PetscInt  nblocks,         // number of blocks to copy
+  PetscInt  bs,              // block size of the source array
+  PetscInt  blocks_to_copy[] // array of block indices to copy from the source array
+)
+{
+  PetscInt np,b;
+  PetscFunctionBeginUser;
   for (np=0; np<npoints; np++) {
     for (b=0; b<nblocks; b++) {
       PetscInt block_id = blocks_to_copy[b];
       /* copy point */
-      copied[nblocks*np + b] = data[bs*np + block_id];
+      dest[nblocks*np + b] = source[bs*np + block_id];
     }
   }
-  /* User is left responsible for freeing the memory */
-  *copied_blocks = copied;
-  PetscCall(DMSwarmRestoreField(swarm,field_name,&bs,&dtype,(void **)&data));
   PetscFunctionReturn(PETSC_SUCCESS);
 }
 
