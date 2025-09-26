@@ -45,7 +45,7 @@ PetscErrorCode PointwiseInterpolation_Scalar(
     PetscInt f;
     PetscInt cidx = cellid_i[np]; // cell index for the particle p
     /* Initialize the interpolation value for the point p */
-    for (f=0; f<nfields; f++) { values_i[f*npoints_i + np] = 0.0; }
+    for (f=0; f<nfields; f++) { values_i[nfields*np + f] = 0.0; }
     /* Iterate over the partitions to which that point is connected */
     for (k=0; k<nen; k++) {
       Partition p;
@@ -56,8 +56,8 @@ PetscErrorCode PointwiseInterpolation_Scalar(
 
       /* Get the partition index */
       local_cidx = gtol_elidx[cidx];
-      puidx = elidx[nen*local_cidx + k];
-      p     = partitions[puidx];
+      puidx      = elidx[nen*local_cidx + k];
+      p          = partitions[puidx];
       PetscCall(PartitionGetDataPointsIdx(p,&ndata,&data_idx));
       if (ndata == 0) continue; // no data points in this partition, skip
       /* Get the coefficients of that partition */
@@ -81,7 +81,7 @@ PetscErrorCode PointwiseInterpolation_Scalar(
       }
       for (f=0; f<nfields; f++) {
         /* Normalize the interpolant with the weights */
-        values_i[f*npoints_i + np] += interpolant[f] * weights[np*npart + puidx];
+        values_i[nfields*np + f] += interpolant[f] * weights[npart*np + puidx];
       }
       /* Restore the coefficients array */
       PetscCall(MatDenseRestoreArray(X,&coeffs));
