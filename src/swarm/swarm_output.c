@@ -102,7 +102,7 @@ TODO: A special case for fields that are not of type PETSC_REAL is required.
 PetscErrorCode SwarmOutputFieldPetscVec_FromName(DM sw, const char *field_name, const char *directory, const char *prefix, PetscBool permute)
 {
   PetscViewer viewer;
-  Vec         new_vec;
+  Vec         new_vec=NULL;
   char        fname[PETSC_MAX_PATH_LEN],outputname[PETSC_MAX_PATH_LEN];
   const char *dm_name;
   PetscFunctionBeginUser;

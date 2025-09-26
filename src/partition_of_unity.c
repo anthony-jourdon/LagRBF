@@ -114,7 +114,8 @@ PetscErrorCode PUCreateDMDALocal(PartitionOfUnity pu)
 {
   VecScatter scatter;
   IS         is;
-  DM         dap,das,cdap,cdas;
+  DM         dap=NULL;
+  DM         das,cdap,cdas;
   Vec        dap_coor,dap_nat_coor;
   Vec        das_coor;
   PetscInt   *natural_gidx;
