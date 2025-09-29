@@ -9,6 +9,7 @@ extern PetscLogEvent LAGRBF_PartitionMatSetRHS;
 extern PetscLogEvent LAGRBF_PartitionSolveLocalCoefficients;
 extern PetscLogEvent LAGRBF_PartitionSolveInterpolationCoefficients;
 extern PetscLogEvent LAGRBF_AdvectionExplicit_RK1;
+//extern PetscLogEvent LAGRBF_AdvectionExplicit_RK2;
 extern PetscLogEvent LAGRBF_AdvectionExplicit_RK4;
 extern PetscLogEvent LAGRBF_AdvectionExplicit_DOPRI;
 
@@ -49,6 +50,7 @@ PetscErrorCode LagRBFInitialize(int *argc,char ***args,const char file[],const c
   PetscCall(PetscLogEventRegister("PartitionSolveInterpolationCoefficients",LAGRBF_CLASSID,&LAGRBF_PartitionSolveInterpolationCoefficients));
   /* Advection */
   PetscCall(PetscLogEventRegister("AdvectionExplicit_RK1",LAGRBF_CLASSID,&LAGRBF_AdvectionExplicit_RK1));
+  //PetscCall(PetscLogEventRegister("AdvectionExplicit_RK2",LAGRBF_CLASSID,&LAGRBF_AdvectionExplicit_RK2));
   PetscCall(PetscLogEventRegister("AdvectionExplicit_RK4",LAGRBF_CLASSID,&LAGRBF_AdvectionExplicit_RK4));
   PetscCall(PetscLogEventRegister("AdvectionExplicit_DOPRI",LAGRBF_CLASSID,&LAGRBF_AdvectionExplicit_DOPRI));
 
