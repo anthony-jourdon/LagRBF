@@ -19,8 +19,29 @@ PetscErrorCode CopyContiguousBlockData_Generic(
   unsigned char *d = (unsigned char *)dest;
   unsigned char *s = (unsigned char *)source;
   PetscFunctionBeginUser;
+  PetscCheck(nblocks > 0 && nblocks <= bs && start_block >= 0 && start_block + nblocks <= bs,
+           PETSC_COMM_SELF, PETSC_ERR_ARG_OUTOFRANGE,
+           "Invalid parameters: nblocks=%"PetscInt_FMT", bs=%"PetscInt_FMT", start_block=%"PetscInt_FMT"", nblocks, bs, start_block);
   for (np=0; np<npoints; np++) {
     memcpy(&d[nblocks*np*typesize], &s[(bs*np + start_block)*typesize], nblocks*typesize);
+  }
+  PetscFunctionReturn(PETSC_SUCCESS);
+}
+
+PetscErrorCode CopyContiguousBlockData_Real(
+  PetscReal *dest,        // destination array
+  PetscReal *source,      // source array
+  PetscInt  npoints,     // number of points
+  PetscInt  nblocks,     // number of blocks to copy
+  PetscInt  bs,          // block size of the source array
+  PetscInt  start_block  // starting block index in the source array
+)
+{
+  PetscInt np;
+  PetscFunctionBeginUser;
+  PetscPrintf(PETSC_COMM_WORLD,"[[ %s ]]\n",PETSC_FUNCTION_NAME);
+  for (np=0; np<npoints; np++) {
+    PetscArraycpy(&dest[nblocks*np], &source[(bs*np + start_block)], nblocks);
   }
   PetscFunctionReturn(PETSC_SUCCESS);
 }
