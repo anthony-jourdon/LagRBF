@@ -608,7 +608,8 @@ static PetscErrorCode Test_advection()
       PetscCall(SwarmOutput(ctx,swarm_interp,3,output_fields,PETSC_FALSE));
     }
     /* Advect */
-    adv_ctx->advection(ctx,swarm_interp,swarm_data);
+    //adv_ctx->advection(ctx,swarm_interp,swarm_data);
+    PetscCall(LagRBF_AdvectSwarm(ctx,swarm_interp,swarm_data));
     LagRBFGetTimeStep(ctx,&dt);  
     time += dt;
     PetscCall(LagRBFSetTime(ctx,time));
