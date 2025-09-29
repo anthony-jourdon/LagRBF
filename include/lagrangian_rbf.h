@@ -33,6 +33,7 @@ PetscErrorCode LagRBFCtxDestroy(LagRBFCtx *ctx);
 PetscErrorCode LagRBF_PartitionOfUnityCreate(LagRBFCtx ctx);
 PetscErrorCode LagRBF_PartitionCreate(LagRBFCtx ctx);
 PetscErrorCode LagRBFSetFromOptions(LagRBFCtx ctx);
+PetscErrorCode LagRBF_AdvectSwarm(LagRBFCtx ctx, DM swi, DM swd);
 /* Setters */
 PetscErrorCode LagRBFSetStep(LagRBFCtx ctx, PetscInt step);
 PetscErrorCode LagRBFSetTimeStep(LagRBFCtx ctx, PetscReal dt);

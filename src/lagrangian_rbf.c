@@ -81,6 +81,16 @@ PetscErrorCode LagRBFSetFromOptions(LagRBFCtx ctx)
   PetscFunctionReturn(PETSC_SUCCESS);
 }
 
+PetscErrorCode LagRBF_AdvectSwarm(LagRBFCtx ctx, DM swi, DM swd)
+{
+  AdvectionCtx adv_ctx=NULL;
+  PetscFunctionBeginUser;
+  PetscCall(LagRBFGetAdvectionCtx(ctx,&adv_ctx));
+  /* Advect */
+  adv_ctx->advection(ctx,swi,swd);
+  PetscFunctionReturn(PETSC_SUCCESS);
+}
+
 PetscErrorCode LagRBFSetStep(LagRBFCtx ctx, PetscInt step)
 {
   PetscFunctionBeginUser;
