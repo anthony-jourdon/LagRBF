@@ -14,11 +14,12 @@ PetscErrorCode AdvectionEvaluateError_DOPRI(AdvectionCtx ctx, DM swi)
   PetscInt      np,i,d,npoints,dim;
   PetscReal     dt,max_err,a_tol,r_tol;
   PetscReal     *coords,*x0;
-  PetscReal     *v_i[7] = {NULL,NULL,NULL,NULL,NULL,NULL,NULL}; // array to store velocities at each stage
+  PetscReal     *v_i[] = {NULL,NULL,NULL,NULL,NULL,NULL,NULL}; // array to store velocities at each stage
   char          v_adv_name[PETSC_MAX_PATH_LEN];
   const char    **coorFieldName;
   PetscReal     DP_weights[7] = {5179.0/57600.0, 0, 7571.0/16695.0, 393.0/640.0, -92097.0/339200.0, 187.0/2100.0, 1.0/40.0};
   PetscFunctionBeginUser;
+  PetscPrintf(PETSC_COMM_WORLD,"[[ %s ]]\n",PETSC_FUNCTION_NAME);
 
   PetscCall(DMSwarmGetLocalSize(swi,&npoints));
   PetscCall(DMSwarmGetCellDMActive(swi, &celldm));
@@ -193,7 +194,6 @@ PetscErrorCode AdvectionExplicit_DOPRI(LagRBFCtx ctx, DM swi, DM swd)
   PetscCall(AdvectionGetVelocityName(adv_ctx,&velocity_name));
   PetscCall(AdvectionGetTimeStep(adv_ctx,&dt));
   PetscCall(DMGetDimension(swi,&dim));
-  PetscCall(DMSwarmGetLocalSize(swi,&npoints));
   PetscCall(DMSwarmGetCellDMActive(swi,&celldm));
   PetscCall(DMSwarmCellDMGetCoordinateFields(celldm,NULL,&coorFieldName));
 
@@ -206,6 +206,7 @@ PetscErrorCode AdvectionExplicit_DOPRI(LagRBFCtx ctx, DM swi, DM swd)
     char      v_adv_name[PETSC_MAX_PATH_LEN];
 
     stage = s + 1; // stage 0 is already set by AdvectionSetInitialValues
+    PetscCall(DMSwarmGetLocalSize(swi,&npoints));
     /* Access coordinates and velocity */
     PetscCall(DMSwarmGetField(swi, coorFieldName[0], NULL, NULL, (void **)&coords));
     PetscCall(DMSwarmGetField(swi, velocity_name,    NULL, NULL, (void **)&velocity));
@@ -243,6 +244,7 @@ PetscErrorCode AdvectionExplicit_DOPRI(LagRBFCtx ctx, DM swi, DM swd)
     /* Interpolate */
     PetscCall(RBFInterpolation(ctx,swi,swd,velocity_name));
     /* Store velocity for the current step */
+    PetscCall(DMSwarmGetLocalSize(swi,&npoints));
     PetscCall(PetscSNPrintf(v_adv_name,PETSC_MAX_PATH_LEN-1,"v_adv_%d",stage));
     PetscCall(DMSwarmGetField(swi, v_adv_name, NULL, NULL, (void **)&v_stage));
     PetscCall(DMSwarmGetField(swi, velocity_name, NULL, NULL, (void **)&velocity));
@@ -251,6 +253,7 @@ PetscErrorCode AdvectionExplicit_DOPRI(LagRBFCtx ctx, DM swi, DM swd)
     PetscCall(DMSwarmRestoreField(swi, v_adv_name, NULL, NULL, (void **)&v_stage));
   }
   /* Advect with high order velocity */
+  PetscCall(DMSwarmGetLocalSize(swi,&npoints));
   PetscCall(DMSwarmGetField(swi, coorFieldName[0], NULL, NULL, (void **)&coords));
   PetscCall(DMSwarmGetField(swi, "coor_init",      NULL, NULL, (void **)&x0));
   PetscCall(DMSwarmGetField(swi, "v_adv_6",        NULL, NULL, (void **)&v_high));

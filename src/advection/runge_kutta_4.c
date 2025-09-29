@@ -51,6 +51,7 @@ static PetscErrorCode AdvectionExplicit_SingleStage(LagRBFCtx ctx, DM swi, DM sw
   /* Interpolate v_s = v(x_s) with s = stage */
   PetscCall(RBFInterpolation(ctx,swi,swd,velocity_name));
   /* Update the velocity for the next step */
+  PetscCall(DMSwarmGetLocalSize(swi,&npoints));
   PetscCall(PetscSNPrintf(v_adv_name,PETSC_MAX_PATH_LEN-1,"v_adv_%d",stage));
   PetscCall(DMSwarmGetField(swi, velocity_name, NULL, NULL, (void **)&velocity));
   PetscCall(DMSwarmGetField(swi, v_adv_name,    NULL, NULL, (void **)&v_i));
