@@ -29,6 +29,7 @@ PetscErrorCode PointwiseInterpolation_Scalar(
   PetscReal      *interpolant;
   PetscLogDouble time[2];
   long int       npoints_local,npoints_global;
+  double         time_max;
   PetscFunctionBeginUser;
   /* Logging */
   PetscCall(PetscTime(&time[0]));
@@ -45,7 +46,7 @@ PetscErrorCode PointwiseInterpolation_Scalar(
     PetscInt f;
     PetscInt cidx = cellid_i[np]; // cell index for the particle p
     /* Initialize the interpolation value for the point p */
-    for (f=0; f<nfields; f++) { values_i[nfields*np + f] = 0.0; }
+    PetscCall(PetscArrayzero(&values_i[nfields*np],nfields));
     /* Iterate over the partitions to which that point is connected */
     for (k=0; k<nen; k++) {
       Partition p;
@@ -63,7 +64,7 @@ PetscErrorCode PointwiseInterpolation_Scalar(
       /* Get the coefficients of that partition */
       PetscCall(PartitionGetCoefficientsMat(p,&X));
       PetscCall(MatDenseGetArray(X,&coeffs));
-      for (f=0; f<nfields; f++) { interpolant[f] = 0.0;}
+      PetscCall(PetscArrayzero(interpolant,nfields));
       for (nd=0; nd<ndata; nd++) {
         PetscInt  d;
         PetscReal dist,rbf;
@@ -95,7 +96,10 @@ PetscErrorCode PointwiseInterpolation_Scalar(
   /* Need to perform a reduction to gather the total number of points */
   npoints_local = (long int)npoints_i;
   PetscCallMPI(MPI_Allreduce(&npoints_local,&npoints_global,1,MPI_LONG,MPI_SUM,PETSC_COMM_WORLD));
-  PetscCall(PetscPrintf(PETSC_COMM_WORLD,"[[ %s ]] interpolated %ld points in %g seconds\n",PETSC_FUNCTION_NAME,npoints_global,time[1]-time[0]));
+  time_max = (double)time[1]-(double)time[0];
+  PetscCallMPI(MPI_Allreduce(&time_max,&time_max,1,MPI_DOUBLE,MPI_MAX,PETSC_COMM_WORLD));
+  /* Perform reduction on time to get the max */
+  PetscCall(PetscPrintf(PETSC_COMM_WORLD,"[[ %s ]] interpolated %ld points in %1.4e seconds\n",PETSC_FUNCTION_NAME,npoints_global,time_max));
 
   PetscFunctionReturn(PETSC_SUCCESS);
 }
@@ -134,7 +138,7 @@ PetscErrorCode RBFInterpolation(LagRBFCtx ctx, DM swi, DM swd, const char *field
   PetscCall(DMSwarmGetField(swd, coordFieldName_d[0], NULL, NULL, (void **)&coords_d));
 
   /* Perform the interpolation */
-#if 0 //defined(__AVX__)
+#if defined(__AVX__)
   PetscCall(PointwiseInterpolation_AVX256(pu,partitions,nfields,npoints_i,cellid_i,coords_i,coords_d,weights,values_i));
 #else
   PetscCall(PointwiseInterpolation_Scalar(pu,partitions,nfields,npoints_i,cellid_i,coords_i,coords_d,weights,values_i));
