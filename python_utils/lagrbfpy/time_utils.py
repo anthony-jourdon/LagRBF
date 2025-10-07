@@ -6,13 +6,15 @@ def process_timeseries(pvdfname:str) -> dict:
     "time": [],
     "step_dir": [],
     "step": [],
-    "fname": []
+    "fname": [],
+    "line": []
   }
   with open(pvdfname,'r') as fp:
     # skip the 3 first lines
     fp.readline()
     fp.readline()
     fp.readline()
+    l = 3
     for line in fp:
       res = line.rsplit(sep='"')[1::2]
       if not res: continue
@@ -20,6 +22,7 @@ def process_timeseries(pvdfname:str) -> dict:
       file_str = res[1]
       timeseries["time"].append(time_str)
       timeseries["fname"].append(file_str)
+      timeseries["line"].append(l)
       matchObj = re.match(r'(?:^(step\d+)/)?.*(\d{6})(.*)',file_str)
       if matchObj:
         if matchObj.group(1):
@@ -27,6 +30,7 @@ def process_timeseries(pvdfname:str) -> dict:
         else:
           timeseries["step_dir"].append('')
         timeseries["step"].append(matchObj.group(2))
+      l += 1
   return timeseries
 
 def write_timeseries(fname:str,timeseries:dict,prefix:str,extension:str):
@@ -45,15 +49,25 @@ def write_timeseries(fname:str,timeseries:dict,prefix:str,extension:str):
 def test():
   import os
   root = os.path.dirname(__file__)
-  pvdfname = os.path.join(root, '../output/timeseries_X.pvd')
-  if not os.path.exists(pvdfname):
-    print(f"File {pvdfname} does not exist.")
+  pvdfname_X = os.path.join(root, '../../output_mpi/timeseries_X.pvd')
+  pvdfname_S = os.path.join(root, '../../output_mpi/timeseries-swarm_interp.pvd')
+  if not os.path.exists(pvdfname_X):
+    print(f"File {pvdfname_X} does not exist.")
     return
 
-  timeseries = process_timeseries(pvdfname)
-  print(timeseries)
+  timeseries_X = process_timeseries(pvdfname_X)
+  timeseries_S = process_timeseries(pvdfname_S)
+  print(timeseries_X['line'])
+  print()
+  print(timeseries_S['line'])
+
+  entries = timeseries_X.keys()
+  for i in range(len(timeseries_S['line']), len(timeseries_X['line'])):
+    for entry in entries:
+      print(f"{entry}: {timeseries_X[entry][i]}")
+
   # Write a new timeseries
-  write_timeseries(os.path.join(root,'../output/timeseries_test.pvd'),timeseries,'test','vtp')
+  #write_timeseries(os.path.join(root,'../output/timeseries_test.pvd'),timeseries,'test','vtp')
   return
 
 if __name__ == '__main__':
