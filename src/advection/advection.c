@@ -31,7 +31,6 @@ PetscErrorCode AdvectionExplicit_Scalar(
 
 #if defined(__AVX__)
 #include <immintrin.h>
-
 PetscErrorCode AdvectionExplicit_AVX256_2D(
   PetscReal *coords, 
   PetscReal *x0, 
@@ -49,17 +48,12 @@ PetscErrorCode AdvectionExplicit_AVX256_2D(
   for (np=0; np<np_aligned; np+=4) {
     __m256d x0_x,x0_y,vx,vy,x,y,xy_lo,xy_hi,xy0,xy1;
     /* Load initial coordinates */    
-    x0_x = _mm256_set_pd(x0[2*(np+3)],x0[2*(np+2)],x0[2*(np+1)],x0[2*np]);
+    x0_x = _mm256_set_pd(x0[2*(np+3)  ],x0[2*(np+2)  ],x0[2*(np+1)  ],x0[2*np  ]);
     x0_y = _mm256_set_pd(x0[2*(np+3)+1],x0[2*(np+2)+1],x0[2*(np+1)+1],x0[2*np+1]);
 
     /* Load velocities */
-#if (PETSC_MEMALIGN == 32)
-    vx = _mm256_load_pd(&velocity[0*npoints + np]);
-    vy = _mm256_load_pd(&velocity[1*npoints + np]);
-#else
-    vx = _mm256_loadu_pd(&velocity[0*npoints + np]);
-    vy = _mm256_loadu_pd(&velocity[1*npoints + np]);
-#endif
+    vx = _mm256_set_pd(velocity[2*(np+3)  ], velocity[2*(np+2)  ], velocity[2*(np+1)  ], velocity[2*np  ]);
+    vy = _mm256_set_pd(velocity[2*(np+3)+1], velocity[2*(np+2)+1], velocity[2*(np+1)+1], velocity[2*np+1]);
     /* Compute new coordinates */
     x = _mm256_fmadd_pd(dt_v, vx, x0_x); // x0 + dt * vx
     y = _mm256_fmadd_pd(dt_v, vy, x0_y); // y0 + dt * vy
@@ -84,7 +78,7 @@ PetscErrorCode AdvectionExplicit_AVX256_2D(
   for (; np<npoints; np++) {
     PetscInt d;
     for (d=0; d<dim; d++) {
-      coords[2*np + d] = x0[2*np + d] + dt * velocity[d*npoints + np];
+      coords[2*np + d] = x0[2*np + d] + dt * velocity[2*np + d];
     }
   }
   PetscFunctionReturn(PETSC_SUCCESS);
@@ -105,54 +99,67 @@ PetscErrorCode AdvectionExplicit_AVX256_3D(
   PetscFunctionBeginUser;
 
   for (np = 0; np < np_aligned; np += 4) {
-    PetscReal x_vals[4],y_vals[4],z_vals[4];
-    __m256d   x0_x,x0_y,x0_z,vx,vy,vz,x,y,z;
+    __m256d   x0_x,x0_y,x0_z,vx,vy,vz,x,y,z,xy_lo,xy_hi,xz_lo,yz_hi,xyz0,xyz1,xyz2;
 
     // Load x0 positions (AoS layout)
-    x0_x = _mm256_set_pd(x0[3*(np+3)], x0[3*(np+2)], x0[3*(np+1)], x0[3*np]);
+    x0_x = _mm256_set_pd(x0[3*(np+3)  ], x0[3*(np+2)  ], x0[3*(np+1)  ], x0[3*np  ]);
     x0_y = _mm256_set_pd(x0[3*(np+3)+1], x0[3*(np+2)+1], x0[3*(np+1)+1], x0[3*np+1]);
     x0_z = _mm256_set_pd(x0[3*(np+3)+2], x0[3*(np+2)+2], x0[3*(np+1)+2], x0[3*np+2]);
 
-    // Load velocities from SoA layout
-#if (PETSC_MEMALIGN == 32)
-    vx = _mm256_load_pd(&velocity[0*npoints + np]);
-    vy = _mm256_load_pd(&velocity[1*npoints + np]);
-    vz = _mm256_load_pd(&velocity[2*npoints + np]);
-#else
-    vx = _mm256_loadu_pd(&velocity[0*npoints + np]);
-    vy = _mm256_loadu_pd(&velocity[1*npoints + np]);
-    vz = _mm256_loadu_pd(&velocity[2*npoints + np]);
-#endif
+    // Load velocities (AoS layout)
+    vx = _mm256_set_pd(velocity[3*(np+3)  ], velocity[3*(np+2)  ], velocity[3*(np+1)  ], velocity[3*np  ]);
+    vy = _mm256_set_pd(velocity[3*(np+3)+1], velocity[3*(np+2)+1], velocity[3*(np+1)+1], velocity[3*np+1]);
+    vz = _mm256_set_pd(velocity[3*(np+3)+2], velocity[3*(np+2)+2], velocity[3*(np+1)+2], velocity[3*np+2]);
 
     // Compute new positions
     x = _mm256_fmadd_pd(dt_v, vx, x0_x);
     y = _mm256_fmadd_pd(dt_v, vy, x0_y);
     z = _mm256_fmadd_pd(dt_v, vz, x0_z);
 
-    // Extract values and store to coords[]
-#if (PETSC_MEMALIGN == 32)
-      _mm256_store_pd(x_vals, x);
-      _mm256_store_pd(y_vals, y);
-      _mm256_store_pd(z_vals, z);
-#else
-      /* Use unaligned store */
-      _mm256_storeu_pd(x_vals, x);
-      _mm256_storeu_pd(y_vals, y);
-      _mm256_storeu_pd(z_vals, z);
-#endif
+    // Interleave x,y,z coordinates for 4 points in AoS format
+    // We need to create: [x0 y0 z0 x1] [y1 z1 x2 y2] [z2 x3 y3 z3]
+    
+    // First, create intermediate vectors with proper ordering
+    xy_lo = _mm256_unpacklo_pd(x, y);  // [x0 y0 x2 y2]
+    xy_hi = _mm256_unpackhi_pd(x, y);  // [x1 y1 x3 y3]
+    xz_lo = _mm256_unpacklo_pd(x, z);  // [x0 z0 x2 z2]
+    yz_hi = _mm256_unpackhi_pd(y, z);  // [y1 z1 y3 z3]
 
-    for (int i = 0; i < 4; ++i) {
-      PetscInt idx = np + i;
-      coords[3*idx + 0] = x_vals[i];
-      coords[3*idx + 1] = y_vals[i];
-      coords[3*idx + 2] = z_vals[i];
-    }
+    // Create the three output vectors for 12 coordinates (3*4 points)
+    // xyz0: [x0 y0 z0 x1] - first point complete + x of second point
+    xyz0 = _mm256_blend_pd(
+             _mm256_blend_pd(xy_lo, z, 0x4),  // [x0 y0 z0 x2] -> blend z0 into position 2
+             _mm256_permute2f128_pd(xy_hi, xy_hi, 0x00), // get x1 from xy_hi
+             0x8); // blend into position 3
+
+    // xyz1: [y1 z1 x2 y2] - rest of second point + third point without z
+    xyz1 = _mm256_blend_pd(
+             _mm256_permute2f128_pd(yz_hi, xz_lo, 0x21), // [y1 z1 x2 z2]
+             _mm256_permute2f128_pd(xy_lo, xy_lo, 0x11),  // get y2
+             0x8); // blend y2 into position 3
+
+    // xyz2: [z2 x3 y3 z3] - rest of third point + fourth point complete
+    xyz2 = _mm256_blend_pd(
+             _mm256_permute2f128_pd(z, xy_hi, 0x21),     // [z2 ? x3 y3]
+             _mm256_permute2f128_pd(z, z, 0x11),         // get z3
+             0x8); // blend z3 into position 3
+
+    // Store the interleaved coordinates
+#if (PETSC_MEMALIGN == 32)
+    _mm256_store_pd(&coords[3*np + 0], xyz0);  // [x0 y0 z0 x1]
+    _mm256_store_pd(&coords[3*np + 4], xyz1);  // [y1 z1 x2 y2]
+    _mm256_store_pd(&coords[3*np + 8], xyz2);  // [z2 x3 y3 z3]
+#else
+    _mm256_storeu_pd(&coords[3*np + 0], xyz0);
+    _mm256_storeu_pd(&coords[3*np + 4], xyz1);
+    _mm256_storeu_pd(&coords[3*np + 8], xyz2);
+#endif
   }
 
   // Scalar remainder
   for (; np < npoints; ++np) {
     for (PetscInt d = 0; d < dim; ++d) {
-      coords[3*np + d] = x0[3*np + d] + dt * velocity[d*npoints + np];
+      coords[3*np + d] = x0[3*np + d] + dt * velocity[3*np + d];
     }
   }
 
@@ -197,7 +204,7 @@ PetscErrorCode AdvectionExplicit(
 )
 {
   PetscFunctionBeginUser;
-#if 0 //defined(__AVX__)
+#if defined(__AVX__)
   PetscCall(AdvectionExplicit_AVX256(coords, x0, velocity, dt, npoints, dim));
 #else
   PetscCall(AdvectionExplicit_Scalar(coords, x0, velocity, dt, npoints, dim));
