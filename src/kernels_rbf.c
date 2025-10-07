@@ -1,17 +1,5 @@
 #include <petsc.h>
 
-PetscReal KernelLinear(PetscReal r, PetscReal epsilon)
-{
-  PetscFunctionBeginUser;
-  PetscFunctionReturn(r);
-}
-
-PetscReal KernelGaussian(PetscReal r, PetscReal epsilon)
-{
-  PetscFunctionBeginUser;
-  PetscFunctionReturn(PetscExpReal(-epsilon * epsilon * r * r));
-}
-
 PetscReal KernelWendlandC0(PetscReal r, PetscReal epsilon)
 {
   PetscReal u;
