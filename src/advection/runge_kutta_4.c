@@ -92,6 +92,7 @@ PetscErrorCode AdvectionExplicit_RK4(LagRBFCtx ctx, DM swi, DM swd)
     PetscCall(AdvectionExplicit_SingleStage(ctx,swi,swd,stage,RK4_coeffs[s]*dt));
   }
   /* Step 3: Combine stages and advect */
+  PetscCall(DMSwarmGetLocalSize(swi,&npoints));
   PetscCall(AdvectionGetIntegrationOrder(adv,&order));
   for (s=0; s<order; s++) {
     PetscCall(PetscSNPrintf(v_adv_name,PETSC_MAX_PATH_LEN-1,"v_adv_%d",s));
