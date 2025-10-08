@@ -13,7 +13,7 @@ static const char help[] = "Test to add particles running time backward followed
 #include "advection/advection_ctx.h"
 #include "swarm/swarm_output.h"
 
-static double halton_sequence(int index, int base)
+static double _halton_sequence(int index, int base)
 {
   double f = 1.0, r = 0.0;
   while (index > 0) {
@@ -93,7 +93,7 @@ static PetscErrorCode SetAnnulusCoordinates_Halton(PetscInt npoints, PetscReal R
     PetscReal u,r,theta;
 
     theta = p * dtheta;
-    u = halton_sequence(p+1,2); // base 2 can be changed
+    u = _halton_sequence(p+1,2); // base 2 can be changed
     /*
     Scale the radius r in [R0,R1] such that the points are uniformly distributed in the annulus
     Area = pi*(R1^2 - R0^2)

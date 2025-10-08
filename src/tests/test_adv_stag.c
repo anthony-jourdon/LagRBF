@@ -134,7 +134,7 @@ static PetscErrorCode SwarmInterp_AddMarkersSphericalFromOptions(PartitionOfUnit
   PetscCall(PetscOptionsGetRealArray(NULL,prefix,"-L",L,&d,&found));
   PetscCheck(d == pu->dim,PETSC_COMM_WORLD,PETSC_ERR_ARG_SIZ,"Option -%sL must have %" PetscInt_FMT " values, found: %" PetscInt_FMT "",prefix,pu->dim,d);
 
-  PetscCall(DMSwarmSetPointsSphericalCoordinates(sw,O,L,m,mode));
+  PetscCall(DMSwarmSetPointsSphericalCoordinates(sw,O,L,m,mode,PETSC_TRUE));
   PetscFunctionReturn(PETSC_SUCCESS);
 }
 
