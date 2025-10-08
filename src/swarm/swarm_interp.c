@@ -7,7 +7,7 @@
 PetscLogEvent LAGRBF_SwarmInterpSetWeights_AVX256;
 PetscLogEvent LAGRBF_SwarmInterpSetWeights_Scalar;
 
-static PetscErrorCode SwarmInterpCreateAdvectionFields(LagRBFCtx ctx, DM swarm)
+PetscErrorCode SwarmInterpCreateAdvectionFields(LagRBFCtx ctx, DM swarm)
 {
   AdvectionCtx adv_ctx;
   PetscInt     dim,order;
@@ -104,7 +104,7 @@ PetscErrorCode SwarmInterpSetCoordinatesFromOptions(PartitionOfUnity pu, DM sw, 
   PetscCheck(d == pu->dim,PETSC_COMM_WORLD,PETSC_ERR_ARG_SIZ,"Option -%sL must have %" PetscInt_FMT " values, found: %" PetscInt_FMT "",prefix,pu->dim,d);
   PetscCall(PetscOptionsGetBool(NULL,prefix,"-spherical",&spherical,&found));
   if (spherical) {
-    PetscCall(DMSwarmSetPointsSphericalCoordinates(sw,O,L,m,mode));
+    PetscCall(DMSwarmSetPointsSphericalCoordinates(sw,O,L,m,mode,PETSC_TRUE));
   } else {
     PetscCall(DMSwarmSetPointsUniformCoordinates(sw,O,L,m,mode));
   }
