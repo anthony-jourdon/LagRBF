@@ -176,6 +176,8 @@ PetscErrorCode AdvectionExplicit_AVX256(
 )
 {
   PetscLogDouble time[2];
+  long int       npoints_local,npoints_global;
+  double         time_max;
   PetscFunctionBeginUser;
   PetscCall(PetscTime(&time[0]));
   switch (dim) {
@@ -189,7 +191,11 @@ PetscErrorCode AdvectionExplicit_AVX256(
       SETERRQ(PETSC_COMM_SELF,PETSC_ERR_SUP,"AdvectionExplicit_AVX256 only supports 2D and 3D, found dim = %" PetscInt_FMT,dim);
   }
   PetscCall(PetscTime(&time[1]));
-  PetscPrintf(PETSC_COMM_WORLD,"[[ %s ]]: Advected %" PetscInt_FMT " points in %g seconds\n",PETSC_FUNCTION_NAME,npoints,time[1]-time[0]);
+  npoints_local = (long int)npoints;
+  PetscCallMPI(MPI_Allreduce(&npoints_local,&npoints_global,1,MPI_LONG,MPI_SUM,PETSC_COMM_WORLD));
+  time_max = (double)time[1]-(double)time[0];
+  PetscCallMPI(MPI_Allreduce(&time_max,&time_max,1,MPI_DOUBLE,MPI_MAX,PETSC_COMM_WORLD));
+  PetscPrintf(PETSC_COMM_WORLD,"[[ %s ]]: Advected %ld points in %1.4e seconds\n",PETSC_FUNCTION_NAME,npoints_global,time_max);
   PetscFunctionReturn(PETSC_SUCCESS);
 }
 #endif
