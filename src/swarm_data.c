@@ -13,6 +13,7 @@ PetscErrorCode SwarmDataCreate(LagRBFCtx ctx, DM *sw)
 
   PetscCall(LagRBFGetPartitionOfUnity(ctx,&pu));
 
+  // To Change -> need to use the local DMDA
   PetscCall(SwarmCreatePIC(pu,&swarm));
   PetscSNPrintf(dm_name, PETSC_MAX_PATH_LEN-1, "swarm_data");
   PetscObjectSetName((PetscObject)swarm,dm_name);
@@ -22,6 +23,7 @@ PetscErrorCode SwarmDataCreate(LagRBFCtx ctx, DM *sw)
 
   PetscCall(DMSwarmInitializeFieldRegister(swarm));
   PetscCall(DMSwarmRegisterPetscDatatypeField(swarm,"fields",ctx->n_ifields,PETSC_REAL));
+  PetscCall(DMSwarmRegisterPetscDatatypeField(swarm,"rbf",1,PETSC_REAL));
   PetscCall(DMSwarmFinalizeFieldRegister(swarm));
 
   *sw = swarm;
