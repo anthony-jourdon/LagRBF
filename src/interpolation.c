@@ -12,20 +12,23 @@ PetscLogEvent LAGRBF_PointwiseInterpolation_Scalar;
 
 PetscErrorCode PointwiseInterpolation_Scalar(
   PartitionOfUnity pu,
-  Partition *partitions,
-  PetscInt nfields,
-  PetscInt npoints_i,
-  PetscInt *cellid_i,
-  PetscReal *coords_i,
-  PetscReal *coords_d,
-  PetscReal *weights,
-  PetscReal *values_i
+  Partition        *partitions,
+  CellInfo         *cellinfo,
+  PetscInt         nfields,
+  PetscInt         npoints_i,
+  PetscInt         *cellid_i,
+  PetscReal        *coords_i,
+  PetscReal        *coords_d,
+  PetscReal        *rbf_d,
+  PetscReal        *weights,
+  PetscReal        *values_i
 )
 {
   DM             da;
   PetscInt       k,np,dim,npart,nel,nen;
   PetscInt       *gtol_elidx;
   const PetscInt *elidx;
+  PetscReal      epsilon;
   PetscReal      *interpolant;
   PetscLogDouble time[2];
   long int       npoints_local,npoints_global;
@@ -36,6 +39,7 @@ PetscErrorCode PointwiseInterpolation_Scalar(
   PetscCall(PetscLogEventBegin(LAGRBF_PointwiseInterpolation_Scalar,0,0,0,0));
 
   PetscCall(PUGetNPartitions(pu,&npart));
+  PetscCall(PUGetEpsilon(pu,&epsilon));
   PetscCall(PUGetGlobalToLocalElementMap(pu,&gtol_elidx));
   PetscCall(PUGetDimension(pu,&dim));
   PetscCall(PUGetDMDALocal(pu,&da));
@@ -43,20 +47,40 @@ PetscErrorCode PointwiseInterpolation_Scalar(
   /* Allocate memory for the interpolant */
   PetscCall(PetscCalloc1(nfields,&interpolant));
   for (np=0; np<npoints_i; np++) {
-    PetscInt f;
-    PetscInt cidx = cellid_i[np]; // cell index for the particle p
+    CellInfo  ci;
+    PetscInt  f,nd,cidx,ci_ndata,local_cidx;
+    PetscInt  *ci_data_idx;
+    
+    /* Cell index of the particle */
+    cidx       = cellid_i[np];     // parallel DMDA
+    local_cidx = gtol_elidx[cidx]; // local sequential DMDA
+    /* Cell info of this cell */
+    ci   = cellinfo[local_cidx];
+    PetscCall(CellInfoGetDataPointsIdx(ci,&ci_ndata,&ci_data_idx));
+    if (ci_ndata == 0) continue; // no data points in this cell neighbourhood, skip
+    /* Precompute the RBF values for all data points connected to that cell */
+    for (nd=0; nd<ci_ndata; nd++) {
+      PetscInt  d;
+      PetscReal dist;
+      /* Compute the RBF value for the interpolation point */
+      dist = 0.0;
+      for (d=0; d<dim; d++) {
+        PetscReal dx = coords_i[dim*np + d] - coords_d[dim*ci_data_idx[nd] + d];
+        dist += dx * dx;
+      }
+      rbf_d[ ci_data_idx[nd] ] = KernelWendlandC2(PetscSqrtReal(dist), epsilon);
+    }
     /* Initialize the interpolation value for the point p */
     PetscCall(PetscArrayzero(&values_i[nfields*np],nfields));
     /* Iterate over the partitions to which that point is connected */
     for (k=0; k<nen; k++) {
       Partition p;
       Mat       X;
-      PetscInt  nd,puidx,ndata,local_cidx;
+      PetscInt  puidx,ndata;
       PetscInt  *data_idx;
       PetscReal *coeffs;
 
       /* Get the partition index */
-      local_cidx = gtol_elidx[cidx];
       puidx      = elidx[nen*local_cidx + k];
       p          = partitions[puidx];
       PetscCall(PartitionGetDataPointsIdx(p,&ndata,&data_idx));
@@ -66,18 +90,10 @@ PetscErrorCode PointwiseInterpolation_Scalar(
       PetscCall(MatDenseGetArray(X,&coeffs));
       PetscCall(PetscArrayzero(interpolant,nfields));
       for (nd=0; nd<ndata; nd++) {
-        PetscInt  d;
-        PetscReal dist,rbf;
-        /* Compute the RBF value for the interpolation point */
-        dist = 0.0;
-        for (d=0; d<dim; d++) {
-          PetscReal dx = coords_i[dim*np + d] - coords_d[dim*data_idx[nd] + d];
-          dist += dx * dx;
-        }
-        rbf = KernelWendlandC2(PetscSqrtReal(dist),p->epsilon);
         for (f=0; f<nfields; f++) {
           /* multiply the RBF value by the coefficient and accumulate the RBF value for each field  */
-          interpolant[f] += rbf * coeffs[f*ndata + nd];
+          interpolant[f] += rbf_d[ data_idx[nd] ] * coeffs[f*ndata + nd];
+          //interpolant[f] += rbf * coeffs[f*ndata + nd];
         }
       }
       for (f=0; f<nfields; f++) {
@@ -109,14 +125,16 @@ PetscErrorCode RBFInterpolation(LagRBFCtx ctx, DM swi, DM swd, const char *field
   DMSwarmCellDM    celldm_i,celldm_d;
   PartitionOfUnity pu;
   Partition        *partitions;
+  CellInfo         *cellinfo = NULL;
   PetscInt         npoints_i,nfields;
   PetscInt         *cellid_i;
-  PetscReal        *coords_i,*coords_d,*weights,*values_i;
+  PetscReal        *coords_i,*coords_d,*weights,*values_i,*rbf_d;
   const char       **coordFieldName_i,**coordFieldName_d,*cellFieldName_i;
   PetscFunctionBeginUser;
   
   PetscCall(LagRBFGetPartitionOfUnity(ctx,&pu));
   PetscCall(LagRBFGetPartitions(ctx,&partitions));
+  PetscCall(LagRBFGetCellInfo(ctx,&cellinfo));
   /* Interpolation points */
   PetscCall(DMSwarmGetLocalSize(swi,&npoints_i));
   /* Setup for coords */
@@ -136,12 +154,37 @@ PetscErrorCode RBFInterpolation(LagRBFCtx ctx, DM swi, DM swd, const char *field
   PetscCall(DMSwarmCellDMGetCoordinateFields(celldm_d,NULL,&coordFieldName_d));
   /* Get coordinates */
   PetscCall(DMSwarmGetField(swd, coordFieldName_d[0], NULL, NULL, (void **)&coords_d));
+  PetscCall(DMSwarmGetField(swd, "rbf", NULL, NULL, (void **)&rbf_d));
 
   /* Perform the interpolation */
 #if defined(__AVX__)
-  PetscCall(PointwiseInterpolation_AVX256(pu,partitions,nfields,npoints_i,cellid_i,coords_i,coords_d,weights,values_i));
+  PetscCall(PointwiseInterpolation_AVX256(
+    pu,
+    partitions,
+    cellinfo,
+    nfields,
+    npoints_i,
+    cellid_i,
+    coords_i,
+    coords_d,
+    rbf_d,
+    weights,
+    values_i
+  ));
 #else
-  PetscCall(PointwiseInterpolation_Scalar(pu,partitions,nfields,npoints_i,cellid_i,coords_i,coords_d,weights,values_i));
+  PetscCall(PointwiseInterpolation_Scalar(
+    pu,
+    partitions,
+    cellinfo,
+    nfields,
+    npoints_i,
+    cellid_i,
+    coords_i,
+    coords_d,
+    rbf_d,
+    weights,
+    values_i
+  ));
 #endif
   
   PetscCall(DMSwarmRestoreField(swi,coordFieldName_i[0],NULL,NULL,(void **)&coords_i));
@@ -149,6 +192,7 @@ PetscErrorCode RBFInterpolation(LagRBFCtx ctx, DM swi, DM swd, const char *field
   PetscCall(DMSwarmRestoreField(swi,"weights",NULL,NULL,(void **)&weights));
   PetscCall(DMSwarmRestoreField(swi,fieldname,&nfields,NULL,(void **)&values_i));
   PetscCall(DMSwarmRestoreField(swd,coordFieldName_d[0],NULL,NULL,(void **)&coords_d));
+  PetscCall(DMSwarmRestoreField(swd,"rbf",NULL,NULL,(void **)&rbf_d));
   
   PetscFunctionReturn(PETSC_SUCCESS);
 }
