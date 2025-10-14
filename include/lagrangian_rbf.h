@@ -5,6 +5,7 @@
 #include "partition_of_unity.h"
 #include "partition.h"
 #include "advection/advection_ctx.h"
+#include "cell_info.h"
 
 typedef enum {
   GEODYNAMICS = 0, // Geodynamics model
@@ -17,6 +18,8 @@ struct _p_LagRBFCtx {
   InterpModelType  mtype; // Model type   
   AdvectionCtx     adv_ctx;  // Advection context
   Partition        *partitions; // Array of partitions structs
+  CellInfo         *cellinfo; // Array of cell info structs
+  DM               swd,swi; // Swarm for data points and interpolation points
   PetscInt         n_ifields; // Number of fields to interpolate
   PetscInt         n_pfields; // Number of fields that are not resulting from interpolation
   PetscInt         step; // Current step in the model
@@ -32,6 +35,7 @@ PetscErrorCode LagRBFCtxCreate(LagRBFCtx *ctx);
 PetscErrorCode LagRBFCtxDestroy(LagRBFCtx *ctx);
 PetscErrorCode LagRBF_PartitionOfUnityCreate(LagRBFCtx ctx);
 PetscErrorCode LagRBF_PartitionCreate(LagRBFCtx ctx);
+PetscErrorCode LagRBF_CellInfoCreate(LagRBFCtx ctx);
 PetscErrorCode LagRBFSetFromOptions(LagRBFCtx ctx);
 PetscErrorCode LagRBF_AdvectSwarm(LagRBFCtx ctx, DM swi, DM swd);
 /* Setters */
@@ -41,8 +45,11 @@ PetscErrorCode LagRBFSetTime(LagRBFCtx ctx, PetscReal time);
 /* Getter */
 PetscErrorCode LagRBFGetPartitionOfUnity(LagRBFCtx ctx, PartitionOfUnity *pu);
 PetscErrorCode LagRBFGetPartitions(LagRBFCtx ctx, Partition **partitions);
+PetscErrorCode LagRBFGetCellInfo(LagRBFCtx ctx, CellInfo **cellinfo);
 PetscErrorCode LagRBFGetStep(LagRBFCtx ctx, PetscInt *step);
 PetscErrorCode LagRBFGetTimeStep(LagRBFCtx ctx, PetscReal *dt);
 PetscErrorCode LagRBFGetTime(LagRBFCtx ctx, PetscReal *time);
 PetscErrorCode LagRBFGetAdvectionCtx(LagRBFCtx ctx, AdvectionCtx *adv_ctx);
+PetscErrorCode LagRBFGetSwarmData(LagRBFCtx ctx, DM *swd);
+PetscErrorCode LagRBFGetSwarmInterp(LagRBFCtx ctx, DM *swi);
 #endif

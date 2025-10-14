@@ -11,6 +11,9 @@ PetscErrorCode LagRBFCtxCreate(LagRBFCtx *ctx)
   p->adv_ctx    = NULL; 
   p->mtype      = GEODYNAMICS; // Default model type
   p->partitions = NULL;
+  p->cellinfo   = NULL;
+  p->swd        = NULL;
+  p->swi        = NULL;
   p->n_ifields  = 0;
   p->n_pfields  = 0;
   p->step       = 0;
@@ -31,8 +34,11 @@ PetscErrorCode LagRBFCtxDestroy(LagRBFCtx *ctx)
 
   if (!p)            { PetscFunctionReturn(PETSC_SUCCESS); }
   if (p->partitions) { PetscCall(PartitionDestroy(p->pu, &p->partitions)); }
+  if (p->cellinfo)   { PetscCall(CellInfoDestroy(p->pu, &p->cellinfo)); }
   if (p->pu)         { PetscCall(PartitionOfUnityDestroy(&p->pu)); }
   if (p->adv_ctx)    { PetscCall(LagRBF_AdvectionCtxDestroy(p)); }
+  if (p->swd)        { PetscCall(DMDestroy(&p->swd)); }
+  if (p->swi)        { PetscCall(DMDestroy(&p->swi)); }
   PetscCall(PetscFree(p));
   *ctx = NULL;
 
@@ -56,6 +62,17 @@ PetscErrorCode LagRBF_PartitionCreate(LagRBFCtx ctx)
   PetscCall(LagRBFGetPartitionOfUnity(ctx,&pu));
   PetscCall(PartitionCreate(pu,&partitions));
   ctx->partitions = partitions;
+  PetscFunctionReturn(PETSC_SUCCESS);
+}
+
+PetscErrorCode LagRBF_CellInfoCreate(LagRBFCtx ctx)
+{
+  PartitionOfUnity pu = NULL;
+  CellInfo        *cellinfo;
+  PetscFunctionBeginUser;
+  PetscCall(LagRBFGetPartitionOfUnity(ctx,&pu));
+  PetscCall(CellInfoCreate(pu,&cellinfo));
+  ctx->cellinfo = cellinfo;
   PetscFunctionReturn(PETSC_SUCCESS);
 }
 
@@ -128,6 +145,14 @@ PetscErrorCode LagRBFGetPartitions(LagRBFCtx ctx, Partition **partitions)
   PetscFunctionReturn(PETSC_SUCCESS);
 }
 
+PetscErrorCode LagRBFGetCellInfo(LagRBFCtx ctx, CellInfo **cellinfo)
+{
+  PetscFunctionBeginUser;
+  PetscCheck(ctx->cellinfo, PETSC_COMM_SELF, PETSC_ERR_ARG_NULL, "CellInfo context is NULL. Call LagRBF_CellInfoCreate() first.");
+  if (cellinfo) { *cellinfo = ctx->cellinfo; }
+  PetscFunctionReturn(PETSC_SUCCESS);
+}
+
 PetscErrorCode LagRBFGetStep(LagRBFCtx ctx, PetscInt *step)
 {
   PetscFunctionBeginUser;
@@ -158,5 +183,21 @@ PetscErrorCode LagRBFGetAdvectionCtx(LagRBFCtx ctx, AdvectionCtx *adv_ctx)
   PetscFunctionBeginUser;
   PetscCheck(ctx->adv_ctx, PETSC_COMM_SELF, PETSC_ERR_ARG_NULL, "Advection context is NULL. Call AdvectionCtxCreate() first.");
   if (adv_ctx) { *adv_ctx = ctx->adv_ctx; }
+  PetscFunctionReturn(PETSC_SUCCESS);
+}
+
+PetscErrorCode LagRBFGetSwarmData(LagRBFCtx ctx, DM *swd)
+{
+  PetscFunctionBeginUser;
+  PetscCheck(ctx->swd, PETSC_COMM_SELF, PETSC_ERR_ARG_NULL, "Swarm for data points is NULL. Call CreateSwarmData() first.");
+  if (swd) { *swd = ctx->swd; }
+  PetscFunctionReturn(PETSC_SUCCESS);
+}
+
+PetscErrorCode LagRBFGetSwarmInterp(LagRBFCtx ctx, DM *swi)
+{
+  PetscFunctionBeginUser;
+  PetscCheck(ctx->swi, PETSC_COMM_SELF, PETSC_ERR_ARG_NULL, "Swarm for interpolation points is NULL. Call CreateSwarmInterp() first.");
+  if (swi) { *swi = ctx->swi; }
   PetscFunctionReturn(PETSC_SUCCESS);
 }
