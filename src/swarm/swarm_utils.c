@@ -113,6 +113,24 @@ static PetscErrorCode PointSetPolarToCartesianCoordinate(PetscReal params[], Pet
   PetscFunctionReturn(PETSC_SUCCESS);
 }
 
+/*@
+  DMSwarmSetPointsSphericalCoordinates_Halton - Set point coordinates in a `DMSWARM` on a regular (ijk) spherical grid
+
+  Collective
+
+  Input Parameters:
++ sw      - the `DMSWARM`
+. min     - minimum coordinate values in the r, theta, phi directions (array of length dim)
+. max     - maximum coordinate values in the r, theta, phi directions (array of length dim)
+. npoints - number of points in each spatial direction (array of length dim)
+- mode    - indicates whether to append points to the swarm (`ADD_VALUES`), or over-ride existing points (`INSERT_VALUES`)
+
+  Notes:
+  When using mode = `INSERT_VALUES`, this method will reset the number of particles in the `DMSWARM`
+  to be `npoints[0]` x `npoints[1]` (2D) or `npoints[0]` x `npoints[1]` x `npoints[2]` (3D). When using mode = `ADD_VALUES`,
+  new points will be appended to any already existing in the `DMSWARM`
+
+@*/
 static PetscErrorCode DMSwarmSetPointsSphericalCoordinates_Uniform(DM sw, PetscReal min[], PetscReal max[], PetscInt npoints[], InsertMode mode)
 {
   DMSwarmCellDM     celldm;
@@ -305,6 +323,24 @@ static PetscErrorCode SphericalParameters_Halton(
   PetscFunctionReturn(PETSC_SUCCESS);
 }
 
+/*@
+  DMSwarmSetPointsSphericalCoordinates_Halton - Set point coordinates in a `DMSWARM` on a spherical grid using Halton sequence
+
+  Collective
+
+  Input Parameters:
++ sw      - the `DMSWARM`
+. min     - minimum coordinate values in the r, theta, phi directions (array of length dim)
+. max     - maximum coordinate values in the r, theta, phi directions (array of length dim)
+. npoints - number of points in each spatial direction (array of length dim)
+- mode    - indicates whether to append points to the swarm (`ADD_VALUES`), or over-ride existing points (`INSERT_VALUES`)
+
+  Notes:
+  When using mode = `INSERT_VALUES`, this method will reset the number of particles in the `DMSWARM`
+  to be `npoints[0]` x `npoints[1]` (2D) or `npoints[0]` x `npoints[1]` x `npoints[2]` (3D). When using mode = `ADD_VALUES`,
+  new points will be appended to any already existing in the `DMSWARM`
+
+@*/
 static PetscErrorCode DMSwarmSetPointsSphericalCoordinates_Halton(DM sw, PetscReal min[], PetscReal max[], PetscInt npoints[], InsertMode mode)
 {
   DMSwarmCellDM     celldm;
@@ -462,7 +498,7 @@ static PetscErrorCode DMSwarmSetPointsSphericalCoordinates_Halton(DM sw, PetscRe
 }
 
 /*@
-  DMSwarmSetPointsSphericalCoordinates - Set point coordinates in a `DMSWARM` on a regular (ijk) spherical grid
+  DMSwarmSetPointsSphericalCoordinates - Set point coordinates in a `DMSWARM` on a spherical grid
 
   Collective
 
@@ -471,7 +507,8 @@ static PetscErrorCode DMSwarmSetPointsSphericalCoordinates_Halton(DM sw, PetscRe
 . min     - minimum coordinate values in the r, theta, phi directions (array of length dim)
 . max     - maximum coordinate values in the r, theta, phi directions (array of length dim)
 . npoints - number of points in each spatial direction (array of length dim)
-- mode    - indicates whether to append points to the swarm (`ADD_VALUES`), or over-ride existing points (`INSERT_VALUES`)
+. mode    - indicates whether to append points to the swarm (`ADD_VALUES`), or over-ride existing points (`INSERT_VALUES`)
+- halton  - if `PETSC_TRUE`, use Halton sequence to distribute points, otherwise use uniform distribution
 
   Notes:
   When using mode = `INSERT_VALUES`, this method will reset the number of particles in the `DMSWARM`
