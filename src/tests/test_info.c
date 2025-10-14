@@ -310,12 +310,12 @@ static PetscErrorCode Test_3()
   Partition        *partitions;
   DM               dap,das;
   PetscInt         *ptos;
-  const PetscInt   *elidx;
+  const PetscInt   *elidx,*elidx_s;
   PetscInt         nel,nen;
   PetscBool        exists;
   MPI_Comm         comm;
   int              rank,size;
-  const char       output_dir[] = "output_sw2";
+  const char       output_dir[] = "test_elmap";
   PetscFunctionBeginUser;
 
   PetscCall(TestDirectory(output_dir,'w',&exists));
@@ -352,11 +352,87 @@ static PetscErrorCode Test_3()
       rank,i,ptos[i]);
   }
 
-
-  PetscCall(ViewSeqDMDA(das, rank));
+  //PetscCall(ViewSeqDMDA(das, rank));
+  PetscCall(PartitionOfUnityMeshView_Seq(pu));
   PetscCall(PartitionOfUnityMeshView(pu));
   PetscCall(PartitionDestroy(pu,&partitions));
   PetscCall(PartitionOfUnityDestroy(&pu));
+  PetscFunctionReturn(PETSC_SUCCESS);
+}
+
+static PetscErrorCode Test_4()
+{
+  DMSwarmCellDM    celldm;
+  LagRBFCtx        ctx;
+  PartitionOfUnity pu;
+  CellInfo         *ci;
+  DM               das,swarm_data;
+  PetscInt         iel,nel,nen;
+  PetscInt         *cellid;
+  const PetscInt   *elidx;
+  PetscReal        *coords;
+  int              rank;
+  const char       **coordFieldName;
+  const char       *cellFieldName;
+  const char       *data_output[] = {"fields"};
+  PetscFunctionBeginUser;
+
+  PetscCallMPI(MPI_Comm_rank(PETSC_COMM_WORLD,&rank));
+
+  /* Create context */
+  PetscCall(LagRBFCtxCreate(&ctx));
+  PetscCall(LagRBFSetFromOptions(ctx));
+  /* Create data structures */
+  PetscCall(LagRBF_PartitionOfUnityCreate(ctx));
+  PetscCall(LagRBF_PartitionCreate(ctx));
+  PetscCall(LagRBF_CellInfoCreate(ctx));
+  /* Create data points */
+  PetscCall(CreateDataPoints(ctx,&ctx->swd));
+  /* Get structures */
+  PetscCall(LagRBFGetPartitionOfUnity(ctx,&pu));
+  PetscCall(LagRBFGetCellInfo(ctx,&ci));
+  PetscCall(LagRBFGetSwarmData(ctx,&swarm_data));
+  PetscCall(SwarmOutput(ctx, swarm_data, 1, data_output, PETSC_FALSE));
+  PetscCall(PartitionOfUnityMeshView(pu));
+  /* Get local sequential DMDA */
+  PetscCall(PUGetDMDALocal(pu,&das));
+  /* Get Elements info */
+  PetscCall(DMDAGetElements(das,&nel,&nen,&elidx));
+  /* Setup cell info */
+  PetscCall(CellInfoSetUp(pu,ci,swarm_data));
+
+  /* Print cell info content */
+  /* Setup for coords */
+  PetscCall(DMSwarmGetCellDMActive(swarm_data,&celldm));
+  PetscCall(DMSwarmCellDMGetCoordinateFields(celldm,NULL,&coordFieldName));
+  /* Setup for cell indices */
+  PetscCall(DMSwarmCellDMGetCellID(celldm,&cellFieldName));
+  PetscCall(DMSwarmGetField(swarm_data, coordFieldName[0], NULL, NULL, (void **)&coords));
+  PetscCall(DMSwarmGetField(swarm_data, cellFieldName, NULL, NULL, (void **)&cellid));
+  for (iel=0; iel<nel; iel++) {
+    CellInfo c = ci[iel];
+    PetscInt nd,eidx,nneigh,ndata;
+    PetscInt *neighbours,*data_idx;
+
+    PetscCall(CellInfoGetIndex(c,&eidx));
+    PetscCall(CellInfoGetNeighbours(c,&nneigh,&neighbours));
+    PetscCall(CellInfoGetDataPointsIdx(c,&ndata,&data_idx));
+    PetscPrintf(PETSC_COMM_SELF,
+      "Rank[%d]: CellInfo[%" PetscInt_FMT "]: eidx = %" PetscInt_FMT ", nneigh = %" PetscInt_FMT ", ndata = %" PetscInt_FMT "\n",
+      rank,iel,eidx,nneigh,ndata);
+    for (nd=0; nd<ndata; nd++) {
+      PetscInt pidx = data_idx[nd];
+      PetscPrintf(
+        PETSC_COMM_SELF,
+        "  Rank[%d]: data_idx[%" PetscInt_FMT "] = %" PetscInt_FMT ", cellidx = %" PetscInt_FMT ", coords = (%1.6e, %1.6e)\n",
+        rank,nd,data_idx[nd],cellid[pidx],coords[2*pidx],coords[2*pidx+1]
+      );
+    }
+  }
+  PetscCall(DMSwarmRestoreField(swarm_data, coordFieldName[0], NULL, NULL, (void **)&coords));
+  PetscCall(DMSwarmRestoreField(swarm_data, cellFieldName, NULL, NULL, (void **)&cellid));
+  PetscCall(DMDARestoreElements(das,&nel,&nen,&elidx));
+  PetscCall(LagRBFCtxDestroy(&ctx));
   PetscFunctionReturn(PETSC_SUCCESS);
 }
 
@@ -368,7 +444,8 @@ int main(int argc, char *argv[])
   //PetscCall(Test());
   //PetscCall(Test_Parallel());
   //PetscCall(Test_Parallel_2());
-  PetscCall(Test_3());
+  //PetscCall(Test_3());
+  PetscCall(Test_4());
 
   PetscCall(PetscFinalize());
   
