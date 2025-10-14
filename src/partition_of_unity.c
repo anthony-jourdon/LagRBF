@@ -14,14 +14,14 @@ PetscErrorCode PUCreate(PartitionOfUnity *pu)
   PetscCall(PetscNew(&p));
   PetscCall(PetscSNPrintf(p->name, PETSC_MAX_PATH_LEN-1,"pu_mesh"));
   PetscCall(PetscSNPrintf(p->sname, PETSC_MAX_PATH_LEN-1,"pu_mesh_%d",rank));
-  p->dap   = NULL;
-  p->das   = NULL;
-  p->dim   = 0;
-  p->n     = NULL;
-  p->npart = 0;
-  p->ptos  = NULL;
-  p->O     = NULL;
-  p->L     = NULL;
+  p->dap        = NULL;
+  p->das        = NULL;
+  p->dim        = 0;
+  p->n          = NULL;
+  p->npart      = 0;
+  p->ptos       = NULL;
+  p->O          = NULL;
+  p->L          = NULL;
 
   *pu = p;
   PetscFunctionReturn(PETSC_SUCCESS);
@@ -65,12 +65,6 @@ PetscErrorCode PUSetFromOptions(PartitionOfUnity pu)
   PetscCall(PetscOptionsGetRealArray(NULL,NULL,option_name,pu->L,&nn,&found));
   if (found) { PetscCheck(nn == pu->dim,PETSC_COMM_WORLD,PETSC_ERR_ARG_SIZ,"Option %s. Expected %" PetscInt_FMT " entries, found %" PetscInt_FMT "",option_name,pu->dim,nn); }
 
-  PetscFunctionReturn(PETSC_SUCCESS);
-}
-
-PetscErrorCode PULoadFromFile(PartitionOfUnity pu, const char filename[])
-{
-  PetscFunctionBeginUser;
   PetscFunctionReturn(PETSC_SUCCESS);
 }
 
@@ -253,6 +247,8 @@ PetscErrorCode PartitionOfUnityCreate(PartitionOfUnity *pu)
   PetscCall(PUCreateDMDA(p));
   /* Create the local DMDA to hold partitions */
   PetscCall(PUCreateDMDALocal(p));
+  /* Set the epsilon factor for RBF */
+  PetscCall(PartitionOfUnityComputeEpsilon(p));
 
   *pu = p;
   PetscFunctionReturn(PETSC_SUCCESS);
@@ -273,6 +269,30 @@ PetscErrorCode PartitionOfUnityDestroy(PartitionOfUnity *pu)
   PetscCall(PetscFree(p));
   *pu = NULL;
 
+  PetscFunctionReturn(PETSC_SUCCESS);
+}
+
+PetscErrorCode PartitionOfUnityComputeEpsilon(PartitionOfUnity pu)
+{
+  DM        dap = NULL;
+  PetscInt  d,dim,global_npart;
+  PetscInt  M[3];
+  PetscReal box_length,overlap,radius;
+  PetscFunctionBeginUser;
+  /* Get the parallel DMDA */
+  PetscCall(PUGetDMDA(pu,&dap));
+  PetscCall(DMDAGetInfo(dap,&dim,&M[0],&M[1],&M[2],NULL,NULL,NULL,NULL,NULL,NULL,NULL,NULL,NULL));
+  /* Compute the RBF epsilon factor */
+  global_npart = 1;
+  for (d=0; d<dim; d++) { global_npart *= M[d]; }
+  /* Set epsilon parameter */
+  box_length = 0.0;
+  for (d=0; d<dim; d++) {
+    box_length = PetscMax(box_length,(pu->L[d] - pu->O[d]));
+  }
+  overlap = 1.5*box_length;
+  radius  = overlap / PetscPowReal(global_npart,1.0/dim);
+  pu->epsilon = 1.0 / radius;
   PetscFunctionReturn(PETSC_SUCCESS);
 }
 
@@ -316,6 +336,15 @@ PetscErrorCode PUGetGlobalToLocalElementMap(PartitionOfUnity pu, PetscInt **ptos
   PetscCheck(pu,PETSC_COMM_SELF,PETSC_ERR_ARG_NULL,"Partition of Unity structure is NULL. Call PartitionOfUnityCreate() first.");
   PetscCheck(pu->ptos,PETSC_COMM_SELF,PETSC_ERR_ARG_WRONGSTATE,"Partition of Unity parallel to sequential element map not created yet.");
   if (ptos) { *ptos = pu->ptos; }
+  PetscFunctionReturn(PETSC_SUCCESS);
+}
+
+PetscErrorCode PUGetEpsilon(PartitionOfUnity pu, PetscReal *epsilon)
+{
+  PetscFunctionBeginUser;
+  PetscCheck(pu,PETSC_COMM_SELF,PETSC_ERR_ARG_NULL,"Partition of Unity structure is NULL. Call PartitionOfUnityCreate() first.");
+  PetscCheck(pu->epsilon > 0.0,PETSC_COMM_SELF,PETSC_ERR_ARG_WRONGSTATE,"Partition of Unity epsilon not computed yet. Call PartitionOfUnityComputeEpsilon() first.");
+  if (epsilon) { *epsilon = pu->epsilon; }
   PetscFunctionReturn(PETSC_SUCCESS);
 }
 
