@@ -27,6 +27,9 @@ PetscErrorCode AdvectionCtxCreate(AdvectionCtx *ctx)
   PetscFunctionBeginUser;
   PetscCall(PetscNew(&adv));
   adv->user = NULL;
+  adv->velocity_type = INTERPOLATION;
+  adv->velocity_fn   = NULL;
+  adv->user_fn       = NULL;
   *ctx = adv;
   PetscFunctionReturn(PETSC_SUCCESS);
 }

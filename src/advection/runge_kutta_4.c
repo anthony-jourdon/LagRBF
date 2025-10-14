@@ -48,8 +48,8 @@ static PetscErrorCode AdvectionExplicit_SingleStage(LagRBFCtx ctx, DM swi, DM sw
   /* Update points */
   PetscCall(DMSwarmMigrate(swi,PETSC_TRUE)); // update cell ids and MPI ranks
   PetscCall(SwarmInterpSetWeights(ctx,swi)); // update the weights for the interpolation
-  /* Interpolate v_s = v(x_s) with s = stage */
-  PetscCall(RBFInterpolation(ctx,swi,swd,velocity_name));
+  /* Evaluate v_s = v(x_s) with s = stage */
+  PetscCall(AdvectionEvaluateVelocity(ctx,swi,swd));
   /* Update the velocity for the next step */
   PetscCall(DMSwarmGetLocalSize(swi,&npoints));
   PetscCall(PetscSNPrintf(v_adv_name,PETSC_MAX_PATH_LEN-1,"v_adv_%d",stage));
@@ -80,7 +80,6 @@ PetscErrorCode AdvectionExplicit_RK4(LagRBFCtx ctx, DM swi, DM swd)
   PetscCall(LagRBFGetAdvectionCtx(ctx,&adv));
   PetscCall(AdvectionGetTimeStep(adv,&dt));
   PetscCall(DMGetDimension(swi,&dim));
-  PetscCall(DMSwarmGetLocalSize(swi,&npoints));
   PetscCall(DMSwarmGetCellDMActive(swi, &celldm));
   PetscCall(DMSwarmCellDMGetCoordinateFields(celldm, NULL, &coorFieldName));
   PetscCall(AdvectionGetVelocityName(adv, &velocity_name));
@@ -92,7 +91,6 @@ PetscErrorCode AdvectionExplicit_RK4(LagRBFCtx ctx, DM swi, DM swd)
     PetscCall(AdvectionExplicit_SingleStage(ctx,swi,swd,stage,RK4_coeffs[s]*dt));
   }
   /* Step 3: Combine stages and advect */
-  PetscCall(DMSwarmGetLocalSize(swi,&npoints));
   PetscCall(AdvectionGetIntegrationOrder(adv,&order));
   for (s=0; s<order; s++) {
     PetscCall(PetscSNPrintf(v_adv_name,PETSC_MAX_PATH_LEN-1,"v_adv_%d",s));
@@ -101,7 +99,7 @@ PetscErrorCode AdvectionExplicit_RK4(LagRBFCtx ctx, DM swi, DM swd)
   PetscCall(DMSwarmGetField(swi, coorFieldName[0], NULL, NULL, (void **)&coords));
   PetscCall(DMSwarmGetField(swi, velocity_name,    NULL, NULL, (void **)&velocity));
   PetscCall(DMSwarmGetField(swi, "coor_init",      NULL, NULL, (void **)&x0));
-  
+  PetscCall(DMSwarmGetLocalSize(swi,&npoints));
   for (np=0; np<npoints; np++) {
     PetscReal sum[] = {0.0, 0.0, 0.0};
     for (d=0; d<dim; d++) {

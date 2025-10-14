@@ -1,6 +1,8 @@
 #include <petsc.h>
+#include "lagrangian_rbf.h"
 #include "advection/advection_ctx.h"
 #include "swarm/swarm_utils.h"
+#include "interpolation.h"
 
 PetscErrorCode AdvectionExplicit_Scalar(
   PetscReal *coords, 
@@ -247,5 +249,112 @@ PetscErrorCode AdvectionSetInitialValues(AdvectionCtx ctx, DM swi)
   PetscCall(DMSwarmRestoreField(swi, velocity_name,    NULL, NULL, (void **)&velocity));
   PetscCall(DMSwarmRestoreField(swi, "coor_init",      NULL, NULL, (void **)&x0));
   PetscCall(DMSwarmRestoreField(swi, "v_adv_0",        NULL, NULL, (void **)&v0));
+  PetscFunctionReturn(PETSC_SUCCESS);
+}
+
+PetscErrorCode AdvectionSetVelocityFunction(AdvectionCtx ctx, PetscErrorCode (*velocity_fn)(PetscReal*,PetscReal*,void*), void *user)
+{
+  PetscFunctionBeginUser;
+  ctx->velocity_type = ANALYTICAL;
+  ctx->velocity_fn   = velocity_fn;
+  ctx->user_fn       = user;
+  PetscFunctionReturn(PETSC_SUCCESS);
+}
+
+PetscErrorCode AdvectionCopyVelocityField(LagRBFCtx ctx, DM swarm)
+{
+  AdvectionCtx adv_ctx;
+  PetscInt     dim,npoints;
+  PetscReal    *interp_fields,*velocity;
+  const char   *velocity_name;
+  PetscFunctionBeginUser;
+  PetscCall(LagRBFGetAdvectionCtx(ctx,&adv_ctx));
+  PetscCall(AdvectionGetVelocityName(adv_ctx,&velocity_name));
+  PetscCall(DMGetDimension(swarm,&dim));
+  PetscCall(DMSwarmGetLocalSize(swarm,&npoints));
+  PetscCall(DMSwarmGetField(swarm, "fields", NULL, NULL, (void **)&interp_fields));
+  PetscCall(DMSwarmGetField(swarm, velocity_name, NULL, NULL, (void **)&velocity));
+  /* Copy the first dim fields into velocity field */
+  PetscCall(CopyContiguousBlockData(velocity, interp_fields, npoints, dim, ctx->n_ifields, 0));
+  PetscCall(DMSwarmRestoreField(swarm, "fields", NULL, NULL, (void **)&interp_fields));
+  PetscCall(DMSwarmRestoreField(swarm, velocity_name, NULL, NULL, (void **)&velocity));
+  PetscFunctionReturn(PETSC_SUCCESS);
+}
+
+PetscErrorCode AdvectionEvaluateVelocityFunction(AdvectionCtx adv_ctx, DM swarm)
+{
+  DMSwarmCellDM celldm;
+  PetscInt      np,dim,npoints;
+  PetscReal     *coords,*velocity;
+  const char    *velocity_name,**coorFieldName;
+  PetscFunctionBeginUser;
+  PetscPrintf(PETSC_COMM_WORLD,"[[ %s ]]\n",PETSC_FUNCTION_NAME);
+  PetscCheck(adv_ctx->velocity_fn,PETSC_COMM_SELF,PETSC_ERR_ARG_NULL,"AdvectionCtx->velocity_fn is NULL, please provide a valid function");
+  PetscCall(DMSwarmGetLocalSize(swarm,&npoints));
+  PetscCall(DMGetDimension(swarm,&dim));
+  PetscCall(DMSwarmGetCellDMActive(swarm, &celldm));
+  PetscCall(DMSwarmCellDMGetCoordinateFields(celldm, NULL, &coorFieldName));
+  PetscCall(AdvectionGetVelocityName(adv_ctx,&velocity_name));
+  PetscCall(DMSwarmGetField(swarm, coorFieldName[0], NULL, NULL, (void **)&coords));
+  PetscCall(DMSwarmGetField(swarm, velocity_name,    NULL, NULL, (void **)&velocity));
+  /* Evaluate the velocity at the current particle positions */
+  for (np=0; np<npoints; np++) {
+    adv_ctx->velocity_fn(&coords[dim*np], &velocity[dim*np], adv_ctx->user_fn);
+  }
+  PetscCall(DMSwarmRestoreField(swarm, coorFieldName[0], NULL, NULL, (void **)&coords));
+  PetscCall(DMSwarmRestoreField(swarm, velocity_name,    NULL, NULL, (void **)&velocity));
+  PetscFunctionReturn(PETSC_SUCCESS);
+}
+
+PetscErrorCode AdvectionSetTimestepVelocity(LagRBFCtx ctx, DM swarm)
+{
+  AdvectionCtx adv_ctx;
+  PetscFunctionBeginUser;
+  PetscPrintf(PETSC_COMM_WORLD,"[[ %s ]]\n",PETSC_FUNCTION_NAME);
+  LagRBFGetAdvectionCtx(ctx,&adv_ctx);
+  switch (adv_ctx->velocity_type) {
+    case INTERPOLATION:
+      PetscCall(AdvectionCopyVelocityField(ctx,swarm));
+      break;
+
+    case ANALYTICAL:
+      PetscCall(AdvectionEvaluateVelocityFunction(adv_ctx,swarm));
+      break;
+    
+    default:
+      SETERRQ(PETSC_COMM_SELF,PETSC_ERR_SUP,"AdvectionCtx->velocity_type has an invalid value: %d",adv_ctx->velocity_type);
+      break;
+  }
+  PetscFunctionReturn(PETSC_SUCCESS);
+}
+
+/*
+  Evaluate the velocity field at the current particle positions.
+  Two options:
+    1) Use RBF interpolation to evaluate the velocity at the particle positions
+    2) Use a user-defined function to evaluate the velocity at the particle positions
+*/
+PetscErrorCode AdvectionEvaluateVelocity(LagRBFCtx ctx, DM swi, DM swd)
+{
+  AdvectionCtx adv_ctx;
+  PetscFunctionBeginUser;
+  PetscCall(LagRBFGetAdvectionCtx(ctx,&adv_ctx));
+  switch (adv_ctx->velocity_type) {
+    case INTERPOLATION:
+    {
+      const char   *velocity_name;
+      PetscCall(AdvectionGetVelocityName(adv_ctx,&velocity_name));
+      PetscCall(RBFInterpolation(ctx,swi,swd,velocity_name));
+    }
+      break;
+
+    case ANALYTICAL:
+      PetscCall(AdvectionEvaluateVelocityFunction(adv_ctx,swi));
+      break;
+    
+    default:
+      SETERRQ(PETSC_COMM_SELF,PETSC_ERR_SUP,"AdvectionCtx->velocity_type has an invalid value: %d",adv_ctx->velocity_type);
+      break;
+  }
   PetscFunctionReturn(PETSC_SUCCESS);
 }

@@ -10,24 +10,36 @@ typedef enum {
   DOPRI  // Dormand-Prince 5(4) method
 } AdvectionScheme;
 
+typedef enum {
+  INTERPOLATION=0, // Velocity field obtained by interpolation
+  ANALYTICAL       // Velocity field obtained from an analytical function
+} VelocityType;
+
 typedef struct _p_AdvectionCtx *AdvectionCtx;
 typedef struct _p_LagRBFCtx *LagRBFCtx;
 
 struct _p_AdvectionCtx {
   AdvectionScheme scheme; // advection scheme to use
+  VelocityType    velocity_type; // method to obtain the velocity field
   PetscReal       dt; // time step for advection
   PetscInt        order; // order of the advection scheme
   char            velocity_name[PETSC_MAX_PATH_LEN]; // name of the velocity field in the DMSwarm
   void            *user; // user-defined context for additional data
+  void            *user_fn; // user-defined context for the velocity function
   PetscErrorCode (*destroy)(AdvectionCtx);
   PetscErrorCode (*advection)(LagRBFCtx,DM,DM);
+  PetscErrorCode (*velocity_fn)(PetscReal*,PetscReal*,void*); // user-defined function to compute the velocity at given coordinates
 };
 
 PetscErrorCode LagRBF_AdvectionCtxCreate(LagRBFCtx ctx, AdvectionScheme scheme, const char *velocity_name);
 PetscErrorCode LagRBF_AdvectionCtxDestroy(LagRBFCtx ctx);
+PetscErrorCode AdvectionEvaluateVelocity(LagRBFCtx ctx, DM swi, DM swd);
+PetscErrorCode AdvectionCopyVelocityField(LagRBFCtx ctx, DM swarm);
+PetscErrorCode AdvectionSetTimestepVelocity(LagRBFCtx ctx, DM swarm);
 /* Setters */
 PetscErrorCode AdvectionSetTimeStep(AdvectionCtx ctx, PetscReal dt);
 PetscErrorCode AdvectionSetVelocityName(AdvectionCtx ctx,const char *name);
+PetscErrorCode AdvectionSetVelocityFunction(AdvectionCtx ctx, PetscErrorCode (*velocity_fn)(PetscReal*,PetscReal*,void*), void *user);
 /* Getters */
 PetscErrorCode AdvectionGetTimeStep(AdvectionCtx ctx, PetscReal *dt);
 PetscErrorCode AdvectionGetIntegrationOrder(AdvectionCtx ctx, PetscInt *order);

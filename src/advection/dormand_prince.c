@@ -62,7 +62,6 @@ PetscErrorCode AdvectionEvaluateError_DOPRI(AdvectionCtx ctx, DM swi)
   }
   /* Perform reduction to find global max error */
   PetscCall(MPI_Allreduce(&max_err, &data->error, 1, MPIU_REAL, MPI_MAX, PETSC_COMM_WORLD));
-  //data->error = max_err; 
   /* Restore fields */
   PetscCall(DMSwarmRestoreField(swi, coorFieldName[0], NULL, NULL, (void **)&coords));
   PetscCall(DMSwarmRestoreField(swi, "coor_init",      NULL, NULL, (void **)&x0));
@@ -76,26 +75,18 @@ PetscErrorCode AdvectionEvaluateError_DOPRI(AdvectionCtx ctx, DM swi)
 /* If error is small we take the time step */ 
 static PetscErrorCode AdvectionTakeStep_DOPRI(LagRBFCtx ctx, DM swi)
 {
-  DMSwarmCellDM celldm;
   AdvectionCtx  adv_ctx;
   DoPriCtx      *data;
-  PetscInt      npoints,dim;
   PetscReal     dt,dt_new,fac,fac_min,fac_max,max_err;
-  const char    **coorFieldName;
   PetscFunctionBeginUser;
-
-  PetscCall(LagRBFGetAdvectionCtx(ctx,&adv_ctx));
-  data = (DoPriCtx *)adv_ctx->user;
-  PetscCall(DMSwarmGetLocalSize(swi,&npoints));
-  PetscCall(DMSwarmGetCellDMActive(swi, &celldm));
-  PetscCall(DMSwarmCellDMGetCoordinateFields(celldm, NULL, &coorFieldName));
-  PetscCall(DMGetDimension(swi,&dim));
-  PetscCall(AdvectionGetTimeStep(adv_ctx,&dt));
   /* Update MPI rank and cell id */
   PetscCall(DMSwarmMigrate(swi,PETSC_TRUE));
   /* Update weights for interpolation */
   PetscCall(SwarmInterpSetWeights(ctx,swi));
   /* Compute the new time step */
+  PetscCall(LagRBFGetAdvectionCtx(ctx,&adv_ctx));
+  data = (DoPriCtx *)adv_ctx->user;
+  PetscCall(AdvectionGetTimeStep(adv_ctx,&dt));
   fac     = data->dt_fac;
   fac_min = data->dt_fac_min;
   fac_max = data->dt_fac_max;
@@ -160,13 +151,11 @@ PetscErrorCode AdvectionComputeAdaptiveTimeStep_DOPRI(LagRBFCtx ctx, DM swi, DM 
 
   PetscCall(LagRBFGetAdvectionCtx(ctx,&adv_ctx));
   data = (DoPriCtx *)adv_ctx->user;
-
   if (data->error <= 1.0) {
     PetscCall(AdvectionTakeStep_DOPRI(ctx,swi));
   } else {
     PetscCall(AdvectionRejectStep_DOPRI(ctx,swi,swd));
   }
-
   PetscFunctionReturn(PETSC_SUCCESS); 
 }
 
@@ -241,8 +230,9 @@ PetscErrorCode AdvectionExplicit_DOPRI(LagRBFCtx ctx, DM swi, DM swd)
     /* Update points */
     PetscCall(DMSwarmMigrate(swi,PETSC_TRUE)); // update cell ids and MPI ranks
     PetscCall(SwarmInterpSetWeights(ctx,swi)); // update the weights for the interpolation
-    /* Interpolate */
-    PetscCall(RBFInterpolation(ctx,swi,swd,velocity_name));
+    /* Evaluate v_s = v(x_s) with s = stage */
+    //PetscCall(RBFInterpolation(ctx,swi,swd,velocity_name));
+    PetscCall(AdvectionEvaluateVelocity(ctx,swi,swd));
     /* Store velocity for the current step */
     PetscCall(DMSwarmGetLocalSize(swi,&npoints));
     PetscCall(PetscSNPrintf(v_adv_name,PETSC_MAX_PATH_LEN-1,"v_adv_%d",stage));
