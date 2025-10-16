@@ -32,13 +32,13 @@ PetscErrorCode PointwiseInterpolation_Scalar(
   PetscReal      *interpolant;
   PetscLogDouble time[2];
   long int       npoints_local,npoints_global;
-  double         time_max;
+  double         time_local,time_max;
   PetscFunctionBeginUser;
   /* Logging */
   PetscCall(PetscTime(&time[0]));
   PetscCall(PetscLogEventBegin(LAGRBF_PointwiseInterpolation_Scalar,0,0,0,0));
 
-  PetscCall(PUGetNPartitions(pu,&npart));
+  PetscCall(PUGetNPartitionsLocal(pu,&npart));
   PetscCall(PUGetEpsilon(pu,&epsilon));
   PetscCall(PUGetGlobalToLocalElementMap(pu,&gtol_elidx));
   PetscCall(PUGetDimension(pu,&dim));
@@ -112,8 +112,8 @@ PetscErrorCode PointwiseInterpolation_Scalar(
   /* Need to perform a reduction to gather the total number of points */
   npoints_local = (long int)npoints_i;
   PetscCallMPI(MPI_Allreduce(&npoints_local,&npoints_global,1,MPI_LONG,MPI_SUM,PETSC_COMM_WORLD));
-  time_max = (double)time[1]-(double)time[0];
-  PetscCallMPI(MPI_Allreduce(&time_max,&time_max,1,MPI_DOUBLE,MPI_MAX,PETSC_COMM_WORLD));
+  time_local = (double)time[1]-(double)time[0];
+  PetscCallMPI(MPI_Allreduce(&time_local,&time_max,1,MPI_DOUBLE,MPI_MAX,PETSC_COMM_WORLD));
   /* Perform reduction on time to get the max */
   PetscCall(PetscPrintf(PETSC_COMM_WORLD,"[[ %s ]] interpolated %ld points in %1.4e seconds\n",PETSC_FUNCTION_NAME,npoints_global,time_max));
 

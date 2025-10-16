@@ -19,6 +19,7 @@ PetscErrorCode PUCreate(PartitionOfUnity *pu)
   p->dim        = 0;
   p->n          = NULL;
   p->npart      = 0;
+  p->npg        = 0;
   p->ptos       = NULL;
   p->O          = NULL;
   p->L          = NULL;
@@ -71,7 +72,8 @@ PetscErrorCode PUSetFromOptions(PartitionOfUnity pu)
 PetscErrorCode PUCreateDMDA(PartitionOfUnity pu)
 {
   DM       da;
-  PetscInt stencil_width=1;
+  PetscInt d,dim,stencil_width=1;
+  PetscInt M[] = {1,1,1};
   char     prefix[PETSC_MAX_PATH_LEN];
   PetscFunctionBeginUser;
 
@@ -98,7 +100,9 @@ PetscErrorCode PUCreateDMDA(PartitionOfUnity pu)
   PetscCall(DMSetFromOptions(da));
   PetscCall(DMSetUp(da));
   PetscCall(DMDASetUniformCoordinates(da,pu->O[0],pu->L[0],pu->O[1],pu->L[1],pu->O[2],pu->L[2]));
-  
+  DMDAGetInfo(da,&dim,&M[0],&M[1],&M[2],NULL,NULL,NULL,NULL,NULL,NULL,NULL,NULL,NULL);
+  pu->npg = 1;
+  for (d=0; d<dim; d++) { pu->npg *= M[d]; }
   pu->dap = da;
 
   PetscFunctionReturn(PETSC_SUCCESS);
@@ -314,11 +318,19 @@ PetscErrorCode PUGetDMDALocal(PartitionOfUnity pu, DM *das)
   PetscFunctionReturn(PETSC_SUCCESS);
 }
 
-PetscErrorCode PUGetNPartitions(PartitionOfUnity pu, PetscInt *npart)
+PetscErrorCode PUGetNPartitionsLocal(PartitionOfUnity pu, PetscInt *npart)
 {
   PetscFunctionBeginUser;
   PetscCheck(pu,PETSC_COMM_SELF,PETSC_ERR_ARG_NULL,"Partition of Unity structure is NULL. Call PartitionOfUnityCreate() first.");
   if (npart) { *npart = pu->npart; }
+  PetscFunctionReturn(PETSC_SUCCESS);
+}
+
+PetscErrorCode PUGetNPartitionsGlobal(PartitionOfUnity pu, PetscInt *npg)
+{
+  PetscFunctionBeginUser;
+  PetscCheck(pu,PETSC_COMM_SELF,PETSC_ERR_ARG_NULL,"Partition of Unity structure is NULL. Call PartitionOfUnityCreate() first.");
+  if (npg) { *npg = pu->npg; }
   PetscFunctionReturn(PETSC_SUCCESS);
 }
 

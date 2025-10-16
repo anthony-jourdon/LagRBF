@@ -174,7 +174,7 @@ PetscErrorCode PartitionSolveInterpolationCoefficients(PartitionOfUnity pu, Part
   PetscFunctionBeginUser;
   PetscCall(PetscLogEventBegin(LAGRBF_PartitionSolveInterpolationCoefficients,0,0,0,0));
   PetscPrintf(PETSC_COMM_WORLD,"[[ %s ]]\n",PETSC_FUNCTION_NAME);
-  PetscCall(PUGetNPartitions(pu,&npart));
+  PetscCall(PUGetNPartitionsLocal(pu,&npart));
   PetscCall(DMSwarmGetField(swarm,fieldname,&nfields,NULL,(void **)&values));
   for (n=0; n<npart; n++) {
     Partition p = partitions[n];

@@ -8,7 +8,8 @@ struct _p_PartitionOfUnity {
   DM        das;   // Sequential DMDA mesh COMM_SELF
   PetscInt  dim;   // Dimension of the partition of unity mesh
   PetscInt  *n;    // Number of partitions in each dimension
-  PetscInt  npart; // Total number of partitions
+  PetscInt  npart; // Rank-local number of partitions
+  PetscInt  npg;   // Global number of partitions
   PetscInt  *ptos; // Parallel to sequential mapping of elements
   PetscReal *O,*L; // Origin and Length of the partition of unity mesh
   PetscReal epsilon; // Epsilon factor for the RBF kernel
@@ -27,7 +28,8 @@ PetscErrorCode PartitionOfUnityComputeEpsilon(PartitionOfUnity pu);
 /* Getters */
 PetscErrorCode PUGetDMDA(PartitionOfUnity pu, DM *dap);
 PetscErrorCode PUGetDMDALocal(PartitionOfUnity pu, DM *das);
-PetscErrorCode PUGetNPartitions(PartitionOfUnity pu, PetscInt *npart);
+PetscErrorCode PUGetNPartitionsLocal(PartitionOfUnity pu, PetscInt *npart);
+PetscErrorCode PUGetNPartitionsGlobal(PartitionOfUnity pu, PetscInt *npg);
 PetscErrorCode PUGetDimension(PartitionOfUnity pu, PetscInt *dim);
 PetscErrorCode PUGetGlobalToLocalElementMap(PartitionOfUnity pu, PetscInt **ptos);
 PetscErrorCode PUGetEpsilon(PartitionOfUnity pu, PetscReal *epsilon);

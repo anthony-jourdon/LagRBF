@@ -32,7 +32,7 @@ PetscErrorCode PointwiseInterpolation_AVX256_2D(
   __m256d        *interpolant_vec;
   PetscFunctionBeginUser;
   
-  PetscCall(PUGetNPartitions(pu,&npart));
+  PetscCall(PUGetNPartitionsLocal(pu,&npart));
   PetscCall(PUGetDimension(pu,&dim));
   PetscCall(PUGetGlobalToLocalElementMap(pu,&gtol_elidx));
   PetscCall(PUGetDMDALocal(pu,&da));
@@ -111,7 +111,6 @@ PetscErrorCode PointwiseInterpolation_AVX256_2D(
       /* Get the coefficients of that partition */
       PetscCall(PartitionGetCoefficientsMat(p,&X));
       PetscCall(MatDenseGetArray(X,&coeffs));
-      //epsilon = _mm256_set1_pd(p->epsilon);
       /* Initialize the interpolant */
       for (f=0; f<nfields; f++) { interpolant_vec[f] = _mm256_setzero_pd(); }
       /* Get the number of data points by chuck of 4 */
@@ -163,6 +162,7 @@ PetscErrorCode PointwiseInterpolation_AVX256_2D(
   PetscFunctionReturn(PETSC_SUCCESS);
 }
 
+/* TODO! */
 PetscErrorCode PointwiseInterpolation_AVX256_3D(
   PartitionOfUnity pu,
   Partition *partitions,
@@ -186,7 +186,7 @@ PetscErrorCode PointwiseInterpolation_AVX256_3D(
   __m256d        *interpolant_vec;
   PetscFunctionBeginUser;
   
-  PetscCall(PUGetNPartitions(pu,&npart));
+  PetscCall(PUGetNPartitionsLocal(pu,&npart));
   PetscCall(PUGetDimension(pu,&dim));
   PetscCall(PUGetGlobalToLocalElementMap(pu,&gtol_elidx));
   PetscCall(PUGetDMDALocal(pu,&da));
@@ -311,7 +311,7 @@ PetscErrorCode PointwiseInterpolation_AVX256(
   PetscInt       dim;
   PetscLogDouble time[2];
   long int       npoints_global,npoints_local;
-  double         time_max;
+  double         time_local,time_max;
   PetscFunctionBeginUser;
 
   /* Logging */
@@ -334,8 +334,8 @@ PetscErrorCode PointwiseInterpolation_AVX256(
   npoints_local = (long int)npoints_i;
   PetscCallMPI(MPI_Allreduce(&npoints_local,&npoints_global,1,MPI_LONG,MPI_SUM,PETSC_COMM_WORLD));
   /* Perform reduction on time to get the max */
-  time_max = (double)time[1]-(double)time[0];
-  PetscCallMPI(MPI_Allreduce(&time_max,&time_max,1,MPI_DOUBLE,MPI_MAX,PETSC_COMM_WORLD));
+  time_local = (double)time[1]-(double)time[0];
+  PetscCallMPI(MPI_Allreduce(&time_local,&time_max,1,MPI_DOUBLE,MPI_MAX,PETSC_COMM_WORLD));
   PetscCall(PetscPrintf(PETSC_COMM_WORLD,"[[ %s ]] interpolated %ld points in %1.4e seconds\n",PETSC_FUNCTION_NAME,npoints_global,time_max));
   PetscCall(PetscLogEventEnd(LAGRBF_PointwiseInterpolation_AVX256,0,0,0,0));
   PetscFunctionReturn(PETSC_SUCCESS);

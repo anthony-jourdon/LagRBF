@@ -158,14 +158,21 @@ PetscErrorCode PartitionCreate(PartitionOfUnity pu, Partition **partition)
 {
   Partition *p;
   PetscInt  n,npart;
+  PetscReal epsilon;
   PetscFunctionBeginUser;
   PetscPrintf(PETSC_COMM_WORLD,"[[ %s ]]\n",PETSC_FUNCTION_NAME);
 
-  PetscCall(PUGetNPartitions(pu,&npart));
+  PetscCall(PUGetNPartitionsLocal(pu,&npart));
   PetscCall(PetscCalloc1(npart,&p));
   for (n=0; n<npart; n++) { PetscCall(PartitionCreate_SinglePartition(&p[n])); }
   /* Create the inverse map connecting partition to cells */
   PetscCall(PartitionCreate_PartitionToCellInverseMapping(pu,p));
+  /* Set the index of each partition */
+  PetscCall(PartitionsSetIndex(pu,p));
+  /* Set the epsilon value for each partition */
+  PetscCall(PUGetEpsilon(pu,&epsilon));
+  for (n=0; n<npart; n++) { PetscCall(PartitionSetEpsilon(p[n],epsilon)); }
+
   *partition = p;
   PetscFunctionReturn(PETSC_SUCCESS);
 }
@@ -177,7 +184,7 @@ PetscErrorCode PartitionDestroy(PartitionOfUnity pu, Partition **partition)
   PetscFunctionBeginUser;
 
   if (!p) { PetscFunctionReturn(PETSC_SUCCESS); }
-  PetscCall(PUGetNPartitions(pu,&npart));
+  PetscCall(PUGetNPartitionsLocal(pu,&npart));
   for (n=0; n<npart; n++) { PetscCall(PartitionDestroy_SinglePartition(&p[n])); }
   PetscCall(PetscFree(p));
   *partition = NULL;
