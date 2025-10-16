@@ -35,11 +35,12 @@ PetscErrorCode LagRBF_AdvectionCtxCreate(LagRBFCtx ctx, AdvectionScheme scheme, 
 PetscErrorCode LagRBF_AdvectionCtxDestroy(LagRBFCtx ctx);
 PetscErrorCode AdvectionEvaluateVelocity(LagRBFCtx ctx, DM swi, DM swd);
 PetscErrorCode AdvectionCopyVelocityField(LagRBFCtx ctx, DM swarm);
-PetscErrorCode AdvectionSetTimestepVelocity(LagRBFCtx ctx, DM swarm);
+PetscErrorCode AdvectionInitializeTimestepVelocity(LagRBFCtx ctx, DM swarm);
 /* Setters */
 PetscErrorCode AdvectionSetTimeStep(AdvectionCtx ctx, PetscReal dt);
 PetscErrorCode AdvectionSetVelocityName(AdvectionCtx ctx,const char *name);
 PetscErrorCode AdvectionSetVelocityFunction(AdvectionCtx ctx, PetscErrorCode (*velocity_fn)(PetscReal*,PetscReal*,void*), void *user);
+PetscErrorCode AdvectionSetVelocityType(AdvectionCtx ctx, VelocityType vtype);
 /* Getters */
 PetscErrorCode AdvectionGetTimeStep(AdvectionCtx ctx, PetscReal *dt);
 PetscErrorCode AdvectionGetIntegrationOrder(AdvectionCtx ctx, PetscInt *order);

@@ -16,6 +16,7 @@ PetscErrorCode AdvectionExplicit_Scalar(
   PetscInt       np,d;
   PetscLogDouble time[2];
   long int       npoints_local,npoints_global;
+  double         time_local,time_max;
   PetscFunctionBeginUser;
   PetscCall(PetscTime(&time[0]));
   if (coords == x0) { SETERRQ(PETSC_COMM_WORLD, PETSC_ERR_ARG_WRONG, "coords and x0 point to same memory"); }
@@ -27,6 +28,8 @@ PetscErrorCode AdvectionExplicit_Scalar(
   PetscCall(PetscTime(&time[1]));
   npoints_local = (long int)npoints;
   PetscCallMPI(MPI_Allreduce(&npoints_local,&npoints_global,1,MPI_LONG,MPI_SUM,PETSC_COMM_WORLD));
+  time_local = (double)time[1]-(double)time[0];
+  PetscCallMPI(MPI_Allreduce(&time_local,&time_max,1,MPI_DOUBLE,MPI_MAX,PETSC_COMM_WORLD));
   PetscPrintf(PETSC_COMM_WORLD,"[[ %s ]]: Advected %ld points in %g seconds\n",PETSC_FUNCTION_NAME,npoints_global,time[1]-time[0]);
   PetscFunctionReturn(PETSC_SUCCESS);
 }
@@ -179,7 +182,7 @@ PetscErrorCode AdvectionExplicit_AVX256(
 {
   PetscLogDouble time[2];
   long int       npoints_local,npoints_global;
-  double         time_max;
+  double         time_local,time_max;
   PetscFunctionBeginUser;
   PetscCall(PetscTime(&time[0]));
   switch (dim) {
@@ -195,8 +198,8 @@ PetscErrorCode AdvectionExplicit_AVX256(
   PetscCall(PetscTime(&time[1]));
   npoints_local = (long int)npoints;
   PetscCallMPI(MPI_Allreduce(&npoints_local,&npoints_global,1,MPI_LONG,MPI_SUM,PETSC_COMM_WORLD));
-  time_max = (double)time[1]-(double)time[0];
-  PetscCallMPI(MPI_Allreduce(&time_max,&time_max,1,MPI_DOUBLE,MPI_MAX,PETSC_COMM_WORLD));
+  time_local = (double)time[1]-(double)time[0];
+  PetscCallMPI(MPI_Allreduce(&time_local,&time_max,1,MPI_DOUBLE,MPI_MAX,PETSC_COMM_WORLD));
   PetscPrintf(PETSC_COMM_WORLD,"[[ %s ]]: Advected %ld points in %1.4e seconds\n",PETSC_FUNCTION_NAME,npoints_global,time_max);
   PetscFunctionReturn(PETSC_SUCCESS);
 }
@@ -306,7 +309,7 @@ PetscErrorCode AdvectionEvaluateVelocityFunction(AdvectionCtx adv_ctx, DM swarm)
   PetscFunctionReturn(PETSC_SUCCESS);
 }
 
-PetscErrorCode AdvectionSetTimestepVelocity(LagRBFCtx ctx, DM swarm)
+PetscErrorCode AdvectionInitializeTimestepVelocity(LagRBFCtx ctx, DM swarm)
 {
   AdvectionCtx adv_ctx;
   PetscFunctionBeginUser;
@@ -328,12 +331,18 @@ PetscErrorCode AdvectionSetTimestepVelocity(LagRBFCtx ctx, DM swarm)
   PetscFunctionReturn(PETSC_SUCCESS);
 }
 
-/*
-  Evaluate the velocity field at the current particle positions.
-  Two options:
+/*@
+  AdvectionEvaluateVelocity - Evaluate the velocity field at the current particle positions.
+
+  Input Parameters:
++ ctx  - The `LagRBFCtx` context
+. swi  - The `DM` swarm containing the interpolation points (particles)
+- swd  - The `DM` swarm containing the data points (velocity field). Can be NULL if using an analytical velocity field.
+  Notes:
+  This function uses the velocity type specified in the `AdvectionCtx` to either:
     1) Use RBF interpolation to evaluate the velocity at the particle positions
     2) Use a user-defined function to evaluate the velocity at the particle positions
-*/
+@*/
 PetscErrorCode AdvectionEvaluateVelocity(LagRBFCtx ctx, DM swi, DM swd)
 {
   AdvectionCtx adv_ctx;
@@ -342,7 +351,7 @@ PetscErrorCode AdvectionEvaluateVelocity(LagRBFCtx ctx, DM swi, DM swd)
   switch (adv_ctx->velocity_type) {
     case INTERPOLATION:
     {
-      const char   *velocity_name;
+      const char *velocity_name;
       PetscCall(AdvectionGetVelocityName(adv_ctx,&velocity_name));
       PetscCall(RBFInterpolation(ctx,swi,swd,velocity_name));
     }
