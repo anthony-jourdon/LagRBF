@@ -2,6 +2,7 @@
 #include "lagrangian_rbf.h"
 #include "advection/advection_ctx.h"
 #include "advection/runge_kutta_1.h"
+#include "advection/runge_kutta_2.h"
 #include "advection/runge_kutta_4.h"
 #include "advection/dormand_prince.h"
 
@@ -15,7 +16,7 @@ const char *AdvectionSchemeNames[] = {
 
 PetscErrorCode (*create_scheme[])(AdvectionCtx) = {
   Advection_RK1Create,
-  NULL, // No RK2 implementation
+  Advection_RK2Create,
   Advection_RK4Create,
   Advection_DOPRICreate,
   0
@@ -26,7 +27,7 @@ PetscErrorCode AdvectionCtxCreate(AdvectionCtx *ctx)
   AdvectionCtx adv;
   PetscFunctionBeginUser;
   PetscCall(PetscNew(&adv));
-  adv->user = NULL;
+  adv->user          = NULL;
   adv->velocity_type = INTERPOLATION;
   adv->velocity_fn   = NULL;
   adv->user_fn       = NULL;
@@ -110,6 +111,14 @@ PetscErrorCode AdvectionGetIntegrationOrder(AdvectionCtx ctx, PetscInt *order)
   PetscFunctionBeginUser;
   PetscCheck(ctx, PETSC_COMM_SELF, PETSC_ERR_ARG_NULL, "Advection context is NULL");
   if (order) { *order = ctx->order; }
+  PetscFunctionReturn(PETSC_SUCCESS);
+}
+
+PetscErrorCode AdvectionSetVelocityType(AdvectionCtx ctx, VelocityType vtype)
+{
+  PetscFunctionBeginUser;
+  PetscCheck(ctx, PETSC_COMM_SELF, PETSC_ERR_ARG_NULL, "Advection context is NULL");
+  ctx->velocity_type = vtype;
   PetscFunctionReturn(PETSC_SUCCESS);
 }
 
