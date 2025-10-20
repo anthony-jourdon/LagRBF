@@ -11,7 +11,6 @@ struct _p_CellInfo {
   PetscInt  ndata;       // Number of data points connected to the cell (include neighbours)
   PetscInt  *data_idx;   // Data points indices connected to the cell (include neighbours)
 };
-typedef struct _p_CellInfo *CellInfo;
 
 PetscErrorCode CellInfoCreate(PartitionOfUnity pu, CellInfo **cellinfo);
 PetscErrorCode CellInfoDestroy(PartitionOfUnity pu, CellInfo **cellinfo);

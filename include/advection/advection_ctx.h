@@ -2,6 +2,7 @@
 #define __softname_advection_ctx_h
 
 #include <petsc.h>
+#include "lagrangian_rbf.h"
 
 typedef enum {
   RK1=0, // First order Runge-Kutta
@@ -14,9 +15,6 @@ typedef enum {
   INTERPOLATION=0, // Velocity field obtained by interpolation
   ANALYTICAL       // Velocity field obtained from an analytical function
 } VelocityType;
-
-typedef struct _p_AdvectionCtx *AdvectionCtx;
-typedef struct _p_LagRBFCtx *LagRBFCtx;
 
 struct _p_AdvectionCtx {
   AdvectionScheme scheme; // advection scheme to use

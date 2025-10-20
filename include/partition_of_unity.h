@@ -2,6 +2,7 @@
 #define __noname_partition_of_unity_h
 
 #include <petsc.h>
+#include "lagrangian_rbf.h"
 
 struct _p_PartitionOfUnity {
   DM        dap;   // Parallel DMDA mesh COMM_WORLD
@@ -16,8 +17,6 @@ struct _p_PartitionOfUnity {
   char      name[PETSC_MAX_PATH_LEN]; // Name of the parallel DMDA mesh
   char      sname[PETSC_MAX_PATH_LEN]; // Name of the sequential DMDA mesh
 };
-
-typedef struct _p_PartitionOfUnity *PartitionOfUnity;
 
 PetscErrorCode PUCreate(PartitionOfUnity *pu);
 PetscErrorCode PUCreateDMDA(PartitionOfUnity pu);

@@ -2,6 +2,7 @@
 #define __softname_partition_h
 
 #include <petsc.h>
+#include "lagrangian_rbf.h"
 #include "partition_of_unity.h"
 /* 
 Partition of Unity Method
@@ -18,11 +19,9 @@ struct _p_Partition {
   PetscReal epsilon; // Epsilon factor for the RBF kernel
 };
 
-typedef struct _p_Partition *Partition;
-
 PetscErrorCode PartitionCreate(PartitionOfUnity pu, Partition **partition);
 PetscErrorCode PartitionDestroy(PartitionOfUnity pu, Partition **partition);
-PetscErrorCode PartitionSetUp_All(Partition *partitions, PetscInt npart, DM swarm);
+PetscErrorCode LagRBF_PartitionsSetUp(LagRBFCtx ctx, DM swarm);
 /* Getters and setters */
 PetscErrorCode PartitionGetMap(Partition p, PetscInt *ncells, PetscInt **map);
 PetscErrorCode PartitionGetDataPointsIdx(Partition p, PetscInt *ndata, PetscInt **data_idx);
