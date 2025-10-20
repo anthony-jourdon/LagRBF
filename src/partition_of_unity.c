@@ -1,4 +1,5 @@
 #include <petsc.h>
+#include "lagrangian_rbf.h"
 #include "partition_of_unity.h"
 #include "partition.h"
 

@@ -2,7 +2,7 @@
 
 #include "partition_of_unity.h"
 #include "partition.h"
-#include "kernels_rbf.h"
+#include "kernels/kernels_rbf.h"
 #include "partition_solve.h"
 
 PetscLogEvent LAGRBF_PartitionAssembleRBFMatrix;
