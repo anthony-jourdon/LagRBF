@@ -30,7 +30,7 @@ static PetscErrorCode PartitionTestGetters(PartitionOfUnity pu, Partition *parti
   PetscInt i,npart;
   PetscFunctionBeginUser;
 
-  PetscCall(PUGetNPartitions(pu,&npart));
+  PetscCall(PUGetNPartitionsLocal(pu,&npart));
   PetscPrintf(PETSC_COMM_WORLD,"Number of partitions: %" PetscInt_FMT "\n",npart);
   
   for (i=0; i<npart; i++) {

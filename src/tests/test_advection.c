@@ -4,6 +4,7 @@ static const char help[] = "Testing advection schemes.\n\n";
 #include "lagrangian_rbf_init.h"
 #include "lagrangian_rbf.h"
 #include "partition_solve.h"
+#include "cell_info.h"
 #include "io_utils.h"
 #include "swarm/swarm_utils.h"
 #include "swarm/swarm_interp.h"
@@ -17,7 +18,7 @@ typedef struct {
   PetscInt  ncells;
 } ConvectionCtx;
 
-static PetscErrorCode AnalyticalRotationVelocity(PetscReal coor[], PetscReal velocity[])
+static PetscErrorCode AnalyticalRotationVelocity_2D(PetscReal coor[], PetscReal velocity[])
 {
   PetscReal r,theta;
   PetscReal radial_u  = 0.0;
@@ -27,6 +28,37 @@ static PetscErrorCode AnalyticalRotationVelocity(PetscReal coor[], PetscReal vel
   theta = PetscAtan2Real(coor[1], coor[0]);
   velocity[0] = radial_u * PetscCosReal(theta) - angular_u * r * PetscSinReal(theta);
   velocity[1] = radial_u * PetscSinReal(theta) + angular_u * r * PetscCosReal(theta);  
+  PetscFunctionReturn(PETSC_SUCCESS);
+}
+
+static PetscErrorCode AnalyticalRotationVelocity_3D(PetscReal coor[], PetscReal velocity[])
+{
+  PetscReal r,theta,phi;
+  PetscReal angular_u = 0.5;
+  PetscFunctionBeginUser;
+  r     = PetscSqrtReal(coor[0]*coor[0] + coor[1]*coor[1] + coor[2]*coor[2]);
+  theta = PetscAtan2Real(PetscSqrtReal(coor[0]*coor[0] + coor[1]*coor[1]), coor[2]);
+  phi   = PetscAtan2Real(coor[1], coor[0]);
+  velocity[0] = -angular_u * r * PetscSinReal(theta) * PetscSinReal(phi);
+  velocity[1] = angular_u * r * PetscSinReal(theta) * PetscCosReal(phi);
+  velocity[2] = 0.0;  // No vertical rotation
+  PetscFunctionReturn(PETSC_SUCCESS);
+}
+
+static PetscErrorCode AnalyticalRotationVelocity(PetscReal coor[], PetscReal velocity[], PetscInt dim)
+{
+  PetscFunctionBeginUser;
+  switch (dim) {
+  case 2:
+    AnalyticalRotationVelocity_2D(coor, velocity);
+    break;
+  case 3:
+    AnalyticalRotationVelocity_3D(coor, velocity);
+    break;
+  
+  default:
+    break;
+  }
   PetscFunctionReturn(PETSC_SUCCESS);
 }
 
@@ -67,23 +99,25 @@ PetscErrorCode PT_AnalyticalConvectionVelocity(PetscReal coor[], PetscReal veloc
 
 PetscErrorCode PT_AnalyticalRotationVelocity(PetscReal coor[], PetscReal velocity[], void *ctx)
 {
+  PetscInt dim = *((PetscInt*)ctx);
   PetscFunctionBeginUser;
-  PetscCall(AnalyticalRotationVelocity(coor,velocity));
+  PetscCall(AnalyticalRotationVelocity(coor,velocity,dim));
   PetscFunctionReturn(PETSC_SUCCESS);
 }
 
-static PetscErrorCode TestAdvectionSetVelocityFunction(AdvectionCtx ctx, PetscBool convection, ConvectionCtx *conv_ctx)
+static PetscErrorCode TestAdvectionSetVelocityFunction(AdvectionCtx ctx, PetscBool convection, ConvectionCtx *conv_ctx, PetscInt *dim)
 {
   PetscFunctionBeginUser;
   if (convection) {
+    PetscCheck(*dim == 2,PETSC_COMM_WORLD,PETSC_ERR_ARG_WRONG,"Convection analytical velocity is only implemented in 2D.");
     PetscCall(AdvectionSetVelocityFunction(ctx,PT_AnalyticalConvectionVelocity,(void *)conv_ctx));
   } else {
-    PetscCall(AdvectionSetVelocityFunction(ctx,PT_AnalyticalRotationVelocity,NULL));
+    PetscCall(AdvectionSetVelocityFunction(ctx,PT_AnalyticalRotationVelocity,(void *)dim));
   }
   PetscFunctionReturn(PETSC_SUCCESS);
 }
 
-static PetscErrorCode TestAdvection_SetAdvectionMode(AdvectionCtx ctx, ConvectionCtx *conv_ctx)
+static PetscErrorCode TestAdvection_SetAdvectionMode(AdvectionCtx ctx, ConvectionCtx *conv_ctx, PetscInt *dim)
 {
   PetscBool     analytical = PETSC_FALSE;
   PetscBool     convection = PETSC_FALSE;
@@ -92,7 +126,7 @@ static PetscErrorCode TestAdvection_SetAdvectionMode(AdvectionCtx ctx, Convectio
   if (analytical) {
     PetscPrintf(PETSC_COMM_WORLD,"[[ ADVECTION ]]: Using analytical function.\n");
     PetscCall(PetscOptionsGetBool(NULL,NULL,"-swarm_data_convection",&convection,NULL));
-    PetscCall(TestAdvectionSetVelocityFunction(ctx,convection,conv_ctx));
+    PetscCall(TestAdvectionSetVelocityFunction(ctx,convection,conv_ctx,dim));
   } else { /* default, nothing to do */
     PetscPrintf(PETSC_COMM_WORLD,"[[ ADVECTION ]]: Using interpolation from RBF.\n");
   }
@@ -147,6 +181,7 @@ static PetscErrorCode SwarmDataSetValues(DM swarm, PetscReal Radius[], PetscInt 
   
   PetscCall(DMSwarmGetLocalSize(swarm,&npoints));
   PetscCall(DMGetDimension(swarm,&dim));
+  if (convection) { PetscCheck(dim == 2,PETSC_COMM_WORLD,PETSC_ERR_ARG_WRONG,"Convection analytical velocity is only implemented in 2D."); }
   PetscCall(DMSwarmGetCellDMActive(swarm, &celldm));
   PetscCall(DMSwarmCellDMGetCoordinateFields(celldm, NULL, &coorFieldName));
   /* Access fields */
@@ -157,7 +192,7 @@ static PetscErrorCode SwarmDataSetValues(DM swarm, PetscReal Radius[], PetscInt 
     if (convection) {
       PetscCall(AnalyticalConvectionVelocity(&coords[dim*p],Radius,ncells,&fields[bs*p]));
     } else {
-      PetscCall(AnalyticalRotationVelocity(&coords[dim*p], &fields[bs*p]));
+      PetscCall(AnalyticalRotationVelocity(&coords[dim*p], &fields[bs*p], dim));
     }
   }
   /* Restore fields */
@@ -186,13 +221,13 @@ static PetscErrorCode CreateSwarmData(LagRBFCtx ctx, DM *sw)
   nn = dim;
   PetscCall(PetscOptionsGetIntArray(NULL,NULL,option_name,m,&nn,&found));
   PetscCheck(nn == dim,PETSC_COMM_WORLD,PETSC_ERR_ARG_SIZ,"Option -%s must have %" PetscInt_FMT " values, found: %" PetscInt_FMT "",option_name,dim,nn);
-  nn = dim;
+  nn = 2;
   PetscCall(PetscOptionsGetRealArray(NULL,prefix,"-Radius",Radius,&nn,&found));
-  PetscCheck(nn == dim,PETSC_COMM_WORLD,PETSC_ERR_ARG_SIZ,"Option -%sRadius must have %" PetscInt_FMT " values, found: %" PetscInt_FMT "",prefix,dim,nn);
+  PetscCheck(nn == 2,PETSC_COMM_WORLD,PETSC_ERR_ARG_SIZ,"Option -%sRadius must have %" PetscInt_FMT " values, found: %" PetscInt_FMT "",prefix,dim,nn);
   ncells = 4;
   PetscCall(PetscOptionsGetInt(NULL,prefix,"-ncells",&ncells,NULL));
   convection = PETSC_FALSE;
-  PetscOptionsGetBool(NULL,prefix,"-convection",&convection,NULL);
+  PetscCall(PetscOptionsGetBool(NULL,prefix,"-convection",&convection,NULL));
 
   /* The following automatically removes the points not living inside the DMCell */
   min[0] = Radius[0]; max[0] = Radius[1];
@@ -214,40 +249,12 @@ static PetscErrorCode CreateSwarmInterp(LagRBFCtx ctx, DM *sw)
   const char       *dm_prefix;
   PetscFunctionBeginUser;
   /* Create interpolation points */
-#if 0
-  PetscCall(LagRBFGetPartitionOfUnity(ctx,&pu));
-  PetscCall(PUGetDMDA(pu,&dap));
-  PetscCall(PUGetDimension(pu,&dim));
-  PetscCall(DMCreate(PetscObjectComm((PetscObject)dap), &swarm)); // COMM_WORLD
-  PetscCall(DMSetType(swarm, DMSWARM));
-  PetscCall(DMSetDimension(swarm, dim));
-  PetscCall(DMSwarmSetType(swarm, DMSWARM_PIC)); // This sets automatically the migrate type: DMSWARM_MIGRATE_DMCELLNSCATTER
-  PetscCall(DMSwarmSetCellDM(swarm, dap));
-  PetscSNPrintf(dm_name, PETSC_MAX_PATH_LEN-1, "swarm_interp");
-  PetscObjectSetName((PetscObject)swarm,dm_name);
-  PetscSNPrintf(dm_prefix, PETSC_MAX_PATH_LEN-1, "%s_",dm_name);
-  PetscCall(DMSetOptionsPrefix(swarm,dm_prefix));
-  PetscCall(DMSetFromOptions(swarm));
-  
-  PetscCall(DMSwarmInitializeFieldRegister(swarm));
-  /* Unique point index across all ranks */
-  PetscCall(DMSwarmRegisterPetscDatatypeField(swarm,"pidx",1,PETSC_INT));
-  /* Weights for interpolation */
-  PetscCall(DMSwarmRegisterPetscDatatypeField(swarm,"weights",pu->npart,PETSC_REAL));
-  /* Fields to interpolate, also contain the velocity even in advection mode */
-  PetscCall(DMSwarmRegisterPetscDatatypeField(swarm,"fields",ctx->n_ifields,PETSC_REAL));
-  /* If advection is required, special fields are added */
-  if (ctx->advection) {
-    PetscCall(SwarmInterpCreateAdvectionFields(ctx, swarm));
-  }
-  PetscCall(DMSwarmFinalizeFieldRegister(swarm));
-  PetscCall(DMSetUp(swarm));
-#endif
   PetscCall(SwarmInterpCreate(ctx,&swarm));
   PetscCall(DMGetOptionsPrefix(swarm,&dm_prefix));
+  PetscCall(DMGetDimension(swarm,&dim));
   nn = 2;
   PetscCall(PetscOptionsGetRealArray(NULL,dm_prefix,"-Radius",Radius,&nn,NULL));
-  nn = 2;
+  nn = dim;
   PetscCall(PetscOptionsGetIntArray(NULL,dm_prefix,"-n",nip,&nn,NULL));
   /* The following automatically removes the points not living inside the DMCell */
   min[0] = Radius[0]; max[0] = Radius[1];
@@ -296,26 +303,9 @@ static PetscErrorCode Test_advection()
 
   PetscCall(PartitionOfUnityMeshView(pu));
   PetscCall(PartitionOfUnityMeshView_Seq(pu));
-#if 1
+
   PetscCall(PUGetEpsilon(pu,&epsilon));
   PetscPrintf(PETSC_COMM_WORLD,"Epsilon from PU: %g\n",epsilon);
-
-  PetscCall(DMDAGetInfo(pu->dap,NULL,&M[0],&M[1],&M[2],NULL,NULL,NULL,NULL,NULL,NULL,NULL,NULL,NULL));
-  global_npart = 1;
-  for (d=0; d<pu->dim; d++) global_npart *= M[d];
-  /* Set epsilon parameter */
-  box_length = 0.0;
-  for (d=0; d<pu->dim; d++) {
-    box_length = PetscMax(box_length,(pu->L[d] - pu->O[d]));
-  }
-  overlap = 1.5*box_length;
-  radius  = overlap / PetscPowReal(global_npart,1.0/pu->dim);
-  epsilon = 1.0 / radius;
-   PetscPrintf(PETSC_COMM_WORLD,"Epsilon for partitions: %g\n",epsilon);
-  for (k=0; k<pu->npart; k++) { 
-    PetscCall(PartitionSetEpsilon(partitions[k],epsilon)); // set the epsilon for the RBF kernel
-  } 
-  PetscCall(PartitionsSetIndex(pu,partitions));
   PetscCall(CreateSwarmData(ctx, &ctx->swd));
   swarm_data = ctx->swd;
   PetscCall(SwarmOutput(ctx, swarm_data, 1, data_output, PETSC_FALSE));
@@ -328,11 +318,12 @@ static PetscErrorCode Test_advection()
   conv_ctx.ncells = ncells;
   conv_ctx.Radius[0] = Radius[0];
   conv_ctx.Radius[1] = Radius[1];
-  PetscCall(TestAdvection_SetAdvectionMode(adv_ctx, &conv_ctx));
+  PetscCall(TestAdvection_SetAdvectionMode(adv_ctx, &conv_ctx, &pu->dim));
 
   /* Set up cell information */
   PetscCall(CellInfoSetUp(pu,cellinfo,swarm_data));
-  PetscCall(PartitionSetUp_All(partitions, pu->npart, swarm_data));
+  //PetscCall(PartitionSetUp_All(partitions, pu->npart, swarm_data));
+  PetscCall(LagRBF_PartitionsSetUp(ctx,swarm_data));
 
   PetscCall(CreateSwarmInterp(ctx, &ctx->swi));
   swarm_interp = ctx->swi;
@@ -340,7 +331,7 @@ static PetscErrorCode Test_advection()
   PetscCall(PartitionSolveInterpolationCoefficients(pu,partitions,swarm_data,"fields"));
   PetscCall(RBFInterpolation(ctx,swarm_interp,swarm_data,"fields"));
   /* Copy the first dim fields into "velocity" */
-  PetscCall(AdvectionSetTimestepVelocity(ctx,swarm_interp));
+  PetscCall(AdvectionInitializeTimestepVelocity(ctx,swarm_interp));
   /* Output */
   PetscCall(SwarmOutput(ctx,swarm_interp,3,output_fields,PETSC_FALSE));
   output_frequency = 100;
@@ -362,7 +353,7 @@ static PetscErrorCode Test_advection()
     /* Interpolate */
     PetscCall(PartitionSolveInterpolationCoefficients(pu,partitions,swarm_data,"fields"));
     PetscCall(RBFInterpolation(ctx,swarm_interp,swarm_data,"fields"));
-    PetscCall(AdvectionSetTimestepVelocity(ctx,swarm_interp));
+    PetscCall(AdvectionInitializeTimestepVelocity(ctx,swarm_interp));
     /* Output */
     if (step % output_frequency == 0) {
       PetscCall(SwarmOutput(ctx,swarm_interp,3,output_fields,PETSC_FALSE));
@@ -388,83 +379,9 @@ static PetscErrorCode Test_advection()
   /* Free memory */
   //PetscCall(DMDestroy(&swarm_interp));
   //PetscCall(DMDestroy(&swarm_data));
-#endif
-  PetscCall(LagRBFCtxDestroy(&ctx));
-
-  PetscFunctionReturn(PETSC_SUCCESS);
-}
-
-PetscErrorCode dumb()
-{
-  LagRBFCtx        ctx;
-  PartitionOfUnity pu;
-  AdvectionCtx     adv_ctx;
-  ConvectionCtx    conv_ctx;
-  CellInfo         *cellinfo;
-  Partition        *partitions;
-  DM               swarm_data,swarm_interp;
-  PetscInt         k,nn,ncells;
-  PetscReal        epsilon;
-  PetscReal        Radius[] = {1.0,2.0};
-  PetscBool        exists;
-  const char       *data_output[] = {"fields"};
-  const char       *output_fields[] = {"pidx","fields"};
-  PetscFunctionBeginUser;
-  PetscCall(LagRBFCtxCreate(&ctx));
-  PetscCall(LagRBFSetFromOptions(ctx));
-  PetscCall(TestDirectory(ctx->output_dir,'w',&exists));
-  if (!exists) { PetscCall(CreateDirectory(ctx->output_dir)); }
-  //p->output_dir
-  ctx->mtype = GEODYNAMICS; // Set the model type
-  PetscCall(LagRBF_PartitionOfUnityCreate(ctx));
-  PetscCall(LagRBF_PartitionCreate(ctx));
-  PetscCall(LagRBF_CellInfoCreate(ctx));
-
-  PetscCall(LagRBFGetPartitionOfUnity(ctx,&pu));
-  PetscCall(LagRBFGetPartitions(ctx,&partitions));
-  PetscCall(LagRBFGetCellInfo(ctx,&cellinfo));
-
-  PetscCall(PartitionOfUnityMeshView(pu));
-  PetscCall(PartitionOfUnityMeshView_Seq(pu));
-
-  PetscCall(PUGetEpsilon(pu,&epsilon));
-  for (k=0; k<pu->npart; k++) { 
-    PetscCall(PartitionSetEpsilon(partitions[k],epsilon)); // set the epsilon for the RBF kernel
-  } 
-  PetscCall(PartitionsSetIndex(pu,partitions));
-  PetscCall(CreateSwarmData(ctx, &ctx->swd));
-  swarm_data = ctx->swd;
-  PetscCall(SwarmOutput(ctx, swarm_data, 1, data_output, PETSC_FALSE));
-
-  /* Set advection mode */
-  PetscCall(LagRBFGetAdvectionCtx(ctx,&adv_ctx));
-  nn = 2;
-  PetscOptionsGetRealArray(NULL,NULL,"-swarm_data_Radius",Radius,&nn,NULL);
-  PetscOptionsGetInt(NULL,NULL,"-swarm_data_ncells",&ncells,NULL);
-  conv_ctx.ncells = ncells;
-  conv_ctx.Radius[0] = Radius[0];
-  conv_ctx.Radius[1] = Radius[1];
-  PetscCall(TestAdvection_SetAdvectionMode(adv_ctx, &conv_ctx));
-  /* Create interpolation swarm */
-  PetscCall(CreateSwarmInterp(ctx, &ctx->swi));
-  swarm_interp = ctx->swi;
-  #if 1
-  /* Set up cell information */
-  PetscCall(CellInfoSetUp(pu,cellinfo,swarm_data));
-  PetscCall(PartitionSetUp_All(partitions, pu->npart, swarm_data));
-
-  /* Interpolate */
-  PetscCall(PartitionSolveInterpolationCoefficients(pu,partitions,swarm_data,"fields"));
-  PetscCall(RBFInterpolation(ctx,swarm_interp,swarm_data,"fields"));
-  /* Copy the first dim fields into "velocity" */
-  PetscCall(AdvectionSetTimestepVelocity(ctx,swarm_interp));
-  #endif
-  /* Output */
-  PetscCall(SwarmOutput(ctx,swarm_interp,2,output_fields,PETSC_FALSE));
-
-  PetscCall(DMSwarmMigrate(swarm_interp,PETSC_TRUE)); // update cell ids and MPI ranks
 
   PetscCall(LagRBFCtxDestroy(&ctx));
+
   PetscFunctionReturn(PETSC_SUCCESS);
 }
 
@@ -474,7 +391,6 @@ int main(int argc, char *argv[])
   PetscCall(LagRBFInitialize(&argc,&argv,0,help));
 
   PetscCall(Test_advection());
-  //PetscCall(dumb());
 
   PetscCall(PetscFinalize());
   
