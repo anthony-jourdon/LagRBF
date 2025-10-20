@@ -5,6 +5,8 @@
 #include "swarm/swarm_utils.h"
 #include "io_utils.h"
 
+PetscLogEvent LAGRBF_SphericalCoordinates_Halton;
+
 PetscErrorCode CopyContiguousBlockData_Generic(
   void      *dest,        // destination array
   void      *source,      // source array
@@ -361,6 +363,7 @@ static PetscErrorCode DMSwarmSetPointsSphericalCoordinates_Halton(DM sw, PetscRe
   PetscErrorCode    (*paramsFn)(PetscInt,PetscReal*,PetscReal*,PetscReal*,PetscReal*) = NULL;
   PetscFunctionBeginUser;
   PetscPrintf(PETSC_COMM_WORLD,"[[ %s ]]\n",PETSC_FUNCTION_NAME);
+  PetscCall(PetscLogEventBegin(LAGRBF_SphericalCoordinates_Halton,0,0,0,0));
   DMSWARMPICVALID(sw);
   PetscCall(DMSwarmGetCellDMActive(sw,&celldm));
   PetscCall(DMSwarmCellDMGetCoordinateFields(celldm, &Nfc, &coordFields));
@@ -494,6 +497,7 @@ static PetscErrorCode DMSwarmSetPointsSphericalCoordinates_Halton(DM sw, PetscRe
 
   PetscCall(PetscSFDestroy(&sfcell));
   PetscCall(VecDestroy(&pos));
+  PetscCall(PetscLogEventEnd(LAGRBF_SphericalCoordinates_Halton,0,0,0,0));
   PetscFunctionReturn(PETSC_SUCCESS);
 }
 
