@@ -3,7 +3,8 @@
 #include "partition_of_unity.h"
 #include "partition.h"
 #include "partition_solve.h"
-#include "kernels_rbf.h"
+#include "cell_info.h"
+#include "kernels/kernels_rbf.h"
 #if defined(__AVX__)
 #include "interpolation_avx.h"
 #endif
@@ -14,6 +15,7 @@ PetscErrorCode PointwiseInterpolation_Scalar(
   PartitionOfUnity pu,
   Partition        *partitions,
   CellInfo         *cellinfo,
+  KernelType       ktype,
   PetscInt         nfields,
   PetscInt         npoints_i,
   PetscInt         *cellid_i,
@@ -30,6 +32,7 @@ PetscErrorCode PointwiseInterpolation_Scalar(
   const PetscInt *elidx;
   PetscReal      epsilon;
   PetscReal      *interpolant;
+  PetscReal      (*kernel_fn)(PetscReal,PetscReal);
   PetscLogDouble time[2];
   long int       npoints_local,npoints_global;
   double         time_local,time_max;
@@ -37,6 +40,27 @@ PetscErrorCode PointwiseInterpolation_Scalar(
   /* Logging */
   PetscCall(PetscTime(&time[0]));
   PetscCall(PetscLogEventBegin(LAGRBF_PointwiseInterpolation_Scalar,0,0,0,0));
+
+  switch (ktype) {
+    case KERNEL_LINEAR:
+      kernel_fn = KernelLinear;
+      break;
+    case KERNEL_WENDLAND_C0:
+      kernel_fn = KernelWendlandC0;
+      break;
+    case KERNEL_WENDLAND_C2:
+      kernel_fn = KernelWendlandC2;
+      break;
+    case KERNEL_WENDLAND_C4:
+      kernel_fn = KernelWendlandC4;
+      break;
+    case KERNEL_WENDLAND_C6:
+      kernel_fn = KernelWendlandC6;
+      break;
+    default:
+      SETERRQ(PETSC_COMM_SELF,PETSC_ERR_ARG_OUTOFRANGE,"Unknown kernel type: %" PetscInt_FMT,ktype);
+      break;
+  }
 
   PetscCall(PUGetNPartitionsLocal(pu,&npart));
   PetscCall(PUGetEpsilon(pu,&epsilon));
@@ -55,20 +79,21 @@ PetscErrorCode PointwiseInterpolation_Scalar(
     cidx       = cellid_i[np];     // parallel DMDA
     local_cidx = gtol_elidx[cidx]; // local sequential DMDA
     /* Cell info of this cell */
-    ci   = cellinfo[local_cidx];
+    ci = cellinfo[local_cidx];
     PetscCall(CellInfoGetDataPointsIdx(ci,&ci_ndata,&ci_data_idx));
     if (ci_ndata == 0) continue; // no data points in this cell neighbourhood, skip
     /* Precompute the RBF values for all data points connected to that cell */
     for (nd=0; nd<ci_ndata; nd++) {
-      PetscInt  d;
+      PetscInt  d,dpidx;
       PetscReal dist;
+      dpidx = ci_data_idx[nd];
       /* Compute the RBF value for the interpolation point */
       dist = 0.0;
       for (d=0; d<dim; d++) {
-        PetscReal dx = coords_i[dim*np + d] - coords_d[dim*ci_data_idx[nd] + d];
+        PetscReal dx = coords_i[dim*np + d] - coords_d[dim*dpidx + d];
         dist += dx * dx;
       }
-      rbf_d[ ci_data_idx[nd] ] = KernelWendlandC2(PetscSqrtReal(dist), epsilon);
+      rbf_d[dpidx] = kernel_fn(PetscSqrtReal(dist), epsilon);
     }
     /* Initialize the interpolation value for the point p */
     PetscCall(PetscArrayzero(&values_i[nfields*np],nfields));
@@ -79,10 +104,11 @@ PetscErrorCode PointwiseInterpolation_Scalar(
       PetscInt  puidx,ndata;
       PetscInt  *data_idx;
       PetscReal *coeffs;
+      PetscReal weight;
 
       /* Get the partition index */
-      puidx      = elidx[nen*local_cidx + k];
-      p          = partitions[puidx];
+      puidx = elidx[nen*local_cidx + k];
+      p     = partitions[puidx];
       PetscCall(PartitionGetDataPointsIdx(p,&ndata,&data_idx));
       if (ndata == 0) continue; // no data points in this partition, skip
       /* Get the coefficients of that partition */
@@ -90,15 +116,16 @@ PetscErrorCode PointwiseInterpolation_Scalar(
       PetscCall(MatDenseGetArray(X,&coeffs));
       PetscCall(PetscArrayzero(interpolant,nfields));
       for (nd=0; nd<ndata; nd++) {
+        PetscReal rbf = rbf_d[ data_idx[nd] ];
         for (f=0; f<nfields; f++) {
           /* multiply the RBF value by the coefficient and accumulate the RBF value for each field  */
-          interpolant[f] += rbf_d[ data_idx[nd] ] * coeffs[f*ndata + nd];
-          //interpolant[f] += rbf * coeffs[f*ndata + nd];
+          interpolant[f] += rbf * coeffs[f*ndata + nd];
         }
       }
+      weight = weights[npart*np + puidx];
       for (f=0; f<nfields; f++) {
         /* Normalize the interpolant with the weights */
-        values_i[nfields*np + f] += interpolant[f] * weights[npart*np + puidx];
+        values_i[nfields*np + f] += interpolant[f] * weight;
       }
       /* Restore the coefficients array */
       PetscCall(MatDenseRestoreArray(X,&coeffs));
@@ -126,6 +153,7 @@ PetscErrorCode RBFInterpolation(LagRBFCtx ctx, DM swi, DM swd, const char *field
   PartitionOfUnity pu;
   Partition        *partitions;
   CellInfo         *cellinfo = NULL;
+  KernelType       ktype;
   PetscInt         npoints_i,nfields;
   PetscInt         *cellid_i;
   PetscReal        *coords_i,*coords_d,*weights,*values_i,*rbf_d;
@@ -135,6 +163,7 @@ PetscErrorCode RBFInterpolation(LagRBFCtx ctx, DM swi, DM swd, const char *field
   PetscCall(LagRBFGetPartitionOfUnity(ctx,&pu));
   PetscCall(LagRBFGetPartitions(ctx,&partitions));
   PetscCall(LagRBFGetCellInfo(ctx,&cellinfo));
+  PetscCall(LagRBFGetKernelType(ctx,&ktype));
   /* Interpolation points */
   PetscCall(DMSwarmGetLocalSize(swi,&npoints_i));
   /* Setup for coords */
@@ -162,6 +191,7 @@ PetscErrorCode RBFInterpolation(LagRBFCtx ctx, DM swi, DM swd, const char *field
     pu,
     partitions,
     cellinfo,
+    ktype,
     nfields,
     npoints_i,
     cellid_i,
@@ -176,6 +206,7 @@ PetscErrorCode RBFInterpolation(LagRBFCtx ctx, DM swi, DM swd, const char *field
     pu,
     partitions,
     cellinfo,
+    ktype,
     nfields,
     npoints_i,
     cellid_i,
