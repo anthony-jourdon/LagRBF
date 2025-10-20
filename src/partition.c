@@ -1,7 +1,6 @@
-#include "partition_of_unity.h"
 #include "partition.h"
 #include "partition_solve.h"
-#include "kernels_rbf.h"
+#include "kernels/kernels_rbf.h"
 
 /*
   Create the inverse map from partition to cells.
@@ -239,16 +238,43 @@ static PetscErrorCode PartitionCreateCoefficientsMat(Partition p, PetscInt nfiel
   PetscFunctionReturn(PETSC_SUCCESS);
 }
 
-PetscErrorCode PartitionSetUp_All(Partition *partitions, PetscInt npart, DM swarm)
+PetscErrorCode LagRBF_PartitionsSetUp(LagRBFCtx ctx, DM swarm)
 {
-  DMSwarmCellDM celldm;
-  PetscInt      n,dim,nfields;
-  PetscReal     *coords,*values;
-  const char    **coordFieldsName;
+  PartitionOfUnity pu;
+  Partition        *partitions;
+  KernelType       ktype;
+  DMSwarmCellDM    celldm;
+  PetscInt         n,npart,dim,nfields;
+  PetscReal        (*kernel_fn)(PetscReal,PetscReal);
+  PetscReal        *coords,*values;
+  const char       **coordFieldsName;
   PetscFunctionBeginUser;
   PetscPrintf(PETSC_COMM_WORLD,"[[ %s ]]\n",PETSC_FUNCTION_NAME);
-
   PetscCheck(swarm,PETSC_COMM_SELF,PETSC_ERR_ARG_NULL,"Swarm is NULL. Create the data swarm first.");
+  PetscCall(LagRBFGetPartitionOfUnity(ctx,&pu));
+  PetscCall(LagRBFGetPartitions(ctx,&partitions));
+  PetscCall(PUGetNPartitionsLocal(pu,&npart));
+  PetscCall(LagRBFGetKernelType(ctx,&ktype));
+  switch (ktype) {
+    case KERNEL_LINEAR:
+      kernel_fn = KernelLinear;
+      break;
+    case KERNEL_WENDLAND_C0:
+      kernel_fn = KernelWendlandC0;
+      break;
+    case KERNEL_WENDLAND_C2:
+      kernel_fn = KernelWendlandC2;
+      break;
+    case KERNEL_WENDLAND_C4:
+      kernel_fn = KernelWendlandC4;
+      break;
+    case KERNEL_WENDLAND_C6:
+      kernel_fn = KernelWendlandC6;
+      break;
+    default:
+      SETERRQ(PETSC_COMM_SELF,PETSC_ERR_ARG_OUTOFRANGE,"Unknown kernel type: %" PetscInt_FMT,ktype);
+      break;
+  }
   /* Swarm */
   PetscCall(DMSwarmSortGetAccess(swarm));
   PetscCall(DMGetDimension(swarm,&dim));
@@ -264,17 +290,16 @@ PetscErrorCode PartitionSetUp_All(Partition *partitions, PetscInt npart, DM swar
       - create the matrix to hold the solution
       - fill and factor the RBF matrix for the partition
   */
-  for (n=0; n<npart; n++) {
+ for (n=0; n<npart; n++) {
     Partition p = partitions[n];
     PetscCall(PartitionFillDataPointsIdx(p,swarm));
     PetscCall(PartitionCreateCoefficientsMat(p,nfields));
-    PetscCall(PartitionSetUpRBFMatrix(p,dim,coords,KernelWendlandC2));
+    PetscCall(PartitionSetUpRBFMatrix(p,dim,coords,kernel_fn));
   }
   /* Restore */
   PetscCall(DMSwarmSortRestoreAccess(swarm));
   PetscCall(DMSwarmRestoreField(swarm,coordFieldsName[0],NULL,NULL,(void **)&coords));
   PetscCall(DMSwarmRestoreField(swarm,"fields",&nfields,NULL,(void **)&values));
-  
   PetscFunctionReturn(PETSC_SUCCESS);
 }
 
