@@ -1,16 +1,16 @@
+#ifndef __softname_kernels_rbf_avx_h
+#define __softname_kernels_rbf_avx_h
 
-#ifndef __softname_kernels_rbf_h
-#define __softname_kernels_rbf_h
-
-#include <petsc.h>
-
-PetscReal KernelWendlandC0(PetscReal r, PetscReal epsilon);
-PetscReal KernelWendlandC2(PetscReal r, PetscReal epsilon);
-PetscReal KernelWendlandC4(PetscReal r, PetscReal epsilon);
-PetscReal KernelWendlandC6(PetscReal r, PetscReal epsilon);
-
-#if defined(__AVX__)
 #include <immintrin.h>
+
+inline __m256d KernelLinear_AVX256(__m256d r, __m256d epsilon)
+{
+  __m256d u;
+  __m256d one = _mm256_set1_pd(1.0);
+  u = _mm256_sub_pd(one, _mm256_mul_pd(epsilon, r)); // u = 1 - epsilon * r
+  return u;
+}
+
 inline __m256d KernelWendlandC2_AVX256(__m256d r, __m256d epsilon)
 {
   __m256d u,u2,u4,four_u,inner,rbf,mask;
@@ -28,6 +28,5 @@ inline __m256d KernelWendlandC2_AVX256(__m256d r, __m256d epsilon)
   rbf    = _mm256_blendv_pd(_mm256_setzero_pd(), rbf, mask);  // apply mask to zero out values where u < 0
   return rbf;
 }
-#endif
 
 #endif
