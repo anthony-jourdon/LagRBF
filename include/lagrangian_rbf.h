@@ -2,10 +2,13 @@
 #define __softname_lagrangian_rbf_h
 
 #include <petsc.h>
-#include "partition_of_unity.h"
-#include "partition.h"
-#include "advection/advection_ctx.h"
-#include "cell_info.h"
+#include "kernels/kernels_rbf.h"
+
+typedef struct _p_LagRBFCtx        *LagRBFCtx;
+typedef struct _p_Partition        *Partition;
+typedef struct _p_PartitionOfUnity *PartitionOfUnity;
+typedef struct _p_AdvectionCtx     *AdvectionCtx;
+typedef struct _p_CellInfo         *CellInfo;
 
 typedef enum {
   GEODYNAMICS = 0, // Geodynamics model
@@ -19,6 +22,7 @@ struct _p_LagRBFCtx {
   AdvectionCtx     adv_ctx;  // Advection context
   Partition        *partitions; // Array of partitions structs
   CellInfo         *cellinfo; // Array of cell info structs
+  KernelType       kernel_type;
   DM               swd,swi; // Swarm for data points and interpolation points
   PetscInt         n_ifields; // Number of fields to interpolate
   PetscInt         n_pfields; // Number of fields that are not resulting from interpolation
@@ -29,8 +33,6 @@ struct _p_LagRBFCtx {
   char             output_dir[PETSC_MAX_PATH_LEN]; // Directory to write output files
 };
 
-typedef struct _p_LagRBFCtx *LagRBFCtx;
-
 PetscErrorCode LagRBFCtxCreate(LagRBFCtx *ctx);
 PetscErrorCode LagRBFCtxDestroy(LagRBFCtx *ctx);
 PetscErrorCode LagRBF_PartitionOfUnityCreate(LagRBFCtx ctx);
@@ -39,10 +41,12 @@ PetscErrorCode LagRBF_CellInfoCreate(LagRBFCtx ctx);
 PetscErrorCode LagRBFSetFromOptions(LagRBFCtx ctx);
 PetscErrorCode LagRBF_AdvectSwarm(LagRBFCtx ctx, DM swi, DM swd);
 /* Setters */
+PetscErrorCode LagRBFSetKernelType(LagRBFCtx ctx, KernelType type);
 PetscErrorCode LagRBFSetStep(LagRBFCtx ctx, PetscInt step);
 PetscErrorCode LagRBFSetTimeStep(LagRBFCtx ctx, PetscReal dt);
 PetscErrorCode LagRBFSetTime(LagRBFCtx ctx, PetscReal time);
 /* Getter */
+PetscErrorCode LagRBFGetKernelType(LagRBFCtx ctx, KernelType *type);
 PetscErrorCode LagRBFGetPartitionOfUnity(LagRBFCtx ctx, PartitionOfUnity *pu);
 PetscErrorCode LagRBFGetPartitions(LagRBFCtx ctx, Partition **partitions);
 PetscErrorCode LagRBFGetCellInfo(LagRBFCtx ctx, CellInfo **cellinfo);

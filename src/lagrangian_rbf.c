@@ -1,5 +1,10 @@
 #include <petsc.h>
 #include "lagrangian_rbf.h"
+#include "partition_of_unity.h"
+#include "partition.h"
+#include "advection/advection_ctx.h"
+#include "cell_info.h"
+#include "kernels/kernels_rbf.h"
 
 PetscErrorCode LagRBFCtxCreate(LagRBFCtx *ctx)
 {
@@ -7,19 +12,20 @@ PetscErrorCode LagRBFCtxCreate(LagRBFCtx *ctx)
   PetscFunctionBeginUser;
 
   PetscCall(PetscNew(&p));
-  p->pu         = NULL;
-  p->adv_ctx    = NULL; 
-  p->mtype      = GEODYNAMICS; // Default model type
-  p->partitions = NULL;
-  p->cellinfo   = NULL;
-  p->swd        = NULL;
-  p->swi        = NULL;
-  p->n_ifields  = 0;
-  p->n_pfields  = 0;
-  p->step       = 0;
-  p->time       = 0.0;
-  p->restart    = PETSC_FALSE;
-  p->advection  = PETSC_FALSE;
+  p->pu          = NULL;
+  p->adv_ctx     = NULL; 
+  p->mtype       = GEODYNAMICS; // Default model type
+  p->partitions  = NULL;
+  p->cellinfo    = NULL;
+  p->kernel_type = KERNEL_LINEAR;
+  p->swd         = NULL;
+  p->swi         = NULL;
+  p->n_ifields   = 0;
+  p->n_pfields   = 0;
+  p->step        = 0;
+  p->time        = 0.0;
+  p->restart     = PETSC_FALSE;
+  p->advection   = PETSC_FALSE;
   PetscCall(PetscSNPrintf(p->output_dir, PETSC_MAX_PATH_LEN-1, "output"));
 
   *ctx = p;
@@ -78,12 +84,15 @@ PetscErrorCode LagRBF_CellInfoCreate(LagRBFCtx ctx)
 
 PetscErrorCode LagRBFSetFromOptions(LagRBFCtx ctx)
 {
-  PetscInt scheme;
+  PetscInt  scheme,kernel_type;
+  PetscBool found;
   char option_name[PETSC_MAX_PATH_LEN],velocity_name[PETSC_MAX_PATH_LEN];
   PetscFunctionBeginUser;
   PetscSNPrintf(option_name, PETSC_MAX_PATH_LEN-1, "-n_interpolation_fields");
   PetscCall(PetscOptionsGetInt(NULL, NULL, option_name, &ctx->n_ifields, NULL));
   PetscCall(PetscOptionsGetString(NULL,NULL,"-output_path",ctx->output_dir,PETSC_MAX_PATH_LEN-1,NULL));
+  PetscCall(PetscOptionsGetInt(NULL,NULL,"-kernel_type",&kernel_type,&found));
+  if (found) { PetscCall(LagRBFSetKernelType(ctx,(KernelType)kernel_type)); }
   /* Check if advection is required, if not return */
   PetscCall(PetscOptionsGetBool(NULL,NULL,"-advection",&ctx->advection,NULL));
   if (!ctx->advection) { PetscFunctionReturn(PETSC_SUCCESS); }
@@ -126,6 +135,21 @@ PetscErrorCode LagRBFSetTime(LagRBFCtx ctx, PetscReal time)
 {
   PetscFunctionBeginUser;
   ctx->time = time;
+  PetscFunctionReturn(PETSC_SUCCESS);
+}
+
+PetscErrorCode LagRBFSetKernelType(LagRBFCtx ctx, KernelType type)
+{
+  PetscFunctionBeginUser;
+  ctx->kernel_type = type;
+  PetscFunctionReturn(PETSC_SUCCESS);
+}
+
+PetscErrorCode LagRBFGetKernelType(LagRBFCtx ctx, KernelType *type)
+{
+  PetscFunctionBeginUser;
+  PetscCheck(ctx, PETSC_COMM_SELF, PETSC_ERR_ARG_NULL, "LagRBFCtx context is NULL.");
+  if (type) { *type = ctx->kernel_type; }
   PetscFunctionReturn(PETSC_SUCCESS);
 }
 
