@@ -64,9 +64,6 @@ PetscErrorCode SwarmInterpCreate(LagRBFCtx ctx, DM *sw)
   PetscCall(DMSetFromOptions(swarm));
   
   PetscCall(DMSwarmInitializeFieldRegister(swarm));
-  /* Unique point index across all ranks */
-  PetscPrintf(PETSC_COMM_WORLD,"\tRegistering \"pidx\" integer field of block size: 1\n");
-  PetscCall(DMSwarmRegisterPetscDatatypeField(swarm,"pidx",1,PETSC_INT));
   /* Weights for interpolation */
   PetscCall(PUGetNPartitionsGlobal(pu,&nnodes));
   PetscPrintf(PETSC_COMM_WORLD,"\tRegistering \"weights\" real field of block size: %" PetscInt_FMT "\n",nnodes);
@@ -518,7 +515,8 @@ PetscErrorCode SwarmInterpAssignUniquePointIndex(DM sw, PetscInt start_idx, Pets
   PetscCall(PetscObjectGetComm((PetscObject)sw,&comm));
   PetscCallMPI(MPI_Comm_rank(comm,&rank));
   PetscCall(DMSwarmGetLocalSize(sw,&npoints)); // rank local points
-  PetscCall(DMSwarmGetField(sw, "pidx", NULL, NULL, (void **)&pidx));
+  //PetscCall(DMSwarmGetField(sw, "pidx", NULL, NULL, (void **)&pidx));
+  PetscCall(DMSwarmGetField(sw, DMSwarmField_pid, NULL, NULL, (void **)&pidx));
   /* find max pid presently in the system */
   max_local = 0;
   for (p=0; p<npoints; p++) {
@@ -537,7 +535,8 @@ PetscErrorCode SwarmInterpAssignUniquePointIndex(DM sw, PetscInt start_idx, Pets
     pidx[p] = max + (np_global-np_local) + (long int)(p-start_idx);
     //printf("assigning %" PetscInt_FMT " -> pid = %" PetscInt_FMT " \n", p, pidx[p] );
   }
-  PetscCall(DMSwarmRestoreField(sw,"pidx",NULL,NULL,(void **)&pidx));
+  //PetscCall(DMSwarmRestoreField(sw,"pidx",NULL,NULL,(void **)&pidx));
+  PetscCall(DMSwarmRestoreField(sw,DMSwarmField_pid,NULL,NULL,(void **)&pidx));
   PetscFunctionReturn(PETSC_SUCCESS);
 }
 

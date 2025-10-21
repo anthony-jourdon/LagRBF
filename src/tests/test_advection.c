@@ -284,7 +284,7 @@ static PetscErrorCode Test_advection()
   PetscReal        Radius[] = {1.0,2.0};
   PetscBool        exists;
   const char       *data_output[] = {"fields"};
-  const char       *output_fields[] = {"pidx","fields","velocity"};
+  const char       *output_fields[] = {"DMSwarm_pid","fields","velocity"};
   PetscFunctionBeginUser;
 
   PetscCall(LagRBFCtxCreate(&ctx));

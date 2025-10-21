@@ -169,6 +169,7 @@ PetscErrorCode SwarmOutput(LagRBFCtx ctx, DM sw, PetscInt nfields, const char *f
       break;
     
     case PETSC_INT:
+    case PETSC_INT64:
       PetscCall(SwarmOutputFieldPetscIS_FromName(sw,fields[f],outputdir,stepprefix));
       break;
 
