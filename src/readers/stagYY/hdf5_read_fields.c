@@ -1,6 +1,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <regex.h>
+#include <hdf5.h>
 #include "readers/reader_utils.h"
 #include "readers/stagYY/hdf5_read_fields.h"
 
@@ -69,11 +70,28 @@ void StagFieldInfoDestroy(StagFieldInfo *field_data)
 static herr_t collect_tstep_datasets(hid_t loc_id, const char *name, const H5L_info_t *info, void *op_data) {
   DatasetList list = (DatasetList)op_data;
   H5O_info_t obj_info;
+  hid_t      obj_id = -1;
   regex_t     regex;
 
-  // Make sure it is a dataset
-  if (H5Oget_info_by_name(loc_id, name, &obj_info, H5P_DEFAULT) < 0) { return 0; }
-  if (obj_info.type != H5O_TYPE_DATASET) { return 0; }
+  // Make sure it is a dataset. Use stable link/object checks instead of
+  // calling H5Oget_info_by_name which changed signature across HDF5 versions.
+  // First check the link exists under the location
+  htri_t link_exists = H5Lexists(loc_id, name, H5P_DEFAULT);
+  if (link_exists <= 0) { return 0; }
+
+  // Open the object by name and query its type. H5Oopen/H5Iget_type is
+  // available across HDF5 versions and avoids the signature mismatch.
+  obj_id = H5Oopen(loc_id, name, H5P_DEFAULT);
+  if (obj_id < 0) { return 0; }
+  H5I_type_t id_type = H5Iget_type(obj_id);
+  if (id_type != H5I_DATASET) {
+    H5Oclose(obj_id);
+    return 0;
+  }
+  /* populate obj_info.type for compatibility with existing code paths */
+  obj_info.type = H5O_TYPE_DATASET;
+  /* close the opened object now that we've determined its type */
+  H5Oclose(obj_id);
 
   // Match any name ending with an underscore and 5 digits (e.g., *_00001)
   // TODO: check if we may need to set the matching char in the op_data struct to generalize this regex research
