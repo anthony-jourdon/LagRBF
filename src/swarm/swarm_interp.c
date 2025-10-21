@@ -1,6 +1,8 @@
 #include <petsc.h>
 #include "lagrangian_rbf.h"
-#include "kernels_rbf.h"
+#include "partition.h"
+#include "advection/advection_ctx.h"
+#include "kernels/kernels_rbf.h"
 #include "swarm/swarm_utils.h"
 #include "swarm/swarm_interp.h"
 
@@ -20,19 +22,19 @@ PetscErrorCode SwarmInterpCreateAdvectionFields(LagRBFCtx ctx, DM swarm)
   PetscCall(AdvectionGetIntegrationOrder(adv_ctx,&order));
   PetscCall(AdvectionGetVelocityName(adv_ctx,&velocity_name));
   /* Velocity field interpolated */
-  PetscPrintf(PETSC_COMM_WORLD,"\tRegistering velocity field '%s', block size: %" PetscInt_FMT "\n",velocity_name,dim);
+  PetscPrintf(PETSC_COMM_WORLD,"\tRegistering velocity field \"%s\" of block size: %" PetscInt_FMT "\n",velocity_name,dim);
   PetscCall(DMSwarmRegisterPetscDatatypeField(swarm,velocity_name,dim,PETSC_REAL));
   /* If the scheme is higher than first order, we need to store the initial coordinates and the velocity at each integration step */
-  if (adv_ctx->scheme != RK1) {
+  if (adv_ctx->scheme != RK1 || adv_ctx->scheme != RK2) {
     PetscInt b;
     /* Store initial coordinates before advection */
-    PetscPrintf(PETSC_COMM_WORLD,"\tRegistering initial coordinates field 'coor_init', block size: %" PetscInt_FMT "\n",dim);
+    PetscPrintf(PETSC_COMM_WORLD,"\tRegistering initial coordinates field \"coor_init\" of block size: %" PetscInt_FMT "\n",dim);
     PetscCall(DMSwarmRegisterPetscDatatypeField(swarm,"coor_init",dim,PETSC_REAL));
     for (b=0; b<order; b++) {
       char v_adv_name[PETSC_MAX_PATH_LEN];
       /* Register Velocity at integration step */
       PetscCall(PetscSNPrintf(v_adv_name,PETSC_MAX_PATH_LEN-1,"v_adv_%d",b));
-      PetscPrintf(PETSC_COMM_WORLD,"\tRegistering integration step velocity field '%s', block size: %" PetscInt_FMT "\n",v_adv_name,dim);
+      PetscPrintf(PETSC_COMM_WORLD,"\tRegistering integration step velocity field \"%s\" of block size: %" PetscInt_FMT "\n",v_adv_name,dim);
       PetscCall(DMSwarmRegisterPetscDatatypeField(swarm,v_adv_name,dim,PETSC_REAL));
     }
   }
@@ -43,30 +45,34 @@ PetscErrorCode SwarmInterpCreate(LagRBFCtx ctx, DM *sw)
 {
   PartitionOfUnity pu;
   DM               dap,swarm;
-  PetscInt         dim;
+  PetscInt         dim,nnodes;
   char             dm_name[PETSC_MAX_PATH_LEN],dm_prefix[PETSC_MAX_PATH_LEN];
   PetscFunctionBeginUser;
   /* Create interpolation points */
-   PetscCall(LagRBFGetPartitionOfUnity(ctx,&pu));
+  PetscCall(LagRBFGetPartitionOfUnity(ctx,&pu));
   PetscCall(PUGetDMDA(pu,&dap));
-  PetscCall(PUGetDimension(pu,&dim));
+  PetscCall(DMGetDimension(dap,&dim));
   PetscCall(DMCreate(PetscObjectComm((PetscObject)dap), &swarm)); // COMM_WORLD
   PetscCall(DMSetType(swarm, DMSWARM));
   PetscCall(DMSetDimension(swarm, dim));
   PetscCall(DMSwarmSetType(swarm, DMSWARM_PIC)); // This sets automatically the migrate type: DMSWARM_MIGRATE_DMCELLNSCATTER
   PetscCall(DMSwarmSetCellDM(swarm, dap));
-  PetscSNPrintf(dm_name, PETSC_MAX_PATH_LEN-1, "swarm_interp");
-  PetscObjectSetName((PetscObject)swarm,dm_name);
-  PetscSNPrintf(dm_prefix, PETSC_MAX_PATH_LEN-1, "%s_",dm_name);
+  PetscCall(PetscSNPrintf(dm_name, PETSC_MAX_PATH_LEN-1, "swarm_interp"));
+  PetscCall(PetscObjectSetName((PetscObject)swarm,dm_name));
+  PetscCall(PetscSNPrintf(dm_prefix, PETSC_MAX_PATH_LEN-1, "%s_",dm_name));
   PetscCall(DMSetOptionsPrefix(swarm,dm_prefix));
   PetscCall(DMSetFromOptions(swarm));
   
   PetscCall(DMSwarmInitializeFieldRegister(swarm));
   /* Unique point index across all ranks */
+  PetscPrintf(PETSC_COMM_WORLD,"\tRegistering \"pidx\" integer field of block size: 1\n");
   PetscCall(DMSwarmRegisterPetscDatatypeField(swarm,"pidx",1,PETSC_INT));
   /* Weights for interpolation */
-  PetscCall(DMSwarmRegisterPetscDatatypeField(swarm,"weights",pu->npart,PETSC_REAL));
+  PetscCall(PUGetNPartitionsGlobal(pu,&nnodes));
+  PetscPrintf(PETSC_COMM_WORLD,"\tRegistering \"weights\" real field of block size: %" PetscInt_FMT "\n",nnodes);
+  PetscCall(DMSwarmRegisterPetscDatatypeField(swarm,"weights",nnodes,PETSC_REAL));
   /* Fields to interpolate, also contain the velocity even in advection mode */
+  PetscPrintf(PETSC_COMM_WORLD,"\tRegistering \"fields\" real field of block size: %" PetscInt_FMT "\n",ctx->n_ifields);
   PetscCall(DMSwarmRegisterPetscDatatypeField(swarm,"fields",ctx->n_ifields,PETSC_REAL));
   /* If advection is required, special fields are added */
   if (ctx->advection) {
@@ -140,8 +146,9 @@ static PetscErrorCode SwarmInterpSetWeights_Scalar(LagRBFCtx ctx, DM sw)
   DMSwarmCellDM    celldm;
   DM               das,cdas;
   Vec              coords;
+  PetscReal        epsilon;
   PetscReal        *pcoords,*weights,*LA_coords;
-  PetscInt         dim,npart,npoints,nn,np,n,puidx;
+  PetscInt         dim,npart,npg,npoints,nn,np,n,puidx;
   const char      **coordFields;
   PetscFunctionBeginUser;
   PetscCall(PetscLogEventBegin(LAGRBF_SwarmInterpSetWeights_Scalar,0,0,0,0));
@@ -157,7 +164,9 @@ static PetscErrorCode SwarmInterpSetWeights_Scalar(LagRBFCtx ctx, DM sw)
   PetscCall(DMGetCoordinates(das,&coords));
   PetscCall(VecGetArray(coords,&LA_coords));
   /* Get the number of nodes in the local DMDA */
-  PetscCall(PUGetNPartitions(pu,&npart));
+  PetscCall(PUGetNPartitionsLocal(pu,&npart));
+  /* Get the number of global partitions */
+  PetscCall(PUGetNPartitionsGlobal(pu,&npg));
   /* Interpolation points */
   PetscCall(DMSwarmGetLocalSize(sw,&npoints)); // rank local points
   PetscCall(DMSwarmGetCellDMActive(sw,&celldm));
@@ -166,19 +175,18 @@ static PetscErrorCode SwarmInterpSetWeights_Scalar(LagRBFCtx ctx, DM sw)
   PetscCall(DMSwarmGetField(sw, coordFields[0], NULL, NULL, (void **)&pcoords));
   /* Weights */
   PetscCall(DMSwarmGetField(sw, "weights", &nn, NULL, (void **)&weights));
-  PetscCheck(nn == npart, PETSC_COMM_WORLD, PETSC_ERR_ARG_SIZ, "The size of weigths must equal the number of partitions of unity: %" PetscInt_FMT ", found: %" PetscInt_FMT "",npart,nn);
-
+  PetscCheck(nn == npg, PETSC_COMM_WORLD, PETSC_ERR_ARG_SIZ, "The size of weigths must equal the number of partitions in the global mesh: %" PetscInt_FMT ", found: %" PetscInt_FMT "",npg,nn);
+  PetscCall(PUGetEpsilon(pu,&epsilon));
   for (np=0; np<npoints; np++) {
     PetscReal sum_w = 0.0;
     /* Loop over partitions */
     for (n=0; n<npart; n++) {
       Partition p = partitions[n]; // current partition
       PetscInt  d;
-      PetscReal epsilon,dist;
+      PetscReal dist;
       PetscReal *pu_centre;
       
       PetscCall(PartitionGetIndex(p,&puidx));
-      PetscCall(PartitionGetEpsilon(p,&epsilon));
       pu_centre = &LA_coords[dim*puidx];
       dist = 0.0;
       for (d=0; d<dim; d++) { 
@@ -318,9 +326,9 @@ static PetscErrorCode SwarmInterpSetWeights_AVX256_3D(
 
     PetscCall(PartitionGetIndex(p,&puidx));
     epsilon   = _mm256_set1_pd(p->epsilon);
-    centre_x  = _mm256_set1_pd(LA_coords[2*puidx    ]);
-    centre_y  = _mm256_set1_pd(LA_coords[2*puidx + 1]);
-    centre_z  = _mm256_set1_pd(LA_coords[2*puidx + 2]);
+    centre_x  = _mm256_set1_pd(LA_coords[3*puidx    ]);
+    centre_y  = _mm256_set1_pd(LA_coords[3*puidx + 1]);
+    centre_z  = _mm256_set1_pd(LA_coords[3*puidx + 2]);
     
     for (np=0; np<np_aligned; np+=4) {
       double  w_arr[4] __attribute__((aligned(32)));
@@ -390,7 +398,7 @@ PetscErrorCode SwarmInterpSetWeights_AVX256(LagRBFCtx ctx, DM sw)
   DM               das,cdas;
   Vec              coords;
   PetscReal        *pcoords,*weights,*LA_coords,*sum_w;
-  PetscInt         np,n,i,dim,npart,npoints,np_aligned,nn,puidx;
+  PetscInt         np,n,i,dim,npart,npg,npoints,np_aligned,nn,puidx;
   const char       **coordFields;
   __m256d          zero_v;
   PetscFunctionBeginUser;
@@ -407,7 +415,9 @@ PetscErrorCode SwarmInterpSetWeights_AVX256(LagRBFCtx ctx, DM sw)
   PetscCall(DMGetCoordinates(das,&coords));
   PetscCall(VecGetArray(coords,&LA_coords));
   /* Get the number of nodes in the local DMDA */
-  PetscCall(PUGetNPartitions(pu,&npart));
+  PetscCall(PUGetNPartitionsLocal(pu,&npart));
+  /* Get the number of global partitions */
+  PetscCall(PUGetNPartitionsGlobal(pu,&npg));
   /* Interpolation points */
   PetscCall(DMSwarmGetLocalSize(sw,&npoints)); // rank local points
   PetscCall(DMSwarmGetCellDMActive(sw,&celldm));
@@ -416,8 +426,7 @@ PetscErrorCode SwarmInterpSetWeights_AVX256(LagRBFCtx ctx, DM sw)
   PetscCall(DMSwarmGetField(sw, coordFields[0], NULL, NULL, (void **)&pcoords));
   /* Weights */
   PetscCall(DMSwarmGetField(sw, "weights", &nn, NULL, (void **)&weights));
-  PetscCheck(nn == npart, PETSC_COMM_WORLD, PETSC_ERR_ARG_SIZ, "The size of weigths must equal the number of partitions of unity: %" PetscInt_FMT ", found: %" PetscInt_FMT "",npart,nn);
-
+  PetscCheck(nn == npg, PETSC_COMM_WORLD, PETSC_ERR_ARG_SIZ, "The size of weigths must equal the number of partitions in the global mesh: %" PetscInt_FMT ", found: %" PetscInt_FMT "",npg,nn);
   PetscCall(PetscCalloc1(npoints,&sum_w));
   switch (dim) {
   case 2:
