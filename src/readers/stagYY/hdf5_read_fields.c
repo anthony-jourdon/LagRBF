@@ -68,11 +68,11 @@ void StagFieldInfoDestroy(StagFieldInfo *field_data)
 /* Define a callback function used to extract time step datasets */
 static herr_t collect_tstep_datasets(hid_t loc_id, const char *name, const H5L_info_t *info, void *op_data) {
   DatasetList list = (DatasetList)op_data;
-  H5O_info1_t obj_info;
+  H5O_info_t obj_info;
   regex_t     regex;
 
   // Make sure it is a dataset
-  if (H5Oget_info_by_name1(loc_id, name, &obj_info, H5P_DEFAULT) < 0) { return 0; }
+  if (H5Oget_info_by_name(loc_id, name, &obj_info, H5P_DEFAULT) < 0) { return 0; }
   if (obj_info.type != H5O_TYPE_DATASET) { return 0; }
 
   // Match any name ending with an underscore and 5 digits (e.g., *_00001)
