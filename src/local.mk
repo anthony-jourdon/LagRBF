@@ -16,4 +16,4 @@ lagrangian-offline-drivers-y.c += $(call thisdir, \
 )
 
 # include subdirectories
-include $(call incsubdirs, tests advection readers swarm kernels)
+include $(call incsubdirs, tests advection readers swarm kernels petsc_private)
