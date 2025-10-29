@@ -4,6 +4,8 @@
 #include <petsc.h>
 #include "partition_of_unity.h"
 
+PetscErrorCode SwarmFieldAssignUniqueIndex(DM sw, const char *field_name, PetscInt start_idx, PetscInt end_idx);
+
 PetscErrorCode CopyContiguousBlockData_Generic(void *dest, void *source, PetscInt npoints, PetscInt nblocks, PetscInt bs, PetscInt start_block, size_t typesize);
 #define CopyContiguousBlockData(dest, source, npoints, nblocks, bs, start_block) \
   CopyContiguousBlockData_Generic(dest, source, npoints, nblocks, bs, start_block, sizeof(*(dest)))
