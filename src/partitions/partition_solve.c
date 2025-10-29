@@ -1,9 +1,9 @@
 #include <petsc.h>
 
 #include "partition_of_unity.h"
-#include "partition.h"
+#include "partitions/partition.h"
 #include "kernels/kernels_rbf.h"
-#include "partition_solve.h"
+#include "partitions/partition_solve.h"
 
 PetscLogEvent LAGRBF_PartitionAssembleRBFMatrix;
 PetscLogEvent LAGRBF_PartitionFactorRBFMatrix;

@@ -5,7 +5,7 @@ static const char help[] = "Test to interpolate and advect particles from StagYY
 #include "lagrangian_rbf_init.h"
 #include "io_utils.h"
 #include "partition_of_unity.h"
-#include "partition.h"
+#include "partitions/partition.h"
 #include "swarm/swarm_output.h"
 #include "swarm/swarm_utils.h"
 #include "swarm/swarm_interp.h"

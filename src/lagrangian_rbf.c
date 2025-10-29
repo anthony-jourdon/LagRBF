@@ -1,7 +1,7 @@
 #include <petsc.h>
 #include "lagrangian_rbf.h"
 #include "partition_of_unity.h"
-#include "partition.h"
+#include "partitions/partition.h"
 #include "advection/advection_ctx.h"
 #include "cell_info.h"
 #include "kernels/kernels_rbf.h"

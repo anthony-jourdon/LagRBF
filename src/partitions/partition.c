@@ -1,5 +1,5 @@
-#include "partition.h"
-#include "partition_solve.h"
+#include "partitions/partition.h"
+#include "partitions/partition_solve.h"
 #include "kernels/kernels_rbf.h"
 
 /*

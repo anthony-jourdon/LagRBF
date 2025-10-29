@@ -1,6 +1,6 @@
 #include <petsc.h>
 #include "lagrangian_rbf.h"
-#include "partition.h"
+#include "partitions/partition.h"
 #include "advection/advection_ctx.h"
 #include "kernels/kernels_rbf.h"
 #include "swarm/swarm_utils.h"

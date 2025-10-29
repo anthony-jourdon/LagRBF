@@ -4,6 +4,9 @@
 #include <petsc.h>
 #include "lagrangian_rbf.h"
 #include "partition_of_unity.h"
+
+//struct 
+
 /* 
 Partition of Unity Method
 a partition is a node of the DMDA 

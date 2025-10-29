@@ -3,7 +3,7 @@ static const char help[] = "Testing advection schemes.\n\n";
 #include <petsc.h>
 #include "lagrangian_rbf_init.h"
 #include "lagrangian_rbf.h"
-#include "partition_solve.h"
+#include "partitions/partition_solve.h"
 #include "cell_info.h"
 #include "io_utils.h"
 #include "swarm/swarm_utils.h"

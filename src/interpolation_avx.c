@@ -1,7 +1,7 @@
 #include <petsc.h>
 #include "partition_of_unity.h"
-#include "partition.h"
-#include "partition_solve.h"
+#include "partitions/partition.h"
+#include "partitions/partition_solve.h"
 #include "cell_info.h"
 #include "kernels/kernels_rbf.h"
 #include "kernels/kernels_rbf_avx.h"
