@@ -81,8 +81,20 @@ PetscErrorCode SwarmOutputFieldPetscIS_FromName(DM sw, const char *field_name, c
 
   PetscCall(DMSwarmGetLocalSize(sw,&npoints));
   PetscCall(DMSwarmGetField(sw,field_name,NULL,&type,&data));
-  idx = (const PetscInt *)data;
-
+  if (sizeof(PetscInt) == sizeof(PetscInt64)) {
+    idx = (const PetscInt *)data;
+  } else if (type == PETSC_INT64) {
+    PetscInt64 *data64 = (PetscInt64 *)data;
+    PetscInt   np;
+    PetscInt   *_idx;
+    PetscMalloc1(npoints,&_idx);
+    for (np=0; np<npoints; np++) {
+      PetscIntCast(data64[np],&_idx[np]);
+    }
+    idx = (const PetscInt *)_idx;
+  } else {
+    idx = (const PetscInt *)data;
+  }
   PetscCall(ISCreateGeneral(comm,npoints,idx,PETSC_USE_POINTER,&is));
   PetscCall(PetscObjectSetName((PetscObject)is, field_name));
   /* Output */
