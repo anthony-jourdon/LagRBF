@@ -262,8 +262,7 @@ static PetscErrorCode CreateSwarmInterp(LagRBFCtx ctx, DM *sw)
 
   PetscCall(SwarmInterpSetWeights(ctx,swarm));
   PetscCall(DMSwarmGetLocalSize(swarm,&npoints_i)); // rank local points
-  PetscCall(SwarmInterpAssignUniquePointIndex(swarm,0,npoints_i));
-
+  PetscCall(SwarmFieldAssignUniqueIndex(swarm,DMSwarmField_pid,0,npoints_i));
   *sw = swarm;
   PetscFunctionReturn(PETSC_SUCCESS);
 }
@@ -284,7 +283,7 @@ static PetscErrorCode Test_advection()
   PetscReal        Radius[] = {1.0,2.0};
   PetscBool        exists;
   const char       *data_output[] = {"fields"};
-  const char       *output_fields[] = {"DMSwarm_pid","fields","velocity"};
+  const char       *output_fields[] = {"DMSwarm_pid","fields","velocity"}; //"pidx"
   PetscFunctionBeginUser;
 
   PetscCall(LagRBFCtxCreate(&ctx));
@@ -322,11 +321,12 @@ static PetscErrorCode Test_advection()
 
   /* Set up cell information */
   PetscCall(CellInfoSetUp(pu,cellinfo,swarm_data));
-  //PetscCall(PartitionSetUp_All(partitions, pu->npart, swarm_data));
-  PetscCall(LagRBF_PartitionsSetUp(ctx,swarm_data));
 
   PetscCall(CreateSwarmInterp(ctx, &ctx->swi));
   swarm_interp = ctx->swi;
+  PetscCall(SwarmOutput(ctx,swarm_interp,3,output_fields,PETSC_FALSE));
+#if 1
+  PetscCall(LagRBF_PartitionsSetUp(ctx,swarm_data));
   /* Interpolate */
   PetscCall(PartitionSolveInterpolationCoefficients(pu,partitions,swarm_data,"fields"));
   PetscCall(RBFInterpolation(ctx,swarm_interp,swarm_data,"fields"));
@@ -376,6 +376,7 @@ static PetscErrorCode Test_advection()
     PetscCall(LagRBFSetTime(ctx,time));
     step++;
   }
+#endif
   /* Free memory */
   //PetscCall(DMDestroy(&swarm_interp));
   //PetscCall(DMDestroy(&swarm_data));
