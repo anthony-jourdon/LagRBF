@@ -16,6 +16,12 @@ typedef enum {
   CLIMATE
 } InterpModelType;
 
+typedef enum {
+  A_FACTOR=0, // Direct solver with matrix factorization
+  A_KSP,      // KSP (direct or iterative) but matrix doesn't change
+  A_ASMB_KSP  // KSP with matrix assembled each time (no reuse)
+} ASolveMethod;
+
 struct _p_LagRBFCtx {
   PartitionOfUnity pu; // Partition of Unity context
   InterpModelType  mtype; // Model type   
@@ -23,6 +29,7 @@ struct _p_LagRBFCtx {
   Partition        *partitions; // Array of partitions structs
   CellInfo         *cellinfo; // Array of cell info structs
   KernelType       kernel_type;
+  ASolveMethod     solve_method; // Method to solve the RBF system
   DM               swd,swi; // Swarm for data points and interpolation points
   PetscInt         n_ifields; // Number of fields to interpolate
   PetscInt         n_pfields; // Number of fields that are not resulting from interpolation
@@ -45,7 +52,9 @@ PetscErrorCode LagRBFSetKernelType(LagRBFCtx ctx, KernelType type);
 PetscErrorCode LagRBFSetStep(LagRBFCtx ctx, PetscInt step);
 PetscErrorCode LagRBFSetTimeStep(LagRBFCtx ctx, PetscReal dt);
 PetscErrorCode LagRBFSetTime(LagRBFCtx ctx, PetscReal time);
-/* Getter */
+PetscErrorCode LagRBFSetSolveMethod(LagRBFCtx ctx, ASolveMethod method);
+/* Getters */
+PetscErrorCode LagRBFGetSolveMethod(LagRBFCtx ctx, ASolveMethod *method);
 PetscErrorCode LagRBFGetKernelType(LagRBFCtx ctx, KernelType *type);
 PetscErrorCode LagRBFGetPartitionOfUnity(LagRBFCtx ctx, PartitionOfUnity *pu);
 PetscErrorCode LagRBFGetPartitions(LagRBFCtx ctx, Partition **partitions);
