@@ -9,8 +9,8 @@ PetscLogEvent LAGRBF_SphericalCoordinates_Halton;
 
 PetscErrorCode SwarmFieldAssignUniqueIndex(DM sw, const char *field_name, PetscInt start_idx, PetscInt end_idx)
 {
-  PetscInt      p,npoints,np_local,np_global;
-  PetscInt64    max_local,max;
+  PetscInt      p,npoints,bs;
+  PetscInt64    np_local,max_local,max,np_global;
   PetscInt64    *pidx;
   PetscMPIInt   rank;
   PetscDataType dtype;
@@ -20,27 +20,28 @@ PetscErrorCode SwarmFieldAssignUniqueIndex(DM sw, const char *field_name, PetscI
   PetscCall(PetscObjectGetComm((PetscObject)sw,&comm));
   PetscCallMPI(MPI_Comm_rank(comm,&rank));
   PetscCall(DMSwarmGetLocalSize(sw,&npoints)); // rank local points
-  PetscCall(DMSwarmGetField(sw, field_name, NULL, &dtype, (void **)&pidx));
+  PetscCall(DMSwarmGetField(sw, field_name, &bs, &dtype, (void **)&pidx));
   PetscCheck(dtype == PETSC_INT64, PETSC_COMM_SELF, PETSC_ERR_ARG_WRONG, "Field %s must be of type PETSC_INT64", field_name);
+  PetscCheck(bs == 1, PETSC_COMM_SELF, PETSC_ERR_ARG_WRONG, "Field %s must be a scalar of blocksize 1, found: %" PetscInt_FMT, field_name, bs);
   /* find max pid presently in the system */
   max_local = 0;
   for (p=0; p<npoints; p++) {
     PetscInt64 mp_idx = pidx[p]; 
     if ( mp_idx > max_local ) { max_local = mp_idx; }
   }
-  PetscCallMPI(MPI_Allreduce(&max_local,&max,1,MPI_LONG,MPI_MAX,comm));
+  PetscCallMPI(MPI_Allreduce(&max_local,&max,1,MPIU_INT64,MPI_MAX,comm));
   /*PetscPrintf(comm,"[[ %s ]] : max_pid = %" PetscInt_FMT "\n",PETSC_FUNCTION_NAME,max);*/
   max += 1;
 
   /* give particles a unique identifier */
-  np_local = end_idx - start_idx;
-  PetscCallMPI(MPI_Scan(&np_local,&np_global,1,MPI_LONG,MPI_SUM,comm));
+  np_local = (PetscInt64)(end_idx - start_idx);
+  PetscCallMPI(MPI_Scan(&np_local,&np_global,1,MPIU_INT64,MPI_SUM,comm));
   //printf("rank %d : np_local = %" PetscInt_FMT ", np_global = %" PetscInt_FMT "\n",(int)rank,np_local,np_global);
   for (p=start_idx; p<end_idx; p++) {
     pidx[p] = max + (np_global-np_local) + (PetscInt64)(p-start_idx);
     //printf("assigning %" PetscInt_FMT " -> pid = %" PetscInt_FMT " \n", p, pidx[p] );
   }
-  PetscCall(DMSwarmRestoreField(sw,field_name,NULL,&dtype,(void **)&pidx));
+  PetscCall(DMSwarmRestoreField(sw, field_name, &bs, &dtype, (void **)&pidx));
   PetscFunctionReturn(PETSC_SUCCESS);
 }
 
