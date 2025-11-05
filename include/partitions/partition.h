@@ -20,6 +20,9 @@ struct _p_Partition {
   PetscInt  idx; // Index of the partition
   PetscInt  *data_idx; // Indices of data points in the partition
   PetscReal epsilon; // Epsilon factor for the RBF kernel
+  void      *data;
+  PetscErrorCode (*destroy)(Partition);
+  PetscErrorCode (*solve)(Partition,PetscInt,PetscReal*);
 };
 
 PetscErrorCode PartitionCreate(PartitionOfUnity pu, Partition **partition);
