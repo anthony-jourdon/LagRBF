@@ -239,15 +239,12 @@ static PetscErrorCode ReconstructYinYangVelocityPressure(StagFieldBin *sfield, P
                                     + vr     * PetscSinReal(spherical[1]);
         
         /* pressure */
-        fields[ bs*yin_idx  + 3 ] = (PetscReal)sfield->data[ bs*yin_idx  + 3 ];
-        fields[ bs*yang_idx + 3 ] = (PetscReal)sfield->data[ bs*yang_idx + 3 ];
-        //p_yin  = (PetscReal)sfield->data[ bs*yin_idx + 3 ];
-        //p_yang = (PetscReal)sfield->data[ bs*yang_idx + 3 ];
-        //sum_P   += p_yin + p_yang;
-        //sum_vol += 2.0;
+        p_yin  = (PetscReal)sfield->data[ bs*yin_idx + 3 ];
+        p_yang = (PetscReal)sfield->data[ bs*yang_idx + 3 ];
+        sum_P   += p_yin + p_yang;
+        sum_vol += 2.0;
       }
     }
-#if 0
     p_avg = sum_P / sum_vol;
     for (j=0; j<n[1]; j++) {
       for (i=0; i<n[0]; i++) {
@@ -260,7 +257,6 @@ static PetscErrorCode ReconstructYinYangVelocityPressure(StagFieldBin *sfield, P
         fields[ bs*yang_idx + 3 ] = (PetscReal)sfield->data[ bs*yang_idx + 3 ] - p_avg;
       }
     }
-#endif
   }
   PetscCall(StagFieldBinFreeArrays(sfield));
   PetscFunctionReturn(PETSC_SUCCESS);
