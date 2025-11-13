@@ -4,5 +4,7 @@
 #include "lagrangian_rbf.h"
 
 PetscErrorCode SwarmDataCreate(LagRBFCtx ctx, DM *sw);
+PetscErrorCode SwarmDataAssignMigrateBasic(LagRBFCtx ctx, DM swarm);
+PetscErrorCode SwarmDataAssignMigrateDuplicateGhostPoints(LagRBFCtx ctx, DM swarm);
 
 #endif
