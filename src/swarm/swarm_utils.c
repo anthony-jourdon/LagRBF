@@ -611,3 +611,95 @@ PetscErrorCode DMSwarmRemoveNPointsFromIndex(DM swarm, PetscInt nindices, PetscI
 
   PetscFunctionReturn(PETSC_SUCCESS);
 }
+
+/* petsc "private" headers */
+#include <petsc/private/dmswarmimpl.h>
+#include "../src/dm/impls/swarm/data_bucket.h"
+#include "../src/dm/impls/swarm/data_ex.h"
+PetscErrorCode DMSwarmMigrate_Push_DuplicatePoints(DM swarm, PetscInt point_start, PetscInt point_end)
+{
+  DM_Swarm    *sw = (DM_Swarm*)swarm->data;
+  PetscInt    r,dim,max_nrank;
+  MPI_Comm    comm;
+  PetscMPIInt nranks,rank;
+  PetscFunctionBeginUser;
+
+  PetscCall(PetscObjectGetComm((PetscObject)swarm,&comm));
+  PetscCallMPI(MPI_Comm_size(comm, &nranks));
+  PetscCallMPI(MPI_Comm_rank(comm, &rank));
+  PetscCall(DMGetDimension(swarm,&dim));
+  /* Maximum number of ranks a point can belong to */
+  max_nrank = (dim == 2) ? 4 : 8; // 4 in 2D, 8 in 3D
+
+  for (r=0; r<max_nrank; r++) {
+    DMSwarmDataEx de;
+    PetscInt      np,n_points_recv,npoints;
+    PetscInt      *rankval,*rank_to_go;
+    size_t        sizeof_dmswarm_point;
+    void          *point_buffer,*recv_points;
+    PetscBool     debug = PETSC_FALSE;
+
+    if (r >= nranks) break; // no need to proceed for ranks that do not exist
+    /* Create the data exchanger structure */
+    PetscCall(DMSwarmDataExCreate(comm, 0, &de));
+    PetscCall(DMSwarmDataExTopologyInitialize(de));
+    /* Get fields */
+    PetscCall(DMSwarmGetField(swarm, DMSwarmField_rank, NULL, NULL, (void **)&rankval)); // rank of each point
+    PetscCall(DMSwarmGetField(swarm, "rank_to_go", NULL, NULL, (void **)&rank_to_go)); // array of ranks to which each point should go
+    /* Set ranks indices to be sent on */
+    for (np=point_start; np<point_end; np++) {
+      PetscMPIInt _rank;
+      PetscInt    rank_to_set = rank_to_go[np*max_nrank + r];
+      /* -1 means the point is not migrating */
+      if (rank_to_set == -1) { continue; } 
+      rankval[np] = rank_to_set;
+      PetscCall(PetscMPIIntCast(rank_to_set, &_rank));
+      if (_rank != rank) { PetscCall(DMSwarmDataExTopologyAddNeighbour(de, _rank)); }
+    }
+    PetscCall(DMSwarmDataExTopologyFinalize(de));
+    /* Count how much points to be sent on each identified ranks */
+    PetscCall(DMSwarmDataExInitializeSendCount(de));
+    for (np=point_start; np<point_end; np++) {
+      PetscMPIInt _rank;
+      PetscInt    rank_to_set = rank_to_go[np*max_nrank + r];
+      if (rank_to_set == -1) { continue; }
+      PetscCall(PetscMPIIntCast(rank_to_set, &_rank));
+      if (_rank != rank) { PetscCall(DMSwarmDataExAddToSendCount(de, _rank, 1)); }
+    }
+    PetscCall(DMSwarmDataExFinalizeSendCount(de));
+    PetscCall(DMSwarmDataBucketCreatePackedArray(sw->db, &sizeof_dmswarm_point, &point_buffer));
+    /* Pack data to be sent */
+    PetscCall(DMSwarmDataExPackInitialize(de, sizeof_dmswarm_point));
+    for (np=point_start; np<point_end; np++) {
+      PetscMPIInt _rank;
+      PetscInt    rank_to_set = rank_to_go[np*max_nrank + r];
+      if (rank_to_set == -1) { continue; }
+      PetscCall(PetscMPIIntCast(rank_to_set, &_rank));
+      if (_rank != rank) { 
+        /* copy point into buffer */
+        PetscCall(DMSwarmDataBucketFillPackedArray(sw->db, np, point_buffer));
+        /* insert point buffer into DMSwarmDataExchanger */
+        PetscCall(DMSwarmDataExPackData(de, _rank, 1, point_buffer));
+      }
+    }
+    PetscCall(DMSwarmDataExPackFinalize(de));
+    PetscCall(DMSwarmRestoreField(swarm, DMSwarmField_rank, NULL, NULL, (void **)&rankval));
+    PetscCall(DMSwarmRestoreField(swarm, "rank_to_go", NULL, NULL, (void **)&rank_to_go));
+    /* Start the communication */
+    PetscCall(DMSwarmDataExBegin(de));
+    PetscCall(DMSwarmDataExEnd(de));
+    PetscCall(DMSwarmDataExGetRecvData(de, &n_points_recv, &recv_points));
+    /* Resize the DMSwarm data bucket to accommodate new points */
+    PetscCall(DMSwarmDataBucketGetSizes(sw->db, &npoints, NULL, NULL));
+    PetscCall(DMSwarmDataBucketSetSizes(sw->db, npoints + n_points_recv, DMSWARM_DATA_BUCKET_BUFFER_DEFAULT));
+    for (np=0; np<n_points_recv; np++) {
+      void *data_p = (void *)((char *)recv_points + np * sizeof_dmswarm_point);
+
+      PetscCall(DMSwarmDataBucketInsertPackedArray(sw->db, npoints + np, data_p));
+    }
+    if (debug) PetscCall(DMSwarmDataExView(de));
+    PetscCall(DMSwarmDataBucketDestroyPackedArray(sw->db, &point_buffer));
+    PetscCall(DMSwarmDataExDestroy(de));
+  }
+  PetscFunctionReturn(PETSC_SUCCESS);
+}
