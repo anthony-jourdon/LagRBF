@@ -15,4 +15,5 @@ PetscErrorCode CopyArbitraryBlockData_Real(PetscReal dest[], PetscReal source[],
 PetscErrorCode SwarmCreatePIC(PartitionOfUnity pu, DM *sw);
 PetscReal halton_sequence(PetscInt index, PetscInt base);
 PetscErrorCode DMSwarmSetPointsSphericalCoordinates(DM sw, PetscReal min[], PetscReal max[], PetscInt npoints[], InsertMode mode, PetscBool halton);
+PetscErrorCode DMSwarmRemoveNPointsFromIndex(DM swarm, PetscInt nindices, PetscInt *indices);
 #endif

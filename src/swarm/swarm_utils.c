@@ -568,3 +568,46 @@ PetscErrorCode DMSwarmSetPointsSphericalCoordinates(DM sw, PetscReal min[], Pets
   PetscCall(DMSwarmSetPointsSphericalCoordinates_Uniform(sw, min, max, npoints, mode));
   PetscFunctionReturn(PETSC_SUCCESS);
 }
+
+/*
+To remove the points at the specified indices from the swarm, 
+We move all points that are not being removed to the front of the swarm,
+and then we resize the swarm to exclude the removed points.
+*/
+
+PetscErrorCode DMSwarmRemoveNPointsFromIndex(DM swarm, PetscInt nindices, PetscInt *indices)
+{
+  PetscInt  i,np,npoints;
+  PetscInt  next_rm,dst_idx;
+  PetscBool sorted;
+  PetscFunctionBeginUser;
+  
+  PetscCall(DMSwarmGetLocalSize(swarm,&npoints));
+  PetscCheck(nindices <= npoints, PetscObjectComm((PetscObject)swarm), PETSC_ERR_ARG_OUTOFRANGE, "Cannot remove %" PetscInt_FMT " points from %" PetscInt_FMT " total points", nindices, npoints);
+  /* Check that no index in indices is out of range */
+  for (i=0; i<nindices; i++) {
+    PetscCheck(indices[i] >=0 && indices[i] < npoints, PetscObjectComm((PetscObject)swarm), PETSC_ERR_ARG_OUTOFRANGE, "Index %" PetscInt_FMT " is out of range [0, %" PetscInt_FMT ")", indices[i], npoints);
+  }
+
+  /* If indices are not sorted, we sort them */
+  PetscCall(PetscSortedInt(nindices, indices, &sorted));
+  if (!sorted) { PetscCall(PetscSortInt(nindices, indices)); }
+
+  next_rm = 0;
+  dst_idx = 0;
+  for (np=0; np<npoints; np++) {
+    if (next_rm < nindices && np == indices[next_rm]) {
+      next_rm++;
+    } else {
+      if (dst_idx != np) {
+        /* copy point np to dst_idx */
+        PetscCall(DMSwarmCopyPoint(swarm, np, dst_idx));
+      }
+      dst_idx++;
+    }
+  }
+  /* Now we remove the last nindices points from the swarm */
+  PetscCall(DMSwarmSetLocalSizes(swarm, dst_idx, -1));
+
+  PetscFunctionReturn(PETSC_SUCCESS);
+}
