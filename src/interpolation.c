@@ -40,28 +40,9 @@ PetscErrorCode PointwiseInterpolation_Scalar(
   /* Logging */
   PetscCall(PetscTime(&time[0]));
   PetscCall(PetscLogEventBegin(LAGRBF_PointwiseInterpolation_Scalar,0,0,0,0));
-
-  switch (ktype) {
-    case KERNEL_LINEAR:
-      kernel_fn = KernelLinear;
-      break;
-    case KERNEL_WENDLAND_C0:
-      kernel_fn = KernelWendlandC0;
-      break;
-    case KERNEL_WENDLAND_C2:
-      kernel_fn = KernelWendlandC2;
-      break;
-    case KERNEL_WENDLAND_C4:
-      kernel_fn = KernelWendlandC4;
-      break;
-    case KERNEL_WENDLAND_C6:
-      kernel_fn = KernelWendlandC6;
-      break;
-    default:
-      SETERRQ(PETSC_COMM_SELF,PETSC_ERR_ARG_OUTOFRANGE,"Unknown kernel type: %" PetscInt_FMT,ktype);
-      break;
-  }
-
+  /* Select the appropriate kernel */
+  PetscCall(KernelGetFunction(ktype,&kernel_fn));
+  /* Get the parallel-sequtial DMDA elements mapping */
   PetscCall(PUGetNPartitionsLocal(pu,&npart));
   PetscCall(PUGetEpsilon(pu,&epsilon));
   PetscCall(PUGetGlobalToLocalElementMap(pu,&gtol_elidx));

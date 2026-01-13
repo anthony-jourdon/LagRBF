@@ -104,28 +104,9 @@ PetscErrorCode PointwiseInterpolation_AVX256(
   PetscCall(PetscTime(&time[0]));
   PetscCall(PetscLogEventBegin(LAGRBF_PointwiseInterpolation_AVX256,0,0,0,0));
   /* Select the appropriate kernel */
-  switch (ktype)
-  {
-  case KERNEL_LINEAR:
-    kernel_avx = KernelLinear_AVX256;
-    kernel_fn  = KernelLinear;
-    break;
-  case KERNEL_WENDLAND_C0:
-    SETERRQ(PETSC_COMM_SELF,PETSC_ERR_SUP,"Wendland C0 kernel not implemented for AVX256");
-    break;
-  case KERNEL_WENDLAND_C2:
-    kernel_avx = KernelWendlandC2_AVX256;
-    kernel_fn  = KernelWendlandC2;
-    break;
-  case KERNEL_WENDLAND_C4:
-    SETERRQ(PETSC_COMM_SELF,PETSC_ERR_SUP,"Wendland C4 kernel not implemented for AVX256");
-    break;
-  case KERNEL_WENDLAND_C6:
-    SETERRQ(PETSC_COMM_SELF,PETSC_ERR_SUP,"Wendland C6 kernel not implemented for AVX256");
-    break;
-  default:
-    break;
-  }
+  PetscCall(KernelGetFunction(ktype,&kernel_fn));
+  PetscCall(KernelGetFunction_AVX256(ktype,&kernel_avx));
+  /* Get parallel-sequential elements mapping */
   PetscCall(PUGetNPartitionsLocal(pu,&npart));
   PetscCall(PUGetDimension(pu,&dim));
   PetscCall(PUGetGlobalToLocalElementMap(pu,&gtol_elidx));

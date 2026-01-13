@@ -3,9 +3,6 @@
 #define __softname_kernels_rbf_h
 
 #include <petsc.h>
-#if defined(__AVX__)
-#include "kernels/kernels_rbf_avx.h"
-#endif
 
 typedef enum {
   KERNEL_LINEAR=0,
@@ -20,5 +17,12 @@ PetscReal KernelWendlandC0(PetscReal r, PetscReal epsilon);
 PetscReal KernelWendlandC2(PetscReal r, PetscReal epsilon);
 PetscReal KernelWendlandC4(PetscReal r, PetscReal epsilon);
 PetscReal KernelWendlandC6(PetscReal r, PetscReal epsilon);
+
+PetscErrorCode KernelGetFunction(KernelType ktype, PetscReal (**kernel_fn)(PetscReal,PetscReal));
+
+#if defined(__AVX__)
+#include "kernels/kernels_rbf_avx.h"
+PetscErrorCode KernelGetFunction_AVX256(KernelType ktype, __m256d (**kernel_avx)(__m256d,__m256d));
+#endif
 
 #endif
