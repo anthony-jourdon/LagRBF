@@ -1,13 +1,16 @@
 #include <petsc.h>
 #include "lagrangian_rbf.h"
-#include "kernels_rbf.h"
-#include "partition_solve.h"
+#include "kernels/kernels_rbf.h"
+#include "partitions/partition_solve.h"
+#include "partitions/partition.h"
 #include "io_utils.h"
 #include "swarm/swarm_utils.h"
 #include "swarm/swarm_interp.h"
-#include "swarm_data.h"
+#include "swarm/swarm_data.h"
 #include "swarm/swarm_output.h"
+#include "readers/stagYY/binary_loader.h"
 
+#if 0
 static PetscErrorCode ViewUniquePointIdentifier(DM sw)
 {
   PetscInt p,npoints;
@@ -435,6 +438,96 @@ static PetscErrorCode Test_4()
   PetscCall(LagRBFCtxDestroy(&ctx));
   PetscFunctionReturn(PETSC_SUCCESS);
 }
+#endif
+PetscErrorCode TestMemoryUsage()
+{
+  PartitionOfUnity pu;
+  LagRBFCtx ctx;
+  Partition *partitions;
+  CellInfo  *cellinfo;
+  DM        swarm_data,swarm_interp;
+  PetscInt  np,cnt,npoints_i,npoints_d,npart;
+  PetscInt  *rm_idx;
+  PetscBool exists;
+  PetscMPIInt rank;
+  //const char *output_fields[] = { DMSwarmPICField_coor, "fields" };
+  const char *fname[] = { "/mnt/c/Users/jourdon/Documents/Scripts/PostProc/StagYY/PJB6_YS1_Rh32_vp00039" };
+  const char *output_fields[] = {"DMSwarm_pid","fields"};
+  PetscFunctionBeginUser;
+
+  PetscCall(LagRBFCtxCreate(&ctx));
+  PetscCall(LagRBFSetFromOptions(ctx));
+  PetscCall(TestDirectory(ctx->output_dir,'w',&exists));
+  if (!exists) { PetscCall(CreateDirectory(ctx->output_dir)); }
+  /* Create data structures */
+  PetscCall(LagRBF_PartitionOfUnityCreate(ctx));
+  PetscCall(LagRBF_PartitionCreate(ctx));
+  PetscCall(LagRBF_CellInfoCreate(ctx));
+
+  PetscCall(LagRBFGetPartitionOfUnity(ctx,&pu));
+  PetscCall(LagRBFGetCellInfo(ctx,&cellinfo));
+  PetscCall(LagRBFGetPartitions(ctx,&partitions));
+
+  PetscCall(SwarmDataCreate(ctx,&swarm_data));
+  PetscCall(MPI_Comm_rank(PETSC_COMM_WORLD,&rank));
+  /* Read data only on rank 0 */
+  if (rank == 0) {
+    PetscCall(StagBinSwarmSetFromFiles(swarm_data, fname, 1, PETSC_FALSE));
+  }
+  /* Send data to other ranks */
+  PetscCall(SwarmDataAssignMigrateBasic(ctx,swarm_data));
+  /* Duplicate ghost points */
+  PetscCall(SwarmDataAssignMigrateDuplicateGhostPoints(ctx,swarm_data));
+  {
+    DMSwarmCellDM    celldm;
+    PetscInt         dim,n;
+    const char       **coordFieldsName;
+    PetscReal        *coords;
+    PetscCall(DMGetDimension(swarm_data,&dim));
+    PetscCall(DMSwarmSortGetAccess(swarm_data));
+    PetscCall(PUGetNPartitionsLocal(pu,&npart));
+    /* Setup for coords */
+    PetscCall(DMSwarmGetCellDMActive(swarm_data, &celldm));
+    PetscCall(DMSwarmCellDMGetCoordinateFields(celldm, NULL, &coordFieldsName));
+    /* Get fields */
+    PetscCall(DMSwarmGetField(swarm_data, coordFieldsName[0], NULL, NULL, (void **)&coords));
+    for (n=0; n<npart; n++) {
+      Partition p = partitions[n];
+      PetscInt  npoints,i,j,d,zero_count;
+      PetscInt  *pidx;
+      PetscReal epsilon;
+      PetscCall(PartitionFillDataPointsIdx(p,swarm_data));
+      PetscCall(PartitionGetDataPointsIdx(p,&npoints,&pidx));
+      if (npoints == 0) continue;
+      PetscCall(PartitionGetEpsilon(p,&epsilon));
+      /* RBF matrix */
+      zero_count = 0;
+      for (i=0; i<npoints; i++) {
+        for (j=i; j<npoints; j++) {
+          PetscReal dist = 0.0;
+          /* Compute the distance between points */
+          for (d=0; d<dim; d++) {
+            dist += (coords[ dim*pidx[i] + d] - coords[ dim*pidx[j] + d]) * (coords[ dim*pidx[i] + d] - coords[ dim*pidx[j] + d]);
+          }
+          dist = PetscSqrtReal(dist);
+          /* Fill the upper triangular part with the RBF kernel */
+          if (1.0 - epsilon * dist < 0.0) {
+            zero_count++;
+          }
+        }
+      }
+      PetscPrintf(PETSC_COMM_SELF,"Rank[%d]: Partition[%" PetscInt_FMT "] has %" PetscInt_FMT " data points and 2*%" PetscInt_FMT " zero entries in the RBF matrix\n",rank,n,npoints,zero_count);
+    }
+    PetscCall(DMSwarmSortRestoreAccess(swarm_data));
+  }
+
+  PetscCall(PartitionOfUnityMeshView(pu));
+  PetscCall(PartitionOfUnityMeshView_Seq(pu));
+
+  PetscCall(DMDestroy(&swarm_data));
+  PetscCall(LagRBFCtxDestroy(&ctx));
+  PetscFunctionReturn(PETSC_SUCCESS);
+}
 
 int main(int argc, char *argv[])
 {
@@ -445,8 +538,8 @@ int main(int argc, char *argv[])
   //PetscCall(Test_Parallel());
   //PetscCall(Test_Parallel_2());
   //PetscCall(Test_3());
-  PetscCall(Test_4());
-
+  //PetscCall(Test_4());
+  PetscCall(TestMemoryUsage());
   PetscCall(PetscFinalize());
   
   return 0;

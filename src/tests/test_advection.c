@@ -8,7 +8,7 @@ static const char help[] = "Testing advection schemes.\n\n";
 #include "io_utils.h"
 #include "swarm/swarm_utils.h"
 #include "swarm/swarm_interp.h"
-#include "swarm_data.h"
+#include "swarm/swarm_data.h"
 #include "interpolation.h"
 #include "advection/advection_ctx.h"
 #include "swarm/swarm_output.h"
@@ -267,6 +267,62 @@ static PetscErrorCode CreateSwarmInterp(LagRBFCtx ctx, DM *sw)
   PetscFunctionReturn(PETSC_SUCCESS);
 }
 
+static PetscErrorCode CountZerosInRBFMatrix(LagRBFCtx ctx, DM swarm)
+{
+  DMSwarmCellDM    celldm;
+  PartitionOfUnity pu;
+  Partition       *partitions;
+  PetscInt         n,dim,npart;
+  const char       **coordFieldsName;
+  PetscReal        *coords;
+  PetscReal        epsilon;
+  PetscMPIInt      rank;
+  PetscFunctionBeginUser;
+  PetscCallMPI(MPI_Comm_rank(PETSC_COMM_WORLD,&rank));
+  PetscCall(LagRBFGetPartitionOfUnity(ctx,&pu));
+  PetscCall(LagRBFGetPartitions(ctx,&partitions));
+  PetscCall(PUGetNPartitionsLocal(pu,&npart));
+  PetscCall(PUGetEpsilon(pu,&epsilon));
+  
+  PetscCall(DMSwarmSortGetAccess(swarm));
+  PetscCall(DMGetDimension(swarm,&dim));
+  /* Setup for coords */
+  PetscCall(DMSwarmGetCellDMActive(swarm, &celldm));
+  PetscCall(DMSwarmCellDMGetCoordinateFields(celldm, NULL, &coordFieldsName));
+  /* Get fields */
+  PetscCall(DMSwarmGetField(swarm, coordFieldsName[0], NULL, NULL, (void **)&coords));
+
+  for (n=0; n<npart; n++) {
+    Partition  p = partitions[n];
+    PetscInt64 zero_count = 0;
+    PetscInt   npoints,i,j,d;
+    PetscInt   *pidx;
+    PetscReal  ratio;
+
+    PetscCall(PartitionFillDataPointsIdx(p,swarm));
+    PetscCall(PartitionGetDataPointsIdx(p,&npoints,&pidx));
+    if (npoints == 0) continue;
+    /* RBF matrix */
+    for (i=0; i<npoints; i++) {
+      for (j=i; j<npoints; j++) {
+        PetscReal dist = 0.0;
+        /* Compute the distance between points */
+        for (d=0; d<dim; d++) {
+          dist += (coords[ dim*pidx[i] + d] - coords[ dim*pidx[j] + d]) * (coords[ dim*pidx[i] + d] - coords[ dim*pidx[j] + d]);
+        }
+        dist = PetscSqrtReal(dist);
+        if (1.0 - epsilon * dist < 0.0) {
+          zero_count++;
+        }
+      }
+    }
+    ratio = (PetscReal)(2*zero_count) / (PetscReal)(npoints*npoints);
+    PetscPrintf(PETSC_COMM_SELF,"Rank[%d]: Partition[%" PetscInt_FMT "] has %" PetscInt_FMT " data points and %" PetscInt64_FMT " zero entries = %g ratio, in the RBF matrix\n",rank,n,npoints,2*zero_count,ratio);
+  }
+
+  PetscFunctionReturn(PETSC_SUCCESS);
+}
+
 static PetscErrorCode Test_advection()
 {
   LagRBFCtx        ctx;
@@ -325,8 +381,10 @@ static PetscErrorCode Test_advection()
   PetscCall(CreateSwarmInterp(ctx, &ctx->swi));
   swarm_interp = ctx->swi;
   PetscCall(SwarmOutput(ctx,swarm_interp,3,output_fields,PETSC_FALSE));
+  /* Count zeros in RBF matrix */
+  //PetscCall(CountZerosInRBFMatrix(ctx,swarm_data));
 #if 1
-  PetscCall(LagRBF_PartitionsSetUp(ctx,swarm_data));
+  PetscCall(LagRBF_PartitionsSetUp(ctx,swarm_data,swarm_interp));
   /* Interpolate */
   PetscCall(PartitionSolveInterpolationCoefficients(pu,partitions,swarm_data,"fields"));
   PetscCall(RBFInterpolation(ctx,swarm_interp,swarm_data,"fields"));
@@ -351,6 +409,7 @@ static PetscErrorCode Test_advection()
     PetscCall(LagRBFSetStep(ctx,step));
     PetscCall(PetscPrintf(PETSC_COMM_WORLD,"[[ STEP: %" PetscInt_FMT " ]], time: %g\n",step,time));
     /* Interpolate */
+    PetscCall(LagRBF_PartitionsSetUp(ctx,swarm_data,swarm_interp));
     PetscCall(PartitionSolveInterpolationCoefficients(pu,partitions,swarm_data,"fields"));
     PetscCall(RBFInterpolation(ctx,swarm_interp,swarm_data,"fields"));
     PetscCall(AdvectionInitializeTimestepVelocity(ctx,swarm_interp));

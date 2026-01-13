@@ -8,9 +8,16 @@ static const char help[] = "Test to read HDF5 files.\n\n";
 #include "lagrangian_rbf.h"
 #include "io_utils.h"
 #include "swarm/swarm_utils.h"
-#include "swarm_data.h"
+#include "swarm/swarm_data.h"
+#include "swarm/swarm_interp.h"
 #include "swarm/swarm_output.h"
+#include "partitions/partition.h"
+#include "partitions/partition_solve.h"
+#include "partition_of_unity.h"
+#include "interpolation.h"
+#include "cell_info.h"
 
+#if 0
 static PetscErrorCode StagReshapeVelocity(PetscInt dim, StagFieldInfo fdata, PetscReal *velocity)
 {
   PetscInt p,d;
@@ -192,13 +199,555 @@ static PetscErrorCode Test()
 #endif
   PetscFunctionReturn(PETSC_SUCCESS);
 }
+#endif
+
+typedef struct {
+  int    n[3];
+  int    nblocks;
+  int    bs;
+  double *data;
+  float  *x,*y,*z;
+  float  rcmb;
+} StagField;
+
+static PetscErrorCode TestBinaryStagg(StagField *sfield)
+{
+  FILE       *fp;
+  PetscInt   nval;
+  int        ib,ix,iy,iz,i,j,k,b,v,magic,xyp,nz2,npi,step;
+  int        ncpu[4],ntot[4],npar[4];
+  float      rcmb,time,erupta_total,botT_val,scale_fac=1.0;
+  float      aspect[2];
+  float      *zg,*x,*y,*z,*data_local;
+  double     *data;
+  const char fname[] = "/mnt/c/Users/jourdon/Documents/Scripts/PostProc/StagYY/PJB6_YS1_Rh32_vp00039";
+  //const char fname[] = "/mnt/c/Users/jourdon/Documents/Scripts/PostProc/StagYY/PJB6_YS1_Rh32_t00039";
+  PetscFunctionBeginUser;
+
+  /* Data block-size here velocity and pressure */
+  nval = 4;
+  //nval = 1;
+  fp = fopen(fname,"rb");
+  PetscCheck(fp != NULL,PETSC_COMM_WORLD,PETSC_ERR_FILE_OPEN,"Cannot open file: %s",fname);
+  
+  fread(&magic,sizeof(int),1,fp);
+  PetscPrintf(PETSC_COMM_WORLD,"Magic number: %d\n",magic);
+  if ( (magic < 100 && nval > 1) || (magic > 300 && nval == 1) ) {
+    SETERRQ(PETSC_COMM_SELF,PETSC_ERR_FILE_READ,"File %s contains the wrong number of components in provided field.",fname);
+  }
+  magic = magic % 100;
+  PetscPrintf(PETSC_COMM_WORLD,"Magic modulo 100: %d\n",magic);
+  if (magic >= 9 && nval == 4) { xyp = 1; } // extra ghost point in x & y directions
+  else                         { xyp = 0; }
+
+  fread(ntot,sizeof(int),4,fp); /* Total number of grid points + # blocks (2 for yin-yang grid) */
+  fread(aspect,sizeof(float),2,fp); /* Aspect ratios */
+  fread(npar,sizeof(int),4,fp); /* Number of parallel subdomains */
+  // z-coordinates of what ??
+  nz2 = 2*ntot[2] + 1;
+  zg = (float*) malloc( nz2 * sizeof(float) );
+  fread(zg,sizeof(float),nz2,fp);
+  /* Compute nx, ny, nz and nb PER CPU */
+  for (k=0; k<4; k++) { ncpu[k] = ntot[k] / npar[k]; }
+  /* Number of values per "read" block */
+  npi = (ncpu[0]+xyp) * (ncpu[1]+xyp) * ncpu[2] * ncpu[3] * nval;
+  fread(&rcmb,sizeof(float),1,fp); /* distance from surface to CMB */
+  fread(&step,sizeof(int),1,fp); /* time step */
+  fread(&time,sizeof(float),1,fp); /* simulation time */
+  fread(&erupta_total,sizeof(float),1,fp); /* ?? */
+  fread(&botT_val,sizeof(float),1,fp); /* bottom temperature value */
+
+  // Report for debugging
+  PetscPrintf(PETSC_COMM_WORLD,"ntot: %d %d %d %d\n",ntot[0],ntot[1],ntot[2],ntot[3]);
+  PetscPrintf(PETSC_COMM_WORLD,"Aspect ratios: %g %g\n",aspect[0],aspect[1]);
+  PetscPrintf(PETSC_COMM_WORLD,"npar: %d %d %d %d\n",npar[0],npar[1],npar[2],npar[3]);
+  PetscPrintf(PETSC_COMM_WORLD,"n per CPU: %d %d %d %d\n",ncpu[0],ncpu[1],ncpu[2],ncpu[3]);
+  PetscPrintf(PETSC_COMM_WORLD,"Number of values per block: %d\n",npi);
+  PetscPrintf(PETSC_COMM_WORLD,"rcmb: %g, step: %d, time: %g, erupta_total: %g, botT_val: %g\n",rcmb,step,time,erupta_total,botT_val);  
+
+  /* 
+    Allocate coordinates arrays
+    Note: coordinates are only for 1 block of the yin-yang grid
+    the other block can be obtained by rotation and is reconstructed later
+  */
+  x = (float*) malloc( ntot[0] * sizeof(float) );
+  y = (float*) malloc( ntot[1] * sizeof(float) );
+  z = (float*) malloc( ntot[2] * sizeof(float) );
+  fread(x,sizeof(float),ntot[0],fp);
+  fread(y,sizeof(float),ntot[1],fp);
+  fread(z,sizeof(float),ntot[2],fp);
+
+  if (nval != 1) { fread(&scale_fac,sizeof(float),1,fp); }
+
+  data       = (double*) malloc( ntot[0]*ntot[1]*ntot[2]*ntot[3]*nval * sizeof(double) );
+  data_local = (float*)  malloc( npi * sizeof(float) );
+  /* Read blocks */
+  for (ib=0; ib<npar[3]; ib++) {
+    for(iz=0; iz<npar[2]; iz++) {
+      for (iy=0; iy<npar[1]; iy++) {
+        for (ix=0; ix<npar[0]; ix++) {
+          /* Read data block */
+          fread(data_local,sizeof(float),npi,fp);
+          /* Copy into global array without the ghost nodes */
+          for (b=0; b<ncpu[3]; b++) {
+            int bb = ib*ncpu[3] + b;
+            for (k=0; k<ncpu[2]; k++) {
+              int kk = iz*ncpu[2] + k;
+              for (j=0; j<ncpu[1]; j++) {
+                int jj = iy*ncpu[1] + j;
+                for (i=0; i<ncpu[0]; i++) {
+                  int ii = ix*ncpu[0] + i;
+                  /* 
+                    Index in local array WITH ghost points
+                    Layout: data_local[b][k][j][i][v] with dimensions:
+                    - b: ncpu[3]
+                    - k: ncpu[2]
+                    - j: ncpu[1]+xyp (includes ghost)
+                    - i: ncpu[0]+xyp (includes ghost)
+                    - v: nval
+                  */
+                  int fidx_from = b * ncpu[2] * (ncpu[1]+xyp) * (ncpu[0]+xyp)
+                                + k * (ncpu[1]+xyp) * (ncpu[0]+xyp)
+                                + j * (ncpu[0]+xyp)
+                                + i;
+                  /* 
+                    Index in global array WITHOUT ghost points
+                    Layout: data[bb][kk][jj][ii][v] with dimensions:
+                    - bb: ntot[3]
+                    - kk: ntot[2]
+                    - jj: ntot[1]
+                    - ii: ntot[0]
+                    - v: nval
+                  */
+                  int fidx_to = bb * ntot[2] * ntot[1] * ntot[0]
+                              + kk * ntot[1] * ntot[0]
+                              + jj * ntot[0]
+                              + ii;
+                  /* Copy all field components for this point */
+                  for (v=0; v<nval; v++) {
+                    int idx_from = nval*fidx_from + v;
+                    int idx_to   = nval*fidx_to + v;
+                    data[ idx_to ] = (double)( scale_fac * data_local[ idx_from ] );
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+  free(data_local);
+  fclose(fp);
+  free(zg);
+
+  /* Set output structure */
+  sfield->n[0]    = ntot[0];
+  sfield->n[1]    = ntot[1];
+  sfield->n[2]    = ntot[2];
+  sfield->nblocks = ntot[3];
+  sfield->bs      = nval;
+  sfield->rcmb    = rcmb;
+  /* Must be freed after copied into the swarm */
+  sfield->data    = data;
+  sfield->x       = x;
+  sfield->y       = y;
+  sfield->z       = z;
+
+  PetscFunctionReturn(PETSC_SUCCESS);
+}
+
+static int sort_ascendant(const void *a, const void *b)
+{
+  int ia = *(const int*)a;
+  int ib = *(const int*)b;
+  if (ia < ib) return -1;
+  if (ia > ib) return  1;
+  return 0;
+}
+
+static PetscErrorCode ReconstructStaggGrid(StagField *sfield, PetscReal **coords, PetscReal **_fields)
+{
+  PetscInt  i,j,k,npoints,nblocks,bs;
+  PetscInt  *n;
+  PetscReal *coor,*fields;
+  PetscFunctionBeginUser;
+  n       = sfield->n;
+  nblocks = sfield->nblocks;
+  bs      = sfield->bs;
+  npoints = n[0] * n[1] * n[2] * nblocks;
+  PetscCall(PetscMalloc1(3*npoints,&coor));
+  PetscCall(PetscMalloc1(bs*npoints,&fields));
+  /* Reconstruct yin-yang grid coordinates */
+  for (k=0; k<n[2]; k++) {
+    PetscReal sum_P = 0.0, sum_vol = 0.0, p_avg;
+    for (j=0; j<n[1]; j++) {
+      for (i=0; i<n[0]; i++) {
+        PetscInt  yin_idx,yang_idx;
+        PetscReal r,lat,lon;
+        PetscReal vtheta,vphi,vr;
+        PetscReal p_yin,p_yang;
+        
+        /* Centre to 0.0 */
+        r   = (PetscReal)sfield->rcmb + (PetscReal)sfield->z[k];
+        lat = 0.25*PETSC_PI - (PetscReal)sfield->x[i];
+        lon = (PetscReal)sfield->y[j] - 0.75*PETSC_PI;
+
+        /* Yin */
+        yin_idx = i + j*n[0] + k*n[0]*n[1];
+        coor[ 3*yin_idx     ] = r * PetscCosReal(lat) * PetscCosReal(lon); /* x */
+        coor[ 3*yin_idx + 1 ] = r * PetscCosReal(lat) * PetscSinReal(lon); /* y */
+        coor[ 3*yin_idx + 2 ] = r * PetscSinReal(lat);                     /* z */
+        
+        /* velocity */
+        vtheta = (PetscReal)sfield->data[ bs*yin_idx     ];
+        vphi   = (PetscReal)sfield->data[ bs*yin_idx + 1 ];
+        vr     = (PetscReal)sfield->data[ bs*yin_idx + 2 ];
+        fields[ bs*yin_idx     ] = vtheta*PetscCosReal(0.5*PETSC_PI - lat)*PetscCosReal(lon) 
+                                   - vphi*PetscSinReal(lon) 
+                                   + vr*PetscSinReal(0.5*PETSC_PI - lat)*PetscCosReal(lon);
+        fields[ bs*yin_idx + 1 ] = vtheta*PetscCosReal(0.5*PETSC_PI - lat)*PetscSinReal(lon)
+                                   + vphi*PetscCosReal(lon) 
+                                   + vr*PetscSinReal(0.5*PETSC_PI - lat)*PetscSinReal(lon);
+        fields[ bs*yin_idx + 2 ] = -vtheta*PetscSinReal(0.5*PETSC_PI - lat) + vr*PetscCosReal(0.5*PETSC_PI - lat);
+        /* pressure */
+        p_yin = (PetscReal)sfield->data[ bs*yin_idx + 3 ];
+
+        /* Yang */
+        yang_idx = yin_idx + n[0]*n[1]*n[2];
+        coor[ 3*yang_idx     ] = - coor[ 3*yin_idx     ];
+        coor[ 3*yang_idx + 1 ] =   coor[ 3*yin_idx + 2 ];
+        coor[ 3*yang_idx + 2 ] =   coor[ 3*yin_idx + 1 ];
+
+        /* velocity */
+        vtheta = (PetscReal)sfield->data[ bs*yang_idx     ];
+        vphi   = (PetscReal)sfield->data[ bs*yang_idx + 1 ];
+        vr     = (PetscReal)sfield->data[ bs*yang_idx + 2 ];
+        fields[ bs*yang_idx     ] = - ( vtheta*PetscSinReal(lat)*PetscCosReal(lon)
+                                      - vphi*PetscSinReal(lon)
+                                      + vr*PetscCosReal(lat)*PetscCosReal(lon) );
+        fields[ bs*yang_idx + 1 ] =   vtheta*PetscSinReal(lat)*PetscSinReal(lon)
+                                      + vphi*PetscCosReal(lon)
+                                      + vr*PetscCosReal(lat)*PetscSinReal(lon);
+        fields[ bs*yang_idx + 2 ] = - vtheta*PetscCosReal(lat) + vr*PetscCosReal(0.5*PETSC_PI - lat);
+        /* pressure */
+        p_yang = (PetscReal)sfield->data[ bs*yang_idx + 3 ];
+
+        sum_P   += p_yin + p_yang;
+        sum_vol += 2.0;
+      }
+    }
+    p_avg = sum_P / sum_vol;
+    for (j=0; j<n[1]; j++) {
+      for (i=0; i<n[0]; i++) {
+        PetscInt  yin_idx,yang_idx;
+        /* Yin */
+        yin_idx = i + j*n[0] + k*n[0]*n[1];
+        fields[ bs*yin_idx + 3 ] = (PetscReal)sfield->data[ bs*yin_idx + 3 ] - p_avg;
+        /* Yang */
+        yang_idx = yin_idx + n[0]*n[1]*n[2];
+        fields[ bs*yang_idx + 3 ] = (PetscReal)sfield->data[ bs*yang_idx + 3 ] - p_avg;
+      }
+    }
+  }
+  *coords = coor;
+  *_fields = fields;
+  free(sfield->data);
+  free(sfield->x);
+  free(sfield->y);
+  free(sfield->z);
+  PetscFunctionReturn(PETSC_SUCCESS);
+}
+
+static PetscErrorCode RemoveYinYangCorners(DM swarm, StagField *sfield)
+{
+  PetscInt  i,j,k,np_yin,cnt;
+  PetscInt  *n,*rm_idx;
+  PetscReal *coords;
+  PetscFunctionBeginUser;
+
+  n      = sfield->n;
+  np_yin = n[0] * n[1] * n[2];
+  PetscCall(DMSwarmGetField(swarm,DMSwarmPICField_coor,NULL,NULL,(void**)&coords));
+  PetscCall(PetscMalloc1(np_yin,&rm_idx));
+  cnt = 0;
+#if 1
+  for (k=0; k<n[2]; k++) {
+    for (j=0; j<n[1]; j++) {
+      for (i=0; i<n[0]; i++) {
+        PetscInt yin_idx,yang_idx;
+        PetscReal x1,y1,z1;
+        PetscReal x2,y2,z2;
+        PetscReal theta1,phi1;
+        PetscReal theta2,phi2;
+
+        /* Yin grid */
+        yin_idx  = i + j*n[0] + k*n[0]*n[1];
+        /* Yang grid */
+        yang_idx = yin_idx + n[0]*n[1]*n[2];
+
+        x1 = coords[ 3*yin_idx     ];
+        y1 = coords[ 3*yin_idx + 1 ];
+        z1 = coords[ 3*yin_idx + 2 ];
+
+        x2 = coords[ 3*yang_idx     ];
+        y2 = coords[ 3*yang_idx + 1 ];
+        z2 = coords[ 3*yang_idx + 2 ];
+
+        theta1 = PetscAtan2Real( PetscSqrtReal(x1*x1 + y1*y1), z1 );
+        phi1   = PetscAtan2Real( y1, x1 );
+
+        theta2 = PetscAtan2Real( PetscSqrtReal(x2*x2 + y2*y2), z2 );
+        phi2   = PetscAtan2Real( y2, x2 );
+        
+        if ( ( theta2 > 0.25*PETSC_PI  && theta2 < 0.75*PETSC_PI && 
+               phi2   > -0.75*PETSC_PI && phi2   < 0.75*PETSC_PI ) ) {
+          if (x1 < 0.0) rm_idx[cnt++] = yin_idx;
+          if (x2 > 0.0) rm_idx[cnt++] = yang_idx;
+        }
+        
+      }
+    }
+  }
+#endif
+  PetscCall(DMSwarmRestoreField(swarm,DMSwarmPICField_coor,NULL,NULL,(void**)&coords));
+  if (cnt == 0) {
+    PetscFree(rm_idx);
+    PetscFunctionReturn(PETSC_SUCCESS);
+  }
+  /* Remove marked points */
+  //PetscLogDouble time[2];
+  //PetscCall(PetscTime(&time[0]));
+  //qsort(rm_idx,cnt,sizeof(PetscInt),sort_ascendant);
+  //PetscCall(PetscIntSortSemiOrdered(cnt, rm_idx));
+  //PetscCall(PetscSortInt(cnt, rm_idx));
+  //PetscCall(PetscTime(&time[1]));
+  //PetscPrintf(PETSC_COMM_WORLD,"Sorting %" PetscInt_FMT " indices took %g sec\n",cnt,time[1]-time[0]);
+  PetscCall(DMSwarmRemoveNPointsFromIndex(swarm, cnt, rm_idx));
+  //for (i=0; i<cnt; i++) {
+  //  PetscCall(DMSwarmRemovePointAtIndex(swarm, rm_idx[i]));
+  //}
+  PetscFree(rm_idx);
+  PetscFunctionReturn(PETSC_SUCCESS);
+}
+
+static PetscErrorCode CreateSwarm(DM *sw)
+{
+  DM swarm;
+  PetscInt dim = 3;
+  char     dm_name[PETSC_MAX_PATH_LEN],dm_prefix[PETSC_MAX_PATH_LEN];
+  PetscFunctionBeginUser;
+
+  PetscCall(DMCreate(PETSC_COMM_WORLD,&swarm));
+  PetscCall(DMSetType(swarm, DMSWARM));
+  PetscCall(DMSetDimension(swarm, dim));
+  PetscCall(DMSwarmSetType(swarm, DMSWARM_BASIC)); // Will use DMSwarmMigrate_Push_Basic
+  PetscCall(PetscSNPrintf(dm_name, PETSC_MAX_PATH_LEN-1, "swarm_data"));
+  PetscCall(PetscObjectSetName((PetscObject)swarm,dm_name));
+  PetscCall(PetscSNPrintf(dm_prefix, PETSC_MAX_PATH_LEN-1, "%s_",dm_name));
+  PetscCall(DMSetOptionsPrefix(swarm,dm_prefix));
+  PetscCall(DMSetFromOptions(swarm));
+
+  PetscCall(DMSwarmInitializeFieldRegister(swarm)); // this register by default the fields DMSwarmField_pid & DMSwarmField_rank
+
+  PetscCall(DMSwarmRegisterPetscDatatypeField(swarm,DMSwarmPICField_coor,dim,PETSC_REAL));
+  PetscCall(DMSwarmRegisterPetscDatatypeField(swarm,"fields",4,PETSC_REAL));
+
+
+  PetscCall(DMSwarmFinalizeFieldRegister(swarm));
+  PetscCall(DMSetUp(swarm));
+  *sw = swarm;
+
+  PetscFunctionReturn(PETSC_SUCCESS);
+}
+
+#if 0
+static PetscErrorCode TestStagBinMain()
+{
+  LagRBFCtx ctx;
+  StagField sfield;
+  DM        swarm;
+  PetscInt  npoints;
+  PetscReal *coor,*coords,*fields,*data;
+  PetscBool exists;
+  const char *output_fields[] = { DMSwarmPICField_coor, "fields" };
+  PetscFunctionBeginUser;
+
+  PetscCall(LagRBFCtxCreate(&ctx));
+  PetscCall(LagRBFSetFromOptions(ctx));
+  PetscCall(TestDirectory(ctx->output_dir,'w',&exists));
+  if (!exists) { PetscCall(CreateDirectory(ctx->output_dir)); }
+
+  PetscCall(PetscMemzero(&sfield,sizeof(StagField)));
+  PetscCall(TestBinaryStagg(&sfield));
+#if 1
+  PetscCall(ReconstructStaggGrid(&sfield,&coor,&data));
+  PetscCall(CreateSwarm(&swarm));
+
+  npoints = sfield.n[0] * sfield.n[1] * sfield.n[2] * sfield.nblocks;
+  PetscCall(DMSwarmSetLocalSizes(swarm,npoints,-1));
+  PetscPrintf(PETSC_COMM_WORLD,"Stag: npoints = %d x %d x %d x %d = %d \n",sfield.n[0],sfield.n[1],sfield.n[2],sfield.nblocks,npoints);
+  PetscPrintf(PETSC_COMM_WORLD,"Stag: bs = %d \n",sfield.bs);
+
+  /* Set coords and velocity fields */
+  //PetscCall(DMSwarmGetField(swarm,"coords",NULL,NULL,(void**)&coords));
+  PetscCall(DMSwarmGetField(swarm,DMSwarmPICField_coor,NULL,NULL,(void**)&coords));
+  PetscCall(DMSwarmGetField(swarm,"fields",NULL,NULL,(void**)&fields));
+  PetscCall(PetscArraycpy(coords,coor,3*npoints));
+  PetscCall(PetscArraycpy(fields,data,4*npoints));
+  //PetscCall(DMSwarmRestoreField(swarm,"coords",NULL,NULL,(void**)&coords));
+  PetscCall(DMSwarmRestoreField(swarm,DMSwarmPICField_coor,NULL,NULL,(void**)&coords));
+  PetscCall(DMSwarmRestoreField(swarm,"fields",NULL,NULL,(void**)&fields));
+
+  PetscFree(coor);
+  PetscFree(data);
+  PetscCall(RemoveYinYangCorners(swarm,&sfield));
+
+  PetscCall(SwarmOutput(ctx,swarm,2,output_fields,PETSC_FALSE));
+#endif
+
+  PetscFunctionReturn(PETSC_SUCCESS);
+}
+#endif
+
+#if 0
+#include "readers/stagYY/binary_loader.h"
+static PetscErrorCode TestStagBinMain()
+{
+  LagRBFCtx ctx;
+  DM        swarm;
+  PetscBool exists;
+  const char *output_fields[] = { DMSwarmPICField_coor, "fields" };
+  const char *fname[] = { "/mnt/c/Users/jourdon/Documents/Scripts/PostProc/StagYY/PJB6_YS1_Rh32_vp00039" };
+  PetscFunctionBeginUser;
+
+  PetscCall(LagRBFCtxCreate(&ctx));
+  PetscCall(LagRBFSetFromOptions(ctx));
+  PetscCall(TestDirectory(ctx->output_dir,'w',&exists));
+  if (!exists) { PetscCall(CreateDirectory(ctx->output_dir)); }
+
+  PetscCall(CreateSwarm(&swarm));
+  PetscCall(StagBinSwarmSetFromFiles(swarm, fname, 1, PETSC_FALSE));
+  PetscCall(SwarmOutput(ctx,swarm,2,output_fields,PETSC_FALSE));
+
+  PetscCall(DMDestroy(&swarm));
+  PetscCall(LagRBFCtxDestroy(&ctx));
+  PetscFunctionReturn(PETSC_SUCCESS);
+}
+#endif
+
+#include "readers/stagYY/binary_loader.h"
+static PetscErrorCode TestStagBinMain()
+{
+  PartitionOfUnity pu;
+  LagRBFCtx ctx;
+  Partition *partitions;
+  CellInfo  *cellinfo;
+  DM        swarm_data,swarm_interp;
+  PetscInt  np,cnt,npoints_i,npoints_d;
+  PetscInt  *rm_idx;
+  PetscBool exists;
+  PetscMPIInt rank;
+  //const char *output_fields[] = { DMSwarmPICField_coor, "fields" };
+  const char *fname[] = { "/mnt/c/Users/jourdon/Documents/Scripts/PostProc/StagYY/PJB6_YS1_Rh32_vp00039" };
+  const char *output_fields[] = {"DMSwarm_pid","fields"};
+  PetscFunctionBeginUser;
+
+  PetscCall(LagRBFCtxCreate(&ctx));
+  PetscCall(LagRBFSetFromOptions(ctx));
+  PetscCall(TestDirectory(ctx->output_dir,'w',&exists));
+  if (!exists) { PetscCall(CreateDirectory(ctx->output_dir)); }
+  /* Create data structures */
+  PetscCall(LagRBF_PartitionOfUnityCreate(ctx));
+  PetscCall(LagRBF_PartitionCreate(ctx));
+  PetscCall(LagRBF_CellInfoCreate(ctx));
+
+  PetscCall(LagRBFGetPartitionOfUnity(ctx,&pu));
+  PetscCall(LagRBFGetCellInfo(ctx,&cellinfo));
+  PetscCall(LagRBFGetPartitions(ctx,&partitions));
+
+  PetscCall(SwarmDataCreate(ctx,&swarm_data));
+  PetscCall(MPI_Comm_rank(PETSC_COMM_WORLD,&rank));
+  /* Read data only on rank 0 */
+  if (rank == 0) {
+    PetscCall(StagBinSwarmSetFromFiles(swarm_data, fname, 1, PETSC_FALSE));
+  }
+  /* Send data to other ranks */
+  PetscCall(SwarmDataAssignMigrateBasic(ctx,swarm_data));
+  /* Duplicate ghost points */
+  PetscCall(SwarmDataAssignMigrateDuplicateGhostPoints(ctx,swarm_data));
+
+#if 0
+  /* There are too much points to fit in memory... downsample */
+  PetscCall(DMSwarmGetLocalSize(swarm_data,&npoints_d));
+  PetscCall(PetscMalloc1(npoints_d/2,&rm_idx));
+  cnt = 0;
+  for (np=0; np<npoints_d; np++) {
+    if (np % 2 == 0) {
+      rm_idx[cnt++] = np;
+    }
+  }
+  PetscCall(DMSwarmRemoveNPointsFromIndex(swarm_data, cnt, rm_idx));
+  /* Again */
+  PetscCall(DMSwarmGetLocalSize(swarm_data,&npoints_d));
+  cnt = 0;
+  for (np=0; np<npoints_d; np++) {
+    if (np % 2 == 0) {
+      rm_idx[cnt++] = np;
+    }
+  }
+  PetscCall(DMSwarmRemoveNPointsFromIndex(swarm_data, cnt, rm_idx));
+  /* Again */
+  PetscCall(DMSwarmGetLocalSize(swarm_data,&npoints_d));
+  cnt = 0;
+  for (np=0; np<npoints_d; np++) {
+    if (np % 2 == 0) {
+      rm_idx[cnt++] = np;
+    }
+  }
+  PetscCall(DMSwarmRemoveNPointsFromIndex(swarm_data, cnt, rm_idx));
+  /* Again */
+  PetscCall(DMSwarmGetLocalSize(swarm_data,&npoints_d));
+  cnt = 0;
+  for (np=0; np<npoints_d; np++) {
+    if (np % 2 == 0) {
+      rm_idx[cnt++] = np;
+    }
+  }
+  PetscCall(DMSwarmRemoveNPointsFromIndex(swarm_data, cnt, rm_idx));
+  PetscCall(PetscFree(rm_idx));
+#endif
+  
+  
+  
+  /* Set up CellInfo data structure */
+  PetscCall(CellInfoSetUp(pu,cellinfo,swarm_data));
+  /* Create swarm for the interpolation */
+  PetscCall(SwarmInterpSetUp(ctx,&swarm_interp));
+  PetscCall(DMSwarmGetLocalSize(swarm_interp,&npoints_i));
+  PetscCall(SwarmFieldAssignUniqueIndex(swarm_interp,DMSwarmField_pid,0,npoints_i));
+  /* Set up Partition data structure */
+  PetscCall(LagRBF_PartitionsSetUp(ctx,swarm_data,swarm_interp));
+  /* Interpolate */
+  PetscCall(PartitionSolveInterpolationCoefficients(pu,partitions,swarm_data,"fields"));
+  PetscCall(RBFInterpolation(ctx,swarm_interp,swarm_data,"fields"));
+
+  //PetscCall(SwarmOutput(ctx,swarm_data,2,output_fields,PETSC_FALSE));
+  PetscCall(SwarmOutput(ctx,swarm_interp,2,output_fields,PETSC_FALSE));
+
+  PetscCall(DMDestroy(&swarm_data));
+  PetscCall(DMDestroy(&swarm_interp));
+  PetscCall(LagRBFCtxDestroy(&ctx));
+  PetscFunctionReturn(PETSC_SUCCESS);
+}
 
 int main(int argc, char *argv[])
 {
   PetscFunctionBeginUser;
   PetscCall(LagRBFInitialize(&argc,&argv,0,help));
 
-  PetscCall(Test());
+  //PetscCall(Test());
+  PetscCall(TestStagBinMain());
 
   PetscCall(PetscFinalize());
   

@@ -163,12 +163,16 @@ PetscErrorCode SwarmOutput(LagRBFCtx ctx, DM sw, PetscInt nfields, const char *f
   PetscCall(ParaviewPVDOpenAppend(beenhere,ctx->step,pvdfname,ctx->time, vtkfname, stepdir));
   beenhere = PETSC_TRUE;
 
+  /* If Swarm type is PIC: */
   { /* Coordinates */
-    DMSwarmCellDM celldm;
-    const char    **coordFields;
-    PetscCall(DMSwarmGetCellDMActive(sw,&celldm));
-    PetscCall(DMSwarmCellDMGetCoordinateFields(celldm, NULL, &coordFields));
-    PetscCall(SwarmOutputFieldPetscVec_FromName(sw,coordFields[0],outputdir,stepprefix,PETSC_FALSE));
+    DM_Swarm *swarm = (DM_Swarm*)sw->data;
+    if (swarm->swarm_type == DMSWARM_PIC) {
+      DMSwarmCellDM celldm;
+      const char    **coordFields;
+      PetscCall(DMSwarmGetCellDMActive(sw,&celldm));
+      PetscCall(DMSwarmCellDMGetCoordinateFields(celldm, NULL, &coordFields));
+      PetscCall(SwarmOutputFieldPetscVec_FromName(sw,coordFields[0],outputdir,stepprefix,PETSC_FALSE));
+    }
   }
   for (f=0; f<nfields; f++) {
     PetscDataType type;
