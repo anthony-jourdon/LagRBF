@@ -129,18 +129,19 @@ PetscErrorCode PartitionCreate_SinglePartition(Partition *partition)
   p->map      = NULL; // Initialize the map
   p->ndata    = 0; // Initialize number of data points in the partition
   p->data_idx = NULL; // Initialize the data points indices
-  p->epsilon  = 1.0; // Default epsilon for the RBF kernel
   p->idx      = -1; // Index of the partition
+  p->setup    = PETSC_FALSE;
   p->data     = NULL;
-  p->destroy  = NULL;
-  p->solve    = NULL;
+  //p->epsilon  = 1.0; // Default epsilon for the RBF kernel
+  //p->destroy  = NULL;
+  //p->solve    = NULL;
   
   *partition = p;
 
   PetscFunctionReturn(PETSC_SUCCESS);
 }
 
-PetscErrorCode PartitionDestroy_SinglePartition(Partition *partition)
+PetscErrorCode PartitionDestroy_SinglePartition(Partition *partition, PetscErrorCode (*destroy)(Partition))
 {
   Partition p = *partition;
   PetscFunctionBeginUser;
@@ -150,7 +151,7 @@ PetscErrorCode PartitionDestroy_SinglePartition(Partition *partition)
   if (p->data_idx) { PetscCall(PetscFree(p->data_idx));  }
   if (p->X)        { PetscCall(MatDestroy(&p->X));       }
   if (p->A)        { PetscCall(MatDestroy(&p->A));       }
-  if (p->destroy)  { PetscCall(p->destroy(p));           }
+  if (destroy)     { PetscCall(destroy(p));           }
   PetscCall(PetscFree(p));
   *partition = NULL;
 
@@ -173,8 +174,8 @@ PetscErrorCode PartitionCreate(PartitionOfUnity pu, Partition **partition)
   /* Set the index of each partition */
   PetscCall(PartitionsSetIndex(pu,p));
   /* Set the epsilon value for each partition */
-  PetscCall(PUGetEpsilon(pu,&epsilon));
-  for (n=0; n<npart; n++) { PetscCall(PartitionSetEpsilon(p[n],epsilon)); }
+  //PetscCall(PUGetEpsilon(pu,&epsilon));
+  //for (n=0; n<npart; n++) { PetscCall(PartitionSetEpsilon(p[n],epsilon)); }
 
   *partition = p;
   PetscFunctionReturn(PETSC_SUCCESS);
@@ -188,7 +189,7 @@ PetscErrorCode PartitionDestroy(PartitionOfUnity pu, Partition **partition)
 
   if (!p) { PetscFunctionReturn(PETSC_SUCCESS); }
   PetscCall(PUGetNPartitionsLocal(pu,&npart));
-  for (n=0; n<npart; n++) { PetscCall(PartitionDestroy_SinglePartition(&p[n])); }
+  for (n=0; n<npart; n++) { PetscCall(PartitionDestroy_SinglePartition(&p[n], pu->pdestroy)); }
   PetscCall(PetscFree(p));
   *partition = NULL;
 
@@ -242,69 +243,34 @@ static PetscErrorCode PartitionCreateCoefficientsMat(Partition p, PetscInt nfiel
   PetscFunctionReturn(PETSC_SUCCESS);
 }
 
-PetscErrorCode LagRBF_PartitionsSetUp(LagRBFCtx ctx, DM swarm)
+/* 
+  PetscErrorCode PartitionSetUp(LagRBFCtx ctx, DM swarm, Partition p)
+  For the partition:
+    - fill the data points indices belonging to the partition
+    - create the matrix to hold the solution
+    - fill (and factor) the RBF matrix for the partition
+*/
+PetscErrorCode PartitionSetUp_SinglePartition(LagRBFCtx ctx, DM swarm, Partition p)
 {
   PartitionOfUnity pu;
   DMSwarmCellDM    celldm;
   ASolveMethod     smethod;
   KernelType       ktype;
-  Partition        *partitions;
-  PetscInt         n,npart,dim,nfields;
+  PetscInt         dim,nfields;
+  PetscReal        epsilon;
   PetscReal        *coords,*values;
   PetscReal        (*kernel_fn)(PetscReal,PetscReal);
-  PetscErrorCode   (*setup)(Partition,PetscInt,PetscReal*,PetscReal (*)(PetscReal,PetscReal));
   const char       **coordFieldsName;
   PetscFunctionBeginUser;
-  PetscPrintf(PETSC_COMM_WORLD,"[[ %s ]]\n",PETSC_FUNCTION_NAME);
-  
-  PetscCheck(swarm,PETSC_COMM_SELF,PETSC_ERR_ARG_NULL,"Swarm is NULL. Create the data swarm first.");
+
+  if (p->setup) { PetscFunctionReturn(PETSC_SUCCESS); }
+  PetscPrintf(PETSC_COMM_WORLD,"[[ %s ]]: Setting up Partition[%" PetscInt_FMT "]\n",PETSC_FUNCTION_NAME,p->idx);
   PetscCall(LagRBFGetPartitionOfUnity(ctx,&pu));
-  PetscCall(LagRBFGetPartitions(ctx,&partitions));
-  PetscCall(PUGetNPartitionsLocal(pu,&npart));
   PetscCall(LagRBFGetSolveMethod(ctx,&smethod));
   PetscCall(LagRBFGetKernelType(ctx,&ktype));
-  switch (ktype) {
-    case KERNEL_LINEAR:
-      PetscPrintf(PETSC_COMM_WORLD,"Interpolation Kernel selected: Linear\n");
-      kernel_fn = KernelLinear;
-      break;
-    case KERNEL_WENDLAND_C0:
-      PetscPrintf(PETSC_COMM_WORLD,"Interpolation Kernel selected: Wendland C0\n");
-      kernel_fn = KernelWendlandC0;
-      break;
-    case KERNEL_WENDLAND_C2:
-      PetscPrintf(PETSC_COMM_WORLD,"Interpolation Kernel selected: Wendland C2\n");
-      kernel_fn = KernelWendlandC2;
-      break;
-    case KERNEL_WENDLAND_C4:
-      PetscPrintf(PETSC_COMM_WORLD,"Interpolation Kernel selected: Wendland C4\n");
-      kernel_fn = KernelWendlandC4;
-      break;
-    case KERNEL_WENDLAND_C6:
-      PetscPrintf(PETSC_COMM_WORLD,"Interpolation Kernel selected: Wendland C6\n");
-      kernel_fn = KernelWendlandC6;
-      break;
-    default:
-      SETERRQ(PETSC_COMM_SELF,PETSC_ERR_ARG_OUTOFRANGE,"Unknown kernel type: %" PetscInt_FMT,ktype);
-      break;
-  }
-  switch (smethod) {
-    case A_FACTOR:
-      PetscPrintf(PETSC_COMM_WORLD,"Solve method selected: Cholesky factorization\n");
-      setup = PartitionSetUpRBFMatrix_Factor;
-      break;
-    case A_KSP:
-      PetscPrintf(PETSC_COMM_WORLD,"Solve method selected: KSP using same RBF matrix\n");
-      setup = PartitionSetUpRBFMatrix_KSP;
-      break;
-    case A_ASMB_KSP:
-      PetscPrintf(PETSC_COMM_WORLD,"Solve method selected: KSP re-assembling RBF matrix\n");
-      SETERRQ(PETSC_COMM_SELF,PETSC_ERR_ARG_WRONG,"Solve method A_ASMB_KSP not implemented yet.");
-      break;
-    default:
-      SETERRQ(PETSC_COMM_SELF,PETSC_ERR_ARG_OUTOFRANGE,"Unknown method type: %" PetscInt_FMT,smethod);
-      break;
-  }
+  PetscCall(KernelGetFunction(ktype,&kernel_fn));
+  PetscCall(PUGetEpsilon(pu,&epsilon));
+
   /* Swarm */
   PetscCall(DMSwarmSortGetAccess(swarm));
   PetscCall(DMGetDimension(swarm,&dim));
@@ -314,22 +280,74 @@ PetscErrorCode LagRBF_PartitionsSetUp(LagRBFCtx ctx, DM swarm)
   /* Get fields */
   PetscCall(DMSwarmGetField(swarm, coordFieldsName[0], NULL, NULL, (void **)&coords));
   PetscCall(DMSwarmGetField(swarm,"fields",&nfields,NULL,(void **)&values));
-  /* 
-    For each partition:
-      - fill the data points indices belonging to the partition
-      - create the matrix to hold the solution
-      - fill and factor the RBF matrix for the partition
-  */
- for (n=0; n<npart; n++) {
-    Partition p = partitions[n];
-    PetscCall(PartitionFillDataPointsIdx(p,swarm));
-    PetscCall(PartitionCreateCoefficientsMat(p,nfields));
-    PetscCall(setup(p,dim,coords,kernel_fn));
-  }
+
+  /* Setup partition */
+  PetscCall(PartitionFillDataPointsIdx(p,swarm));
+  PetscCall(PartitionCreateCoefficientsMat(p,nfields));
+  PetscCall(pu->psetup(p,dim,epsilon,coords,kernel_fn));
+
   /* Restore */
   PetscCall(DMSwarmSortRestoreAccess(swarm));
   PetscCall(DMSwarmRestoreField(swarm,coordFieldsName[0],NULL,NULL,(void **)&coords));
   PetscCall(DMSwarmRestoreField(swarm,"fields",&nfields,NULL,(void **)&values));
+
+  p->setup = PETSC_TRUE;
+
+  PetscFunctionReturn(PETSC_SUCCESS);
+}
+
+/*
+  PetscErrorCode LagRBF_PartitionsSetUp(LagRBFCtx ctx, DM swd, DM swi)
+
+  Iterates over the points in the interpolation swarm to identify the partitions to which they are connected.
+  This avoids setting up partitions that are not needed for the interpolation.
+  Needs to be called after each update of the interpolation swarm.
+*/
+PetscErrorCode LagRBF_PartitionsSetUp(LagRBFCtx ctx, DM swd, DM swi)
+{
+  PartitionOfUnity pu;
+  DMSwarmCellDM    celldm_i;
+  Partition        *partitions;
+  DM               das;
+  PetscInt         np,npoints_i;
+  PetscInt         nel,nen;
+  PetscInt         *gtol_elidx,*cellid_i;
+  const PetscInt   *elidx;
+  const char       *cellFieldName_i;
+  PetscFunctionBeginUser;
+  PetscPrintf(PETSC_COMM_WORLD,"[[ %s ]]\n",PETSC_FUNCTION_NAME);
+  
+  PetscCall(LagRBFGetPartitionOfUnity(ctx,&pu));
+  PetscCall(LagRBFGetPartitions(ctx,&partitions));
+  /* Local DMDA info */
+  PetscCall(PUGetDMDALocal(pu,&das));
+  PetscCall(PUGetGlobalToLocalElementMap(pu,&gtol_elidx));
+  PetscCall(DMDAGetElements(das,&nel,&nen,&elidx));
+
+  /* Interpolation swarm info */
+  PetscCall(DMSwarmGetLocalSize(swi,&npoints_i));
+  PetscCall(DMSwarmGetCellDMActive(swi,&celldm_i));
+  PetscCall(DMSwarmCellDMGetCellID(celldm_i,&cellFieldName_i));
+  PetscCall(DMSwarmGetField(swi, cellFieldName_i, NULL, NULL, (void **)&cellid_i));
+
+  for (np=0; np<npoints_i; np++) {
+    PetscInt k,cidx,local_cidx;
+    /* Cell index of the particle */
+    cidx       = cellid_i[np];     // parallel DMDA
+    local_cidx = gtol_elidx[cidx]; // local sequential DMDA
+    /* Iterate over the partitions to which that point is connected */
+    for (k=0; k<nen; k++) {
+      Partition p;
+      PetscInt  puidx;
+      /* Get the partition index */
+      puidx = elidx[nen*local_cidx + k];
+      p     = partitions[puidx];
+      /* Setup the partition (internal check if already setup) */
+      PetscCall(PartitionSetUp_SinglePartition(ctx,swd,p));
+    }
+  }
+  PetscCall(DMSwarmRestoreField(swi, cellFieldName_i, NULL, NULL, (void **)&cellid_i));
+  PetscCall(DMDARestoreElements(das,&nel,&nen,&elidx));
   PetscFunctionReturn(PETSC_SUCCESS);
 }
 
@@ -371,16 +389,18 @@ PetscErrorCode PartitionGetRBFMatrix(Partition p, Mat *A)
 PetscErrorCode PartitionGetEpsilon(Partition p, PetscReal *epsilon)
 {
   PetscFunctionBeginUser;
+  SETERRQ(PETSC_COMM_SELF,PETSC_ERR_SUP,"Espilon is no longer stored in the Partition structure but in PartitionOfUnity.");
   PetscCheck(p,PETSC_COMM_SELF,PETSC_ERR_ARG_NULL,"Partition structure is NULL. Call PartitionCreate() first.");
-  if (epsilon) { *epsilon = p->epsilon; }
+  //if (epsilon) { *epsilon = p->epsilon; }
   PetscFunctionReturn(PETSC_SUCCESS);
 }
 
 PetscErrorCode PartitionSetEpsilon(Partition p, PetscReal epsilon)
 {
   PetscFunctionBeginUser;
+  SETERRQ(PETSC_COMM_SELF,PETSC_ERR_SUP,"Espilon is no longer stored in the Partition structure but in PartitionOfUnity.");
   PetscCheck(p,PETSC_COMM_SELF,PETSC_ERR_ARG_NULL,"Partition structure is NULL. Call PartitionCreate() first.");
-  p->epsilon = epsilon;
+  //p->epsilon = epsilon;
   PetscFunctionReturn(PETSC_SUCCESS);
 }
 

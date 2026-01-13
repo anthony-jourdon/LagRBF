@@ -14,12 +14,14 @@ PetscErrorCode PartitionCreateRBFMatrix(Partition p)
   PetscCheck(p,PETSC_COMM_SELF,PETSC_ERR_ARG_NULL,"Partition structure is NULL. Call PartitionCreate() first.");
   PetscCheck(!p->A,PETSC_COMM_SELF,PETSC_ERR_ARG_WRONGSTATE,"RBF matrix already created.");
   PetscCall(MatCreateDense(PETSC_COMM_SELF,PETSC_DECIDE,PETSC_DECIDE,p->ndata,p->ndata,NULL,&p->A));
+  PetscCall(MatSetFromOptions(p->A));
   PetscFunctionReturn(PETSC_SUCCESS);
 }
 
 PetscErrorCode PartitionAssembleRBFMatrix(
   Partition p, 
   PetscInt dim, 
+  PetscReal epsilon,
   PetscReal coords[], 
   PetscReal (*kernel_fn)(PetscReal,PetscReal)
 )
@@ -27,7 +29,6 @@ PetscErrorCode PartitionAssembleRBFMatrix(
   Mat       A;
   PetscInt  i,j,d,npoints;
   PetscInt  *pidx;
-  PetscReal epsilon;
   PetscReal *rbf;
   PetscFunctionBeginUser;
 
@@ -35,7 +36,6 @@ PetscErrorCode PartitionAssembleRBFMatrix(
   PetscCall(PartitionGetRBFMatrix(p,&A));
   PetscCheck(A,PETSC_COMM_SELF,PETSC_ERR_ARG_WRONGSTATE,"RBF matrix not created yet. Call PartitionCreateRBFMatrix() first.");
   PetscCall(PartitionGetDataPointsIdx(p,&npoints,&pidx));
-  PetscCall(PartitionGetEpsilon(p,&epsilon));
   PetscCall(MatDenseGetArray(A,&rbf));
   /* Fill the matrix */
   for (i=0; i<npoints; i++) {
@@ -71,10 +71,12 @@ PetscErrorCode PartitionSolveInterpolationCoefficients(PartitionOfUnity pu, Part
   for (n=0; n<npart; n++) {
     Partition p = partitions[n];
     PetscInt  npoints;
+
+    if (!p->setup) continue; // partition not setup, skip
     PetscCall(PartitionGetDataPointsIdx(p,&npoints,NULL));
     if (npoints == 0) continue; // no data points in this partition, skip
     /* Solve for the interpolation coefficients in this partition */
-    PetscCall(p->solve(p,nfields,values));
+    PetscCall(pu->psolve(p,nfields,values));
   }
   /* Restore the field */
   PetscCall(DMSwarmRestoreField(swarm,fieldname,&nfields,NULL,(void **)&values));

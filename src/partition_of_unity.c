@@ -2,6 +2,7 @@
 #include "lagrangian_rbf.h"
 #include "partition_of_unity.h"
 #include "partitions/partition.h"
+#include "partitions/partition_solve.h"
 
 PetscErrorCode PUCreate(PartitionOfUnity *pu)
 {
@@ -24,6 +25,11 @@ PetscErrorCode PUCreate(PartitionOfUnity *pu)
   p->ptos       = NULL;
   p->O          = NULL;
   p->L          = NULL;
+  p->epsilon    = 1.0;
+  p->psetup_set = PETSC_FALSE;
+  p->psetup     = NULL;
+  p->pdestroy   = NULL;
+  p->psolve     = NULL;
 
   *pu = p;
   PetscFunctionReturn(PETSC_SUCCESS);
@@ -298,6 +304,39 @@ PetscErrorCode PartitionOfUnityComputeEpsilon(PartitionOfUnity pu)
   overlap = 1.5*box_length;
   radius  = overlap / PetscPowReal(global_npart,1.0/dim);
   pu->epsilon = 1.0 / radius;
+  PetscFunctionReturn(PETSC_SUCCESS);
+}
+
+PetscErrorCode PUAttachPartitionFunctions(PartitionOfUnity pu, ASolveMethod smethod)
+{
+  PetscFunctionBeginUser;
+  PetscCheck(pu,PETSC_COMM_SELF,PETSC_ERR_ARG_NULL,"Partition of Unity structure is NULL. Call PUCreate() first.");
+  if (pu->psetup_set) PetscFunctionReturn(PETSC_SUCCESS);
+
+  switch (smethod) {
+  case A_FACTOR:
+    PetscPrintf(PETSC_COMM_WORLD,"Solve method selected: Cholesky factorization\n");
+    pu->psetup   = PartitionSetUpRBFMatrix_Factor;
+    pu->psolve   = PartitionSolveLocalCoefficientsFactor;
+    pu->pdestroy = NULL;
+    break;
+  case A_KSP:
+    PetscPrintf(PETSC_COMM_WORLD,"Solve method selected: KSP using same RBF matrix\n");
+    pu->psetup   = PartitionSetUpRBFMatrix_KSP;
+    pu->psolve   = PartitionSolveLocalCoefficientsKSP;
+    pu->pdestroy = PartitionKSPDestroyCtx;
+    break;
+  case A_ASMB_KSP:
+    PetscPrintf(PETSC_COMM_WORLD,"Solve method selected: KSP re-assembling RBF matrix\n");
+    SETERRQ(PETSC_COMM_SELF,PETSC_ERR_ARG_WRONG,"Solve method A_ASMB_KSP not implemented yet.");
+    break;
+  
+  default:
+    SETERRQ(PETSC_COMM_SELF,PETSC_ERR_ARG_OUTOFRANGE,"Unknown method type: %" PetscInt_FMT,smethod);
+    break;
+  }
+  pu->psetup_set = PETSC_TRUE;
+
   PetscFunctionReturn(PETSC_SUCCESS);
 }
 

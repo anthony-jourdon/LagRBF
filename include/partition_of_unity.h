@@ -1,5 +1,5 @@
-#ifndef __noname_partition_of_unity_h
-#define __noname_partition_of_unity_h
+#ifndef __softname_partition_of_unity_h
+#define __softname_partition_of_unity_h
 
 #include <petsc.h>
 #include "lagrangian_rbf.h"
@@ -16,6 +16,12 @@ struct _p_PartitionOfUnity {
   PetscReal epsilon; // Epsilon factor for the RBF kernel
   char      name[PETSC_MAX_PATH_LEN]; // Name of the parallel DMDA mesh
   char      sname[PETSC_MAX_PATH_LEN]; // Name of the sequential DMDA mesh
+  
+  // Partitions methods
+  PetscBool      psetup_set;
+  PetscErrorCode (*psetup)(Partition,PetscInt,PetscReal,PetscReal*,PetscReal (*)(PetscReal,PetscReal));
+  PetscErrorCode (*pdestroy)(Partition);
+  PetscErrorCode (*psolve)(Partition,PetscInt,PetscReal*);
 };
 
 PetscErrorCode PUCreate(PartitionOfUnity *pu);
@@ -24,6 +30,7 @@ PetscErrorCode PUCreateDMDALocal(PartitionOfUnity pu);
 PetscErrorCode PartitionOfUnityCreate(PartitionOfUnity *pu);
 PetscErrorCode PartitionOfUnityDestroy(PartitionOfUnity *pu);
 PetscErrorCode PartitionOfUnityComputeEpsilon(PartitionOfUnity pu);
+PetscErrorCode PUAttachPartitionFunctions(PartitionOfUnity pu, ASolveMethod smethod);
 /* Getters */
 PetscErrorCode PUGetDMDA(PartitionOfUnity pu, DM *dap);
 PetscErrorCode PUGetDMDALocal(PartitionOfUnity pu, DM *das);

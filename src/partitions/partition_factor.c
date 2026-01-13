@@ -99,18 +99,16 @@ PetscErrorCode PartitionSolveLocalCoefficientsFactor(Partition p, PetscInt nfiel
 
 PetscErrorCode PartitionSetUpRBFMatrix_Factor(
   Partition p, 
-  PetscInt dim, 
+  PetscInt  dim, 
+  PetscReal epsilon,
   PetscReal coords[],
   PetscReal (*kernel_fn)(PetscReal,PetscReal)
 )
 {
   PetscFunctionBeginUser;
   PetscCall(PartitionCreateRBFMatrix(p));
-  PetscCall(PartitionAssembleRBFMatrix(p,dim,coords,kernel_fn));
+  PetscCall(PartitionAssembleRBFMatrix(p,dim,epsilon,coords,kernel_fn));
   PetscCall(PartitionFactorRBFMatrix(p));
 
-  p->solve   = PartitionSolveLocalCoefficientsFactor;
-  p->destroy = NULL;
-  p->data    = NULL;
   PetscFunctionReturn(PETSC_SUCCESS);
 }

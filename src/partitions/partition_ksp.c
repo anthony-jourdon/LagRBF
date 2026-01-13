@@ -108,7 +108,8 @@ PetscErrorCode PartitionSolveLocalCoefficientsKSP(Partition p, PetscInt nfields,
 
 PetscErrorCode PartitionSetUpRBFMatrix_KSP(
   Partition p, 
-  PetscInt dim, 
+  PetscInt  dim, 
+  PetscReal epsilon,
   PetscReal coords[],
   PetscReal (*kernel_fn)(PetscReal,PetscReal)
 )
@@ -119,14 +120,11 @@ PetscErrorCode PartitionSetUpRBFMatrix_KSP(
   PetscCall(PartitionKSPCreateCtx(&data_ctx));
   /* Create and assemble RBF matrix */
   PetscCall(PartitionCreateRBFMatrix(p));
-  PetscCall(PartitionAssembleRBFMatrix(p,dim,coords,kernel_fn));
+  PetscCall(PartitionAssembleRBFMatrix(p,dim,epsilon,coords,kernel_fn));
   /* Create KSP solver context */
   PetscCall(PartitionKSPCreate(p,&data_ctx->ksp));
   /* Create RHS vector */
   PetscCall(PartitionRHSVecCreate(p,&data_ctx->RHS));
-  /* Attach method-specific solve and destroy functions */
-  p->solve   = PartitionSolveLocalCoefficientsKSP;
-  p->destroy = PartitionKSPDestroyCtx;
   /* Attach method-specific context */
   p->data = (void*)data_ctx;
   PetscFunctionReturn(PETSC_SUCCESS);

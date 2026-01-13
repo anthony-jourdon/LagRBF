@@ -19,15 +19,14 @@ struct _p_Partition {
   PetscInt  ndata; // Number of data points in the partition
   PetscInt  idx; // Index of the partition
   PetscInt  *data_idx; // Indices of data points in the partition
-  PetscReal epsilon; // Epsilon factor for the RBF kernel
+  PetscBool setup;
   void      *data;
-  PetscErrorCode (*destroy)(Partition);
-  PetscErrorCode (*solve)(Partition,PetscInt,PetscReal*);
 };
 
 PetscErrorCode PartitionCreate(PartitionOfUnity pu, Partition **partition);
 PetscErrorCode PartitionDestroy(PartitionOfUnity pu, Partition **partition);
-PetscErrorCode LagRBF_PartitionsSetUp(LagRBFCtx ctx, DM swarm);
+PetscErrorCode LagRBF_PartitionsSetUp(LagRBFCtx ctx, DM swd, DM swi);
+PetscErrorCode PartitionFillDataPointsIdx(Partition p, DM swarm);
 /* Getters and setters */
 PetscErrorCode PartitionGetMap(Partition p, PetscInt *ncells, PetscInt **map);
 PetscErrorCode PartitionGetDataPointsIdx(Partition p, PetscInt *ndata, PetscInt **data_idx);
