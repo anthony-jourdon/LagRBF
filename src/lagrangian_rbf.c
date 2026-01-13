@@ -57,6 +57,7 @@ PetscErrorCode LagRBF_PartitionOfUnityCreate(LagRBFCtx ctx)
   PartitionOfUnity pu = NULL;
   PetscFunctionBeginUser;
   PetscCall(PartitionOfUnityCreate(&pu));
+  PetscCall(PUAttachPartitionFunctions(pu, ctx->solve_method));
   ctx->pu = pu;
   PetscFunctionReturn(PETSC_SUCCESS);
 }
