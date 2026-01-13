@@ -218,19 +218,19 @@ static PetscErrorCode SwarmInterpSetWeights_Scalar(LagRBFCtx ctx, DM sw)
 
 #if defined(__AVX__)
 static PetscErrorCode SwarmInterpSetWeights_AVX256_2D(
-  PetscInt  npart,       // number of partitions
-  Partition *partitions, // array of partitions
-  PetscReal *LA_coords,  // partition centres coordinates
-  PetscInt  npoints,     // number of interpolation points
-  PetscReal *pcoords,    // interpolation points coordinates
-  PetscReal *weights,    // output weights (size npoints*npart)
-  PetscReal *sum_w       // output sum of weights (size npoints)
+  PartitionOfUnity pu,
+  Partition        *partitions, // array of partitions
+  PetscReal        *LA_coords,  // partition centres coordinates
+  PetscInt         npoints,     // number of interpolation points
+  PetscReal        *pcoords,    // interpolation points coordinates
+  PetscReal        *weights,    // output weights (size npoints*npart)
+  PetscReal        *sum_w       // output sum of weights (size npoints)
 )
 {
-  PetscInt d,n,np,i,np_aligned;
+  PetscInt d,n,np,i,np_aligned,npart;
   PetscInt dim = 2;
   PetscFunctionBeginUser;
-
+  PetscCall(PUGetNPartitionsLocal(pu,&npart));
   np_aligned = (npoints/4)*4;
   for (n=0; n<npart; n++) {
     Partition p = partitions[n]; // current partition
@@ -238,7 +238,7 @@ static PetscErrorCode SwarmInterpSetWeights_AVX256_2D(
     __m256d   epsilon,centre_x,centre_y;
 
     PetscCall(PartitionGetIndex(p,&puidx));
-    epsilon   = _mm256_set1_pd(p->epsilon);
+    epsilon   = _mm256_set1_pd(pu->epsilon);
     centre_x  = _mm256_set1_pd(LA_coords[2*puidx    ]);
     centre_y  = _mm256_set1_pd(LA_coords[2*puidx + 1]);
   
@@ -294,7 +294,7 @@ static PetscErrorCode SwarmInterpSetWeights_AVX256_2D(
       }
       dist = PetscSqrtReal(dist);
       /* Compute the weight */
-      weights[np*npart + puidx] = KernelWendlandC2(dist,p->epsilon);
+      weights[np*npart + puidx] = KernelWendlandC2(dist,pu->epsilon);
       sum_w[np] += weights[np*npart + puidx];
     }
   }
@@ -302,19 +302,20 @@ static PetscErrorCode SwarmInterpSetWeights_AVX256_2D(
 }
 
 static PetscErrorCode SwarmInterpSetWeights_AVX256_3D(
-  PetscInt  npart,       // number of partitions
-  Partition *partitions, // array of partitions
-  PetscReal *LA_coords,  // partition centres coordinates
-  PetscInt  npoints,     // number of interpolation points
-  PetscReal *pcoords,    // interpolation points coordinates
-  PetscReal *weights,    // output weights (size npoints*npart)
-  PetscReal *sum_w       // output sum of weights (size npoints)
+  PartitionOfUnity pu,
+  Partition        *partitions, // array of partitions
+  PetscReal        *LA_coords,  // partition centres coordinates
+  PetscInt         npoints,     // number of interpolation points
+  PetscReal        *pcoords,    // interpolation points coordinates
+  PetscReal        *weights,    // output weights (size npoints*npart)
+  PetscReal        *sum_w       // output sum of weights (size npoints)
 )
 {
-  PetscInt d,n,np,i,np_aligned;
+  PetscInt d,n,np,i,np_aligned,npart;
   PetscInt dim = 3;
   PetscFunctionBeginUser;
 
+  PetscCall(PUGetNPartitionsLocal(pu,&npart));
   np_aligned = (npoints/4)*4;
   for (n=0; n<npart; n++) {
     Partition p = partitions[n]; // current partition
@@ -322,7 +323,7 @@ static PetscErrorCode SwarmInterpSetWeights_AVX256_3D(
     __m256d   epsilon,centre_x,centre_y,centre_z;
 
     PetscCall(PartitionGetIndex(p,&puidx));
-    epsilon   = _mm256_set1_pd(p->epsilon);
+    epsilon   = _mm256_set1_pd(pu->epsilon);
     centre_x  = _mm256_set1_pd(LA_coords[3*puidx    ]);
     centre_y  = _mm256_set1_pd(LA_coords[3*puidx + 1]);
     centre_z  = _mm256_set1_pd(LA_coords[3*puidx + 2]);
@@ -380,7 +381,7 @@ static PetscErrorCode SwarmInterpSetWeights_AVX256_3D(
       }
       dist = PetscSqrtReal(dist);
       /* Compute the weight */
-      weights[np*npart + puidx] = KernelWendlandC2(dist,p->epsilon);
+      weights[np*npart + puidx] = KernelWendlandC2(dist,pu->epsilon);
       sum_w[np] += weights[np*npart + puidx];
     }
   }
@@ -427,11 +428,11 @@ PetscErrorCode SwarmInterpSetWeights_AVX256(LagRBFCtx ctx, DM sw)
   PetscCall(PetscCalloc1(npoints,&sum_w));
   switch (dim) {
   case 2:
-    PetscCall(SwarmInterpSetWeights_AVX256_2D(npart,partitions,LA_coords,npoints,pcoords,weights,sum_w));
+    PetscCall(SwarmInterpSetWeights_AVX256_2D(pu,partitions,LA_coords,npoints,pcoords,weights,sum_w));
     break;
   
   case 3:
-    PetscCall(SwarmInterpSetWeights_AVX256_3D(npart,partitions,LA_coords,npoints,pcoords,weights,sum_w));
+    PetscCall(SwarmInterpSetWeights_AVX256_3D(pu,partitions,LA_coords,npoints,pcoords,weights,sum_w));
     break;
   
   default:
@@ -546,7 +547,7 @@ PetscErrorCode SwarmInterpAssignUniquePointIndex(DM sw, PetscInt start_idx, Pets
 PetscErrorCode SwarmInterpSetUp(LagRBFCtx ctx, DM *sw)
 {
   DM       swarm;
-  PetscInt npoints;
+  //PetscInt npoints;
   PetscFunctionBeginUser;
 
   PetscCall(SwarmInterpCreate(ctx,&swarm));
@@ -557,8 +558,9 @@ PetscErrorCode SwarmInterpSetUp(LagRBFCtx ctx, DM *sw)
     PetscCall(SwarmInterpSetCoordinatesFromOptions(ctx->pu,swarm,INSERT_VALUES));
   }
   PetscCall(SwarmInterpSetWeights(ctx,swarm));
-  PetscCall(DMSwarmGetLocalSize(swarm,&npoints));
-  PetscCall(SwarmInterpAssignUniquePointIndex(swarm,0,npoints));
+  /* We may want to do this later */
+  //PetscCall(DMSwarmGetLocalSize(swarm,&npoints));
+  //PetscCall(SwarmInterpAssignUniquePointIndex(swarm,0,npoints));
   *sw = swarm;
   PetscFunctionReturn(PETSC_SUCCESS);
 }
