@@ -636,6 +636,63 @@ static PetscErrorCode TestStagBinMain()
 }
 #endif
 
+
+static PetscErrorCode CountZerosInRBFMatrix(LagRBFCtx ctx, DM swarm)
+{
+  DMSwarmCellDM    celldm;
+  PartitionOfUnity pu;
+  Partition       *partitions;
+  PetscInt         n,dim,npart;
+  const char       **coordFieldsName;
+  PetscReal        *coords;
+  PetscReal        epsilon;
+  PetscMPIInt      rank;
+  PetscFunctionBeginUser;
+  PetscCallMPI(MPI_Comm_rank(PETSC_COMM_WORLD,&rank));
+  PetscCall(LagRBFGetPartitionOfUnity(ctx,&pu));
+  PetscCall(LagRBFGetPartitions(ctx,&partitions));
+  PetscCall(PUGetNPartitionsLocal(pu,&npart));
+  PetscCall(PUGetEpsilon(pu,&epsilon));
+  
+  PetscCall(DMSwarmSortGetAccess(swarm));
+  PetscCall(DMGetDimension(swarm,&dim));
+  /* Setup for coords */
+  PetscCall(DMSwarmGetCellDMActive(swarm, &celldm));
+  PetscCall(DMSwarmCellDMGetCoordinateFields(celldm, NULL, &coordFieldsName));
+  /* Get fields */
+  PetscCall(DMSwarmGetField(swarm, coordFieldsName[0], NULL, NULL, (void **)&coords));
+
+  for (n=0; n<npart; n++) {
+    Partition  p = partitions[n];
+    PetscInt64 zero_count = 0;
+    PetscInt   npoints,i,j,d;
+    PetscInt   *pidx;
+    PetscReal  ratio;
+
+    PetscCall(PartitionFillDataPointsIdx(p,swarm));
+    PetscCall(PartitionGetDataPointsIdx(p,&npoints,&pidx));
+    if (npoints == 0) continue;
+    /* RBF matrix */
+    for (i=0; i<npoints; i++) {
+      for (j=i; j<npoints; j++) {
+        PetscReal dist = 0.0;
+        /* Compute the distance between points */
+        for (d=0; d<dim; d++) {
+          dist += (coords[ dim*pidx[i] + d] - coords[ dim*pidx[j] + d]) * (coords[ dim*pidx[i] + d] - coords[ dim*pidx[j] + d]);
+        }
+        dist = PetscSqrtReal(dist);
+        if (1.0 - epsilon * dist < 0.0) {
+          zero_count++;
+        }
+      }
+    }
+    ratio = (PetscReal)(2*zero_count) / (PetscReal)(npoints*npoints);
+    PetscPrintf(PETSC_COMM_SELF,"Rank[%d]: Partition[%" PetscInt_FMT "] has %" PetscInt_FMT " data points and %" PetscInt64_FMT " zero entries = %g ratio, in the RBF matrix\n",rank,n,npoints,2*zero_count,ratio);
+  }
+
+  PetscFunctionReturn(PETSC_SUCCESS);
+}
+
 #include "readers/stagYY/binary_loader.h"
 static PetscErrorCode TestStagBinMain()
 {
@@ -649,7 +706,7 @@ static PetscErrorCode TestStagBinMain()
   PetscBool exists;
   PetscMPIInt rank;
   //const char *output_fields[] = { DMSwarmPICField_coor, "fields" };
-  const char *fname[] = { "/mnt/c/Users/jourdon/Documents/Scripts/PostProc/StagYY/PJB6_YS1_Rh32_vp00039" };
+  const char *fname[] = { "/home/jourdon/data/LagRBF_input/PJB6_YS1_Rh32_vp00039" };
   const char *output_fields[] = {"DMSwarm_pid","fields","velocity"};
   PetscFunctionBeginUser;
 
@@ -658,6 +715,7 @@ static PetscErrorCode TestStagBinMain()
   PetscCall(TestDirectory(ctx->output_dir,'w',&exists));
   if (!exists) { PetscCall(CreateDirectory(ctx->output_dir)); }
   /* Create data structures */
+  ctx->mtype = GEODYNAMICS; // Set the model type
   PetscCall(LagRBF_PartitionOfUnityCreate(ctx));
   PetscCall(LagRBF_PartitionCreate(ctx));
   PetscCall(LagRBF_CellInfoCreate(ctx));
@@ -678,67 +736,32 @@ static PetscErrorCode TestStagBinMain()
   PetscCall(SwarmDataAssignMigrateBasic(ctx,swarm_data));
   /* Duplicate ghost points */
   PetscCall(SwarmDataAssignMigrateDuplicateGhostPoints(ctx,swarm_data));
+  /* Set cell IDs */
+  PetscCall(DMSwarmPICSetCellId(swarm_data));
 
+  PetscCall(CountZerosInRBFMatrix(ctx, swarm_data));
 #if 0
-  /* There are too much points to fit in memory... downsample */
   PetscCall(DMSwarmGetLocalSize(swarm_data,&npoints_d));
-  PetscCall(PetscMalloc1(npoints_d/2,&rm_idx));
-  cnt = 0;
-  for (np=0; np<npoints_d; np++) {
-    if (np % 2 == 0) {
-      rm_idx[cnt++] = np;
-    }
-  }
-  PetscCall(DMSwarmRemoveNPointsFromIndex(swarm_data, cnt, rm_idx));
-  /* Again */
-  PetscCall(DMSwarmGetLocalSize(swarm_data,&npoints_d));
-  cnt = 0;
-  for (np=0; np<npoints_d; np++) {
-    if (np % 2 == 0) {
-      rm_idx[cnt++] = np;
-    }
-  }
-  PetscCall(DMSwarmRemoveNPointsFromIndex(swarm_data, cnt, rm_idx));
-  /* Again */
-  PetscCall(DMSwarmGetLocalSize(swarm_data,&npoints_d));
-  cnt = 0;
-  for (np=0; np<npoints_d; np++) {
-    if (np % 2 == 0) {
-      rm_idx[cnt++] = np;
-    }
-  }
-  PetscCall(DMSwarmRemoveNPointsFromIndex(swarm_data, cnt, rm_idx));
-  /* Again */
-  PetscCall(DMSwarmGetLocalSize(swarm_data,&npoints_d));
-  cnt = 0;
-  for (np=0; np<npoints_d; np++) {
-    if (np % 2 == 0) {
-      rm_idx[cnt++] = np;
-    }
-  }
-  PetscCall(DMSwarmRemoveNPointsFromIndex(swarm_data, cnt, rm_idx));
-  PetscCall(PetscFree(rm_idx));
-#endif
-  
-  
-  
+  //PetscPrintf(PETSC_COMM_SELF,"Rank[%d]: swarm data contains: %" PetscInt_FMT " points\n",rank,npoints_d);
+
   /* Set up CellInfo data structure */
   PetscCall(CellInfoSetUp(pu,cellinfo,swarm_data));
   /* Create swarm for the interpolation */
   PetscCall(SwarmInterpSetUp(ctx,&swarm_interp));
   PetscCall(DMSwarmGetLocalSize(swarm_interp,&npoints_i));
   PetscCall(SwarmFieldAssignUniqueIndex(swarm_interp,DMSwarmField_pid,0,npoints_i));
-
-#if 0
+  //PetscPrintf(PETSC_COMM_SELF,"Rank[%d]: swarm interp contains: %" PetscInt_FMT " points\n",rank,npoints_i);
+#if 1
   /* Set up Partition data structure */
+  PetscPrintf(PETSC_COMM_WORLD,"Setting up partitions...\n");
   PetscCall(LagRBF_PartitionsSetUp(ctx,swarm_data,swarm_interp));
   /* Interpolate */
   PetscCall(PartitionSolveInterpolationCoefficients(ctx,swarm_data,"fields"));
   PetscCall(RBFInterpolation(ctx,swarm_interp,swarm_data,"fields"));
 #endif
-  //PetscCall(SwarmOutput(ctx,swarm_data,2,output_fields,PETSC_FALSE));
+  PetscCall(SwarmOutput(ctx,swarm_data,2,output_fields,PETSC_FALSE));
   PetscCall(SwarmOutput(ctx,swarm_interp,3,output_fields,PETSC_FALSE));
-
+#endif
   PetscCall(DMDestroy(&swarm_data));
   PetscCall(DMDestroy(&swarm_interp));
   PetscCall(LagRBFCtxDestroy(&ctx));
