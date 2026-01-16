@@ -159,7 +159,7 @@ PetscErrorCode SwarmDataAssignMigrateDuplicateGhostPoints(LagRBFCtx ctx, DM swar
   PetscCall(PetscMalloc1(3*nranks,&all_dm_max));
   PetscCallMPI(MPI_Allgather(dms_min, 3, MPIU_REAL, all_dm_min, 3, MPIU_REAL, PETSC_COMM_WORLD));
   PetscCallMPI(MPI_Allgather(dms_max, 3, MPIU_REAL, all_dm_max, 3, MPIU_REAL, PETSC_COMM_WORLD));
-
+  max_nranks = (dim == 2) ? 4 : 8; // 4 in 2D, 8 in 3D
   /* Now check for each point if it is inside the local bounding box of each rank of the overlapping DMDA */
   PetscCall(DMSwarmGetLocalSize(swarm,&npoints));
   if (npoints < 0) { 
@@ -168,7 +168,6 @@ PetscErrorCode SwarmDataAssignMigrateDuplicateGhostPoints(LagRBFCtx ctx, DM swar
   }
   PetscCall(DMSwarmGetField(swarm, DMSwarmPICField_coor, NULL, NULL, (void **)&pcoor));
   PetscCall(DMSwarmGetField(swarm, "rank_to_go", NULL, NULL, (void **)&rank_to_go));
-  max_nranks = (dim == 2) ? 4 : 8; // 4 in 2D, 8 in 3D
   for (np=0; np<npoints; np++) {
     PetscInt  d,r,cnt;
     /* Initialize rank_to_go to -1 */
@@ -177,7 +176,7 @@ PetscErrorCode SwarmDataAssignMigrateDuplicateGhostPoints(LagRBFCtx ctx, DM swar
     }
     /* Find all ranks the point belongs to */
     cnt = 0;
-    for (r=0; r<max_nranks; r++) {
+    for (r=0; r<nranks; r++) {
       PetscBool point_inside = PETSC_TRUE;
       for (d=0; d<dim; d++) {
         if (pcoor[dim*np+d] < all_dm_min[3*r + d]) point_inside = PETSC_FALSE;
@@ -189,6 +188,7 @@ PetscErrorCode SwarmDataAssignMigrateDuplicateGhostPoints(LagRBFCtx ctx, DM swar
       }
     }
     PetscCheck(cnt > 0,PETSC_COMM_SELF,PETSC_ERR_ARG_WRONG,"Point %" PetscInt_FMT " does not belong to any DMDA local bounding box.",np);
+    //PetscCheck(cnt <= max_nranks,PETSC_COMM_SELF,PETSC_ERR_ARG_WRONG,"Point %" PetscInt_FMT " belongs to more than %" PetscInt_FMT " ranks overlapping DMDA bounding boxes.",np,max_nranks);
   }
   PetscCall(DMSwarmRestoreField(swarm, DMSwarmPICField_coor, NULL, NULL, (void **)&pcoor));
   PetscCall(DMSwarmRestoreField(swarm, "rank_to_go", NULL, NULL, (void **)&rank_to_go));
