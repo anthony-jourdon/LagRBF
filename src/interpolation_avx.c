@@ -73,21 +73,21 @@ static inline __m256d ComputeDistance_AVX256_3D(
 
 PetscErrorCode PointwiseInterpolation_AVX256(
   PartitionOfUnity pu,
-  Partition *partitions,
-  CellInfo *cellinfo,
-  KernelType ktype,
-  PetscInt nfields,
-  PetscInt npoints_i,
-  PetscInt *cellid_i,
-  PetscReal *coords_i,
-  PetscReal *coords_d,
-  PetscReal *rbf_d,
-  PetscReal *weights,
-  PetscReal *values_i
+  Partition        *partitions,
+  CellInfo         *cellinfo,
+  KernelType       ktype,
+  PetscInt         nfields,
+  PetscInt         npoints_i,
+  PetscInt         *cellid_i,
+  PetscReal        *coords_i,
+  PetscReal        *coords_d,
+  PetscReal        *rbf_d,
+  PetscReal        *weights,
+  PetscReal        *values_i
 )
 {
   DM             da;
-  PetscInt       dim,k,np,npart,nel,nen;
+  PetscInt       dim,k,np,nel,nen;
   PetscInt       *gtol_elidx;
   const PetscInt *elidx;
   PetscReal      *interpolant;
@@ -107,7 +107,6 @@ PetscErrorCode PointwiseInterpolation_AVX256(
   PetscCall(KernelGetFunction(ktype,&kernel_fn));
   PetscCall(KernelGetFunction_AVX256(ktype,&kernel_avx));
   /* Get parallel-sequential elements mapping */
-  PetscCall(PUGetNPartitionsLocal(pu,&npart));
   PetscCall(PUGetDimension(pu,&dim));
   PetscCall(PUGetGlobalToLocalElementMap(pu,&gtol_elidx));
   PetscCall(PUGetDMDALocal(pu,&da));
@@ -225,7 +224,7 @@ PetscErrorCode PointwiseInterpolation_AVX256(
         }
       }
       /* Compute the global interpolation */
-      weight = weights[npart*np + puidx];
+      weight = weights[nen*np + k];
       for (f=0; f<nfields; f++) {
         values_i[nfields*np + f] += interpolant[f] * weight;
       }

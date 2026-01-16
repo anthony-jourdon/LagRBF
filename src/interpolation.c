@@ -27,7 +27,7 @@ PetscErrorCode PointwiseInterpolation_Scalar(
 )
 {
   DM             da;
-  PetscInt       k,np,dim,npart,nel,nen;
+  PetscInt       k,np,dim,nel,nen;
   PetscInt       *gtol_elidx;
   const PetscInt *elidx;
   PetscReal      epsilon;
@@ -43,12 +43,11 @@ PetscErrorCode PointwiseInterpolation_Scalar(
   /* Select the appropriate kernel */
   PetscCall(KernelGetFunction(ktype,&kernel_fn));
   /* Get the parallel-sequtial DMDA elements mapping */
-  PetscCall(PUGetNPartitionsLocal(pu,&npart));
-  PetscCall(PUGetEpsilon(pu,&epsilon));
   PetscCall(PUGetGlobalToLocalElementMap(pu,&gtol_elidx));
   PetscCall(PUGetDimension(pu,&dim));
   PetscCall(PUGetDMDALocal(pu,&da));
   PetscCall(DMDAGetElements(da,&nel,&nen,&elidx));
+  PetscCall(PUGetEpsilon(pu,&epsilon));
   /* Allocate memory for the interpolant */
   PetscCall(PetscCalloc1(nfields,&interpolant));
   for (np=0; np<npoints_i; np++) {
@@ -103,7 +102,8 @@ PetscErrorCode PointwiseInterpolation_Scalar(
           interpolant[f] += rbf * coeffs[f*ndata + nd];
         }
       }
-      weight = weights[npart*np + puidx];
+      /* Get the weight */
+      weight = weights[nen*np + k];
       for (f=0; f<nfields; f++) {
         /* Normalize the interpolant with the weights */
         values_i[nfields*np + f] += interpolant[f] * weight;
