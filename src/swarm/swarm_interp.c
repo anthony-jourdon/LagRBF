@@ -5,6 +5,7 @@
 #include "kernels/kernels_rbf.h"
 #include "swarm/swarm_utils.h"
 #include "swarm/swarm_interp.h"
+#include "cell_info.h"
 
 PetscLogEvent LAGRBF_SwarmInterpSetWeights_AVX256;
 PetscLogEvent LAGRBF_SwarmInterpSetWeights_Scalar;
@@ -45,7 +46,8 @@ PetscErrorCode SwarmInterpCreate(LagRBFCtx ctx, DM *sw)
 {
   PartitionOfUnity pu;
   DM               dap,swarm;
-  PetscInt         dim,nnodes;
+  PetscInt         dim,nel,nen;
+  const PetscInt   *elidx;
   char             dm_name[PETSC_MAX_PATH_LEN],dm_prefix[PETSC_MAX_PATH_LEN];
   PetscFunctionBeginUser;
   /* Create interpolation points */
@@ -65,9 +67,10 @@ PetscErrorCode SwarmInterpCreate(LagRBFCtx ctx, DM *sw)
   
   PetscCall(DMSwarmInitializeFieldRegister(swarm));
   /* Weights for interpolation */
-  PetscCall(PUGetNPartitionsGlobal(pu,&nnodes));
-  PetscPrintf(PETSC_COMM_WORLD,"\tRegistering \"weights\" real field of block size: %" PetscInt_FMT "\n",nnodes);
-  PetscCall(DMSwarmRegisterPetscDatatypeField(swarm,"weights",nnodes,PETSC_REAL));
+  PetscCall(DMDAGetElements(dap,&nel,&nen,&elidx));
+  PetscPrintf(PETSC_COMM_WORLD,"\tRegistering \"weights\" real field of block size: %" PetscInt_FMT "\n",nen);
+  PetscCall(DMSwarmRegisterPetscDatatypeField(swarm,"weights",nen,PETSC_REAL));
+  PetscCall(DMDARestoreElements(dap,&nel,&nen,&elidx));
   /* Fields to interpolate, also contain the velocity even in advection mode */
   PetscPrintf(PETSC_COMM_WORLD,"\tRegistering \"fields\" real field of block size: %" PetscInt_FMT "\n",ctx->n_ifields);
   PetscCall(DMSwarmRegisterPetscDatatypeField(swarm,"fields",ctx->n_ifields,PETSC_REAL));
@@ -139,14 +142,16 @@ static PetscErrorCode SwarmInterpLoadCoordinates(PartitionOfUnity pu, DM sw)
 static PetscErrorCode SwarmInterpSetWeights_Scalar(LagRBFCtx ctx, DM sw)
 {
   PartitionOfUnity pu;
-  Partition        *partitions;
   DMSwarmCellDM    celldm;
+  Partition        *partitions;
   DM               das,cdas;
   Vec              coords;
   PetscReal        epsilon;
   PetscReal        *pcoords,*weights,*LA_coords;
-  PetscInt         dim,npart,npg,npoints,nn,np,n,puidx;
-  const char      **coordFields;
+  PetscInt         k,np,n,dim,npart,npoints,nn,puidx,nel,nen;
+  PetscInt         *cellid,*gtol_elidx;
+  const PetscInt   *elidx;
+  const char       **coordFields,*cellFieldName;
   PetscFunctionBeginUser;
   PetscCall(PetscLogEventBegin(LAGRBF_SwarmInterpSetWeights_Scalar,0,0,0,0));
 
@@ -156,31 +161,40 @@ static PetscErrorCode SwarmInterpSetWeights_Scalar(LagRBFCtx ctx, DM sw)
   /* Get the rank-local DMDA (overlapping between processes) */
   PetscCall(PUGetDMDALocal(pu,&das));
   PetscCall(DMGetDimension(das,&dim));
+  PetscCall(DMDAGetElements(das,&nel,&nen,&elidx));
   /* Get partitions centre coordinates (DMDA's nodes) */
   PetscCall(DMGetCoordinateDM(das,&cdas));
   PetscCall(DMGetCoordinates(das,&coords));
   PetscCall(VecGetArray(coords,&LA_coords));
-  /* Get the number of nodes in the local DMDA */
+  /* Get the number of nodes in the sequential DMDA */
   PetscCall(PUGetNPartitionsLocal(pu,&npart));
-  /* Get the number of global partitions */
-  PetscCall(PUGetNPartitionsGlobal(pu,&npg));
+  /* Get the parallel DMDA to sequential DMDA element map */
+  PetscCall(PUGetGlobalToLocalElementMap(pu,&gtol_elidx));
+
   /* Interpolation points */
   PetscCall(DMSwarmGetLocalSize(sw,&npoints)); // rank local points
   PetscCall(DMSwarmGetCellDMActive(sw,&celldm));
   /* Setup for coords */
   PetscCall(DMSwarmCellDMGetCoordinateFields(celldm, NULL, &coordFields));
   PetscCall(DMSwarmGetField(sw, coordFields[0], NULL, NULL, (void **)&pcoords));
+  /* Cell id */
+  PetscCall(DMSwarmCellDMGetCellID(celldm,&cellFieldName));
+  PetscCall(DMSwarmGetField(sw, cellFieldName, NULL, NULL, (void **)&cellid));
   /* Weights */
   PetscCall(DMSwarmGetField(sw, "weights", &nn, NULL, (void **)&weights));
-  PetscCheck(nn == npg, PETSC_COMM_WORLD, PETSC_ERR_ARG_SIZ, "The size of weigths must equal the number of partitions in the global mesh: %" PetscInt_FMT ", found: %" PetscInt_FMT "",npg,nn);
   PetscCall(PUGetEpsilon(pu,&epsilon));
   for (np=0; np<npoints; np++) {
+    PetscInt  eidx,eidx_local,nidx_e;
     PetscReal sum_w = 0.0;
-    /* Loop over partitions */
+
+    /* Cell index of the particle */
+    eidx       = cellid[np];       // parallel DMDA
+    eidx_local = gtol_elidx[eidx]; // local sequential DMDA
+    /* Loop over the local sequential DMDA partitions */
     for (n=0; n<npart; n++) {
       Partition p = partitions[n]; // current partition
       PetscInt  d;
-      PetscReal dist;
+      PetscReal dist,weight;
       PetscReal *pu_centre;
       
       PetscCall(PartitionGetIndex(p,&puidx));
@@ -189,25 +203,33 @@ static PetscErrorCode SwarmInterpSetWeights_Scalar(LagRBFCtx ctx, DM sw)
       for (d=0; d<dim; d++) { 
         dist += (pcoords[dim*np + d] - pu_centre[d]) * (pcoords[dim*np + d] - pu_centre[d]); 
       }
-      dist = PetscSqrtReal(dist);
+      dist   = PetscSqrtReal(dist);
       /* Compute the weight */
-      weights[np*npart + puidx] = KernelWendlandC2(dist,epsilon);
-      sum_w += weights[np*npart + puidx];
+      weight = KernelWendlandC2(dist,epsilon);
+      sum_w += weight;
+
+      /* Store the weight only for the nodes connected to this element */
+      for (k=0; k<nen; k++) {
+        nidx_e = elidx[nen*eidx_local + k];
+        if (nidx_e == puidx) {
+          weights[np*nen + k] = weight;
+          break;
+        }
+      }
     }
     /* Normalize weights */
-    for (n=0; n<npart; n++) {
-      Partition p = partitions[n]; // current partition
-
-      PetscCall(PartitionGetIndex(p,&puidx));
+    for (k=0; k<nen; k++) {
+      nidx_e = elidx[nen*eidx_local + k];
       if (sum_w > 0.0) {
         /* Normalize the weights */
-        weights[np*npart + puidx] /= sum_w;
+        weights[np*nen + k] /= sum_w;
       } else {
         /* If the sum of weights is zero, set the weight to zero */
-        weights[np*npart + puidx] = 0.0;
+        weights[np*nen + k] = 0.0;
       }
     }
   }
+  PetscCall(DMSwarmRestoreField(sw, cellFieldName, NULL, NULL, (void **)&cellid));
   PetscCall(DMSwarmRestoreField(sw,"weights",NULL,NULL,(void **)&weights));
   PetscCall(DMSwarmRestoreField(sw,coordFields[0],NULL,NULL,(void **)&pcoords));
   PetscCall(VecRestoreArray(coords,&LA_coords));
@@ -217,85 +239,116 @@ static PetscErrorCode SwarmInterpSetWeights_Scalar(LagRBFCtx ctx, DM sw)
 }
 
 #if defined(__AVX__)
+#include <immintrin.h>
+#include "kernels/kernels_rbf_avx.h"
 static PetscErrorCode SwarmInterpSetWeights_AVX256_2D(
   PartitionOfUnity pu,
   Partition        *partitions, // array of partitions
   PetscReal        *LA_coords,  // partition centres coordinates
   PetscInt         npoints,     // number of interpolation points
   PetscReal        *pcoords,    // interpolation points coordinates
-  PetscReal        *weights,    // output weights (size npoints*npart)
+  PetscInt         *cellid,     // cell index for each point
+  PetscInt         *gtol_elidx, // global to local element map
+  const PetscInt   *elidx,      // element connectivity
+  PetscInt         nen,         // nodes per element
+  PetscReal        *weights,    // output weights (size npoints*nen)
   PetscReal        *sum_w       // output sum of weights (size npoints)
 )
 {
-  PetscInt d,n,np,i,np_aligned,npart;
+  PetscInt d,n,np,k,npart;
   PetscInt dim = 2;
   PetscFunctionBeginUser;
   PetscCall(PUGetNPartitionsLocal(pu,&npart));
-  np_aligned = (npoints/4)*4;
-  for (n=0; n<npart; n++) {
-    Partition p = partitions[n]; // current partition
-    PetscInt  puidx;
-    __m256d   epsilon,centre_x,centre_y;
-
-    PetscCall(PartitionGetIndex(p,&puidx));
-    epsilon   = _mm256_set1_pd(pu->epsilon);
-    centre_x  = _mm256_set1_pd(LA_coords[2*puidx    ]);
-    centre_y  = _mm256_set1_pd(LA_coords[2*puidx + 1]);
   
-    for (np=0; np<np_aligned; np+=4) {
-      double  w_arr[4] __attribute__((aligned(32)));
-      __m256d x,y,dx,dy,dist2,dist,rbf,sum_v;
-      /* Store the coordinates */
-      x = _mm256_set_pd(
-        pcoords[ 2*(np+3) ],
-        pcoords[ 2*(np+2) ],
-        pcoords[ 2*(np+1) ],
-        pcoords[ 2*np     ]
+  /* Process each point */
+  for (np=0; np<npoints; np++) {
+    PetscInt  eidx,eidx_local,nidx_e;
+    __m256d   epsilon,pt_x,pt_y;
+
+    /* Cell index of the particle */
+    eidx       = cellid[np];       // parallel DMDA
+    eidx_local = gtol_elidx[eidx]; // local sequential DMDA
+    
+    epsilon = _mm256_set1_pd(pu->epsilon);
+    pt_x    = _mm256_set1_pd(pcoords[2*np    ]);
+    pt_y    = _mm256_set1_pd(pcoords[2*np + 1]);
+    
+    /* Loop over partitions 4 at a time using AVX */
+    for (n=0; n<(npart/4)*4; n+=4) {
+      double    w_arr[4] __attribute__((aligned(32)));
+      __m256d   cx,cy,dx,dy,dist2,dist,rbf;
+      PetscInt  puidx[4];
+      
+      /* Get indices for 4 partitions */
+      for (k=0; k<4; k++) {
+        PetscCall(PartitionGetIndex(partitions[n+k],&puidx[k]));
+      }
+      
+      /* Load 4 partition centers */
+      cx = _mm256_set_pd(
+        LA_coords[2*puidx[3]    ],
+        LA_coords[2*puidx[2]    ],
+        LA_coords[2*puidx[1]    ],
+        LA_coords[2*puidx[0]    ]
       );
-      y = _mm256_set_pd(
-        pcoords[ 2*(np+3) + 1 ],
-        pcoords[ 2*(np+2) + 1 ],
-        pcoords[ 2*(np+1) + 1 ],
-        pcoords[ 2*np     + 1 ]
+      cy = _mm256_set_pd(
+        LA_coords[2*puidx[3] + 1],
+        LA_coords[2*puidx[2] + 1],
+        LA_coords[2*puidx[1] + 1],
+        LA_coords[2*puidx[0] + 1]
       );
-      /* Compute the distance between the point and the partition centre */
-      dx    = _mm256_sub_pd(x, centre_x); // dx = x - centre_x
-      dy    = _mm256_sub_pd(y, centre_y); // dy = y - centre_y
-      dist2 = _mm256_fmadd_pd(dx, dx, _mm256_mul_pd(dy, dy)); // dx*dx + dy*dy
-      dist  = _mm256_sqrt_pd(dist2);                          // sqrt(dx*dx + dy*dy)
+      
+      /* Compute distances and weights */
+      dx    = _mm256_sub_pd(pt_x, cx);
+      dy    = _mm256_sub_pd(pt_y, cy);
+      dist2 = _mm256_fmadd_pd(dx, dx, _mm256_mul_pd(dy, dy));
+      dist  = _mm256_sqrt_pd(dist2);
       rbf   = KernelWendlandC2_AVX256(dist, epsilon);
-      /* accumulate into sum_w (contiguous) */
-#if (PETSC_MEMALIGN == 32)
-      sum_v = _mm256_load_pd(&sum_w[np]);
-      sum_v = _mm256_add_pd(sum_v, rbf);
-      _mm256_store_pd(&sum_w[np], sum_v);
-#else
-      sum_v = _mm256_loadu_pd(&sum_w[np]);
-      sum_v = _mm256_add_pd(sum_v, rbf);
-      _mm256_storeu_pd(&sum_w[np], sum_v);
-#endif
-      /* 
-        store per-point weight for this partition (stride = npart).
-        AVX2 has no scatter: write 4 scalars (fast enough compared to kernel) 
-      */
+      
+      /* Store weights */
       _mm256_store_pd(w_arr, rbf);
-      /* weights layout: weights[np*npart + puidx] */
-      for (i=0; i<4; i++) {
-        PetscInt idx = np + i;
-        weights[idx * npart + puidx] = (PetscReal)w_arr[i];
+      
+      /* Accumulate sum and store weights for nodes in this element */
+      for (k=0; k<4; k++) {
+        PetscInt j;
+        sum_w[np] += w_arr[k];
+        
+        /* Store weight only for nodes connected to this element */
+        for (j=0; j<nen; j++) {
+          nidx_e = elidx[nen*eidx_local + j];
+          if (nidx_e == puidx[k]) {
+            weights[np*nen + j] = (PetscReal)w_arr[k];
+            break;
+          }
+        }
       }
     }
-    /* Handle remaining points (not aligned to 4) */
-    for (; np<npoints; np++) {
-      PetscReal dist;
+    
+    /* Handle remaining partitions (not aligned to 4) */
+    for (; n<npart; n++) {
+      Partition p = partitions[n];
+      PetscInt  puidx;
+      PetscReal dist,weight;
+      PetscReal *pu_centre;
+      
+      PetscCall(PartitionGetIndex(p,&puidx));
+      pu_centre = &LA_coords[dim*puidx];
       dist = 0.0;
       for (d=0; d<dim; d++) { 
-        dist += (pcoords[dim*np + d] - LA_coords[dim*puidx + d]) * (pcoords[dim*np + d] - LA_coords[dim*puidx + d]); 
+        dist += (pcoords[dim*np + d] - pu_centre[d]) * (pcoords[dim*np + d] - pu_centre[d]); 
       }
-      dist = PetscSqrtReal(dist);
-      /* Compute the weight */
-      weights[np*npart + puidx] = KernelWendlandC2(dist,pu->epsilon);
-      sum_w[np] += weights[np*npart + puidx];
+      dist   = PetscSqrtReal(dist);
+      weight = KernelWendlandC2(dist,pu->epsilon);
+      sum_w[np] += weight;
+
+      /* Store the weight only for the nodes connected to this element */
+      for (k=0; k<nen; k++) {
+        nidx_e = elidx[nen*eidx_local + k];
+        if (nidx_e == puidx) {
+          weights[np*nen + k] = weight;
+          break;
+        }
+      }
     }
   }
   PetscFunctionReturn(PETSC_SUCCESS);
@@ -307,82 +360,117 @@ static PetscErrorCode SwarmInterpSetWeights_AVX256_3D(
   PetscReal        *LA_coords,  // partition centres coordinates
   PetscInt         npoints,     // number of interpolation points
   PetscReal        *pcoords,    // interpolation points coordinates
-  PetscReal        *weights,    // output weights (size npoints*npart)
+  PetscInt         *cellid,     // cell index for each point
+  PetscInt         *gtol_elidx, // global to local element map
+  const PetscInt   *elidx,      // element connectivity
+  PetscInt         nen,         // nodes per element
+  PetscReal        *weights,    // output weights (size npoints*nen)
   PetscReal        *sum_w       // output sum of weights (size npoints)
 )
 {
-  PetscInt d,n,np,i,np_aligned,npart;
+  PetscInt d,n,np,k,npart;
   PetscInt dim = 3;
   PetscFunctionBeginUser;
 
   PetscCall(PUGetNPartitionsLocal(pu,&npart));
-  np_aligned = (npoints/4)*4;
-  for (n=0; n<npart; n++) {
-    Partition p = partitions[n]; // current partition
-    PetscInt  puidx;
-    __m256d   epsilon,centre_x,centre_y,centre_z;
+  
+  /* Process each point */
+  for (np=0; np<npoints; np++) {
+    PetscInt  eidx,eidx_local,nidx_e;
+    __m256d   epsilon,pt_x,pt_y,pt_z;
 
-    PetscCall(PartitionGetIndex(p,&puidx));
-    epsilon   = _mm256_set1_pd(pu->epsilon);
-    centre_x  = _mm256_set1_pd(LA_coords[3*puidx    ]);
-    centre_y  = _mm256_set1_pd(LA_coords[3*puidx + 1]);
-    centre_z  = _mm256_set1_pd(LA_coords[3*puidx + 2]);
+    /* Cell index of the particle */
+    eidx       = cellid[np];       // parallel DMDA
+    eidx_local = gtol_elidx[eidx]; // local sequential DMDA
     
-    for (np=0; np<np_aligned; np+=4) {
-      double  w_arr[4] __attribute__((aligned(32)));
-      __m256d x,y,z,dx,dy,dz,dist2,dist,rbf,sum_v;
-      /* Store the coordinates */
-      x = _mm256_set_pd(
-        pcoords[ 3*(np+3) ], pcoords[ 3*(np+2) ],
-        pcoords[ 3*(np+1) ], pcoords[ 3*np     ]
+    epsilon = _mm256_set1_pd(pu->epsilon);
+    pt_x    = _mm256_set1_pd(pcoords[3*np    ]);
+    pt_y    = _mm256_set1_pd(pcoords[3*np + 1]);
+    pt_z    = _mm256_set1_pd(pcoords[3*np + 2]);
+    
+    /* Loop over partitions 4 at a time using AVX */
+    for (n=0; n<(npart/4)*4; n+=4) {
+      double    w_arr[4] __attribute__((aligned(32)));
+      __m256d   cx,cy,cz,dx,dy,dz,dist2,dist,rbf;
+      PetscInt  puidx[4];
+      
+      /* Get indices for 4 partitions */
+      for (k=0; k<4; k++) {
+        PetscCall(PartitionGetIndex(partitions[n+k],&puidx[k]));
+      }
+      
+      /* Load 4 partition centers */
+      cx = _mm256_set_pd(
+        LA_coords[3*puidx[3]    ],
+        LA_coords[3*puidx[2]    ],
+        LA_coords[3*puidx[1]    ],
+        LA_coords[3*puidx[0]    ]
       );
-      y = _mm256_set_pd(
-        pcoords[ 3*(np+3) + 1 ], pcoords[ 3*(np+2) + 1 ],
-        pcoords[ 3*(np+1) + 1 ], pcoords[ 3*np     + 1 ]
+      cy = _mm256_set_pd(
+        LA_coords[3*puidx[3] + 1],
+        LA_coords[3*puidx[2] + 1],
+        LA_coords[3*puidx[1] + 1],
+        LA_coords[3*puidx[0] + 1]
       );
-      z = _mm256_set_pd(
-        pcoords[ 3*(np+3) + 2 ], pcoords[ 3*(np+2) + 2 ],
-        pcoords[ 3*(np+1) + 2 ], pcoords[ 3*np     + 2 ]
+      cz = _mm256_set_pd(
+        LA_coords[3*puidx[3] + 2],
+        LA_coords[3*puidx[2] + 2],
+        LA_coords[3*puidx[1] + 2],
+        LA_coords[3*puidx[0] + 2]
       );
-      /* Compute the distance between the point and the partition centre */
-      dx    = _mm256_sub_pd(x, centre_x); // dx = x - centre_x
-      dy    = _mm256_sub_pd(y, centre_y); // dy = y - centre_y
-      dz    = _mm256_sub_pd(z, centre_z); // dz = z - centre_z
-      dist2 = _mm256_fmadd_pd(dx, dx, _mm256_fmadd_pd(dy, dy, _mm256_mul_pd(dz, dz))); // dx*dx + dy*dy + dz*dz
-      dist  = _mm256_sqrt_pd(dist2);    // sqrt(dx*dx + dy*dy + dz*dz)
+      
+      /* Compute distances and weights */
+      dx    = _mm256_sub_pd(pt_x, cx);
+      dy    = _mm256_sub_pd(pt_y, cy);
+      dz    = _mm256_sub_pd(pt_z, cz);
+      dist2 = _mm256_fmadd_pd(dx, dx, _mm256_fmadd_pd(dy, dy, _mm256_mul_pd(dz, dz)));
+      dist  = _mm256_sqrt_pd(dist2);
       rbf   = KernelWendlandC2_AVX256(dist, epsilon);
-      /* accumulate into sum_w (contiguous) */
-#if (PETSC_MEMALIGN == 32)
-      sum_v = _mm256_load_pd(&sum_w[np]);
-      sum_v = _mm256_add_pd(sum_v, rbf);
-      _mm256_store_pd(&sum_w[np], sum_v);
-#else
-      sum_v = _mm256_loadu_pd(&sum_w[np]);
-      sum_v = _mm256_add_pd(sum_v, rbf);
-      _mm256_storeu_pd(&sum_w[np], sum_v);
-#endif
-      /* 
-        store per-point weight for this partition (stride = npart).
-        AVX2 has no scatter: write 4 scalars (fast enough compared to kernel) 
-      */
+      
+      /* Store weights */
       _mm256_store_pd(w_arr, rbf);
-      /* weights layout: weights[np*npart + puidx] */
-      for (i=0; i<4; i++) {
-        PetscInt idx = np + i;
-        weights[idx * npart + puidx] = (PetscReal)w_arr[i];
+      
+      /* Accumulate sum and store weights for nodes in this element */
+      for (k=0; k<4; k++) {
+        PetscInt j;
+        sum_w[np] += w_arr[k];
+        
+        /* Store weight only for nodes connected to this element */
+        for (j=0; j<nen; j++) {
+          nidx_e = elidx[nen*eidx_local + j];
+          if (nidx_e == puidx[k]) {
+            weights[np*nen + j] = (PetscReal)w_arr[k];
+            break;
+          }
+        }
       }
     }
-    /* Handle remaining points (not aligned to 4) */
-    for (; np<npoints; np++) {
-      PetscReal dist;
+    
+    /* Handle remaining partitions (not aligned to 4) */
+    for (; n<npart; n++) {
+      Partition p = partitions[n];
+      PetscInt  puidx;
+      PetscReal dist,weight;
+      PetscReal *pu_centre;
+      
+      PetscCall(PartitionGetIndex(p,&puidx));
+      pu_centre = &LA_coords[dim*puidx];
       dist = 0.0;
       for (d=0; d<dim; d++) { 
-        dist += (pcoords[dim*np + d] - LA_coords[dim*puidx + d]) * (pcoords[dim*np + d] - LA_coords[dim*puidx + d]); 
+        dist += (pcoords[dim*np + d] - pu_centre[d]) * (pcoords[dim*np + d] - pu_centre[d]); 
       }
-      dist = PetscSqrtReal(dist);
-      /* Compute the weight */
-      weights[np*npart + puidx] = KernelWendlandC2(dist,pu->epsilon);
-      sum_w[np] += weights[np*npart + puidx];
+      dist   = PetscSqrtReal(dist);
+      weight = KernelWendlandC2(dist,pu->epsilon);
+      sum_w[np] += weight;
+
+      /* Store the weight only for the nodes connected to this element */
+      for (k=0; k<nen; k++) {
+        nidx_e = elidx[nen*eidx_local + k];
+        if (nidx_e == puidx) {
+          weights[np*nen + k] = weight;
+          break;
+        }
+      }
     }
   }
   PetscFunctionReturn(PETSC_SUCCESS);
@@ -396,9 +484,10 @@ PetscErrorCode SwarmInterpSetWeights_AVX256(LagRBFCtx ctx, DM sw)
   DM               das,cdas;
   Vec              coords;
   PetscReal        *pcoords,*weights,*LA_coords,*sum_w;
-  PetscInt         np,n,i,dim,npart,npg,npoints,np_aligned,nn,puidx;
-  const char       **coordFields;
-  __m256d          zero_v;
+  PetscInt         k,np,dim,npart,npoints,nn,nel,nen;
+  PetscInt         *cellid,*gtol_elidx;
+  const PetscInt   *elidx;
+  const char       **coordFields,*cellFieldName;
   PetscFunctionBeginUser;
   PetscCall(PetscLogEventBegin(LAGRBF_SwarmInterpSetWeights_AVX256,0,0,0,0));
 
@@ -408,81 +497,56 @@ PetscErrorCode SwarmInterpSetWeights_AVX256(LagRBFCtx ctx, DM sw)
   /* Get the rank-local DMDA (overlapping between processes) */
   PetscCall(PUGetDMDALocal(pu,&das));
   PetscCall(DMGetDimension(das,&dim));
+  PetscCall(DMDAGetElements(das,&nel,&nen,&elidx));
   /* Get partitions centre coordinates (DMDA's nodes) */
   PetscCall(DMGetCoordinateDM(das,&cdas));
   PetscCall(DMGetCoordinates(das,&coords));
   PetscCall(VecGetArray(coords,&LA_coords));
-  /* Get the number of nodes in the local DMDA */
+  /* Get the number of nodes in the sequential DMDA */
   PetscCall(PUGetNPartitionsLocal(pu,&npart));
-  /* Get the number of global partitions */
-  PetscCall(PUGetNPartitionsGlobal(pu,&npg));
+  /* Get the parallel DMDA to sequential DMDA element map */
+  PetscCall(PUGetGlobalToLocalElementMap(pu,&gtol_elidx));
+
   /* Interpolation points */
   PetscCall(DMSwarmGetLocalSize(sw,&npoints)); // rank local points
   PetscCall(DMSwarmGetCellDMActive(sw,&celldm));
   /* Setup for coords */
   PetscCall(DMSwarmCellDMGetCoordinateFields(celldm, NULL, &coordFields));
   PetscCall(DMSwarmGetField(sw, coordFields[0], NULL, NULL, (void **)&pcoords));
+  /* Cell id */
+  PetscCall(DMSwarmCellDMGetCellID(celldm,&cellFieldName));
+  PetscCall(DMSwarmGetField(sw, cellFieldName, NULL, NULL, (void **)&cellid));
   /* Weights */
   PetscCall(DMSwarmGetField(sw, "weights", &nn, NULL, (void **)&weights));
-  PetscCheck(nn == npg, PETSC_COMM_WORLD, PETSC_ERR_ARG_SIZ, "The size of weigths must equal the number of partitions in the global mesh: %" PetscInt_FMT ", found: %" PetscInt_FMT "",npg,nn);
   PetscCall(PetscCalloc1(npoints,&sum_w));
+  
   switch (dim) {
   case 2:
-    PetscCall(SwarmInterpSetWeights_AVX256_2D(pu,partitions,LA_coords,npoints,pcoords,weights,sum_w));
+    PetscCall(SwarmInterpSetWeights_AVX256_2D(pu,partitions,LA_coords,npoints,pcoords,cellid,gtol_elidx,elidx,nen,weights,sum_w));
     break;
   
   case 3:
-    PetscCall(SwarmInterpSetWeights_AVX256_3D(pu,partitions,LA_coords,npoints,pcoords,weights,sum_w));
+    PetscCall(SwarmInterpSetWeights_AVX256_3D(pu,partitions,LA_coords,npoints,pcoords,cellid,gtol_elidx,elidx,nen,weights,sum_w));
     break;
   
   default:
     SETERRQ(PETSC_COMM_WORLD,PETSC_ERR_SUP,"AVX256 weights only implemented for 2D and 3D, found dim = %" PetscInt_FMT "",dim);
     break;
   }
-  /* Normalize weights using AVX256 vectorization over npoints */
-  np_aligned = (npoints/4)*4;
-  zero_v = _mm256_setzero_pd();
-  for (n=0; n<npart; n++) {
-    Partition p = partitions[n]; // current partition
-    PetscCall(PartitionGetIndex(p,&puidx));
-    for (np=0; np<np_aligned; np+=4) {
-      double  norm_arr[4] __attribute__((aligned(32)));
-      __m256d sum_v,w_v,mask,div_v,norm_v;
-
-#if (PETSC_MEMALIGN == 32)
-      sum_v = _mm256_load_pd(&sum_w[np]);
-#else
-      sum_v = _mm256_loadu_pd(&sum_w[np]);
-#endif
-      /* load 4 weights for this partition into vector */
-      w_v = _mm256_set_pd(
-        weights[(np + 3) * npart + puidx],
-        weights[(np + 2) * npart + puidx],
-        weights[(np + 1) * npart + puidx],
-        weights[ np      * npart + puidx]
-      );
-      /* where sum_v > 0: w /= sum_v, else set 0 (avoid div by zero) */
-      mask   = _mm256_cmp_pd(sum_v, zero_v, _CMP_GT_OQ);
-      /* safe division: compute w_v / sum_v, but keep zero where mask false */
-      div_v  = _mm256_div_pd(w_v, sum_v);
-      norm_v = _mm256_blendv_pd(zero_v, div_v, mask);
-      /* store normalized weights back (no scatter: extract and scalar-store) */
-      _mm256_store_pd(norm_arr, norm_v);
-      for (i=0; i<4; i++) {
-        PetscInt idx = np + i;
-        weights[idx * npart + puidx] = (PetscReal)norm_arr[i];
-      }
-    }
-    /* Handle remaining points (not aligned to 4) */
-    for (; np<npoints; np++) {
+  
+  /* Normalize weights */
+  for (np=0; np<npoints; np++) {
+    for (k=0; k<nen; k++) {
       if (sum_w[np] > 0.0) {
-        weights[np*npart + puidx] /= sum_w[np];
+        weights[np*nen + k] /= sum_w[np];
       } else {
-        weights[np*npart + puidx] = 0.0;
+        weights[np*nen + k] = 0.0;
       }
     }
   }
+  
   PetscCall(PetscFree(sum_w));
+  PetscCall(DMSwarmRestoreField(sw, cellFieldName, NULL, NULL, (void **)&cellid));
   PetscCall(DMSwarmRestoreField(sw,"weights",NULL,NULL,(void **)&weights));
   PetscCall(DMSwarmRestoreField(sw,coordFields[0],NULL,NULL,(void **)&pcoords));
   PetscCall(VecRestoreArray(coords,&LA_coords));
@@ -496,7 +560,6 @@ PetscErrorCode SwarmInterpSetWeights(LagRBFCtx ctx, DM sw)
 {
   PetscFunctionBeginUser;
 
-  /* For now we only support sequential */
 #if defined(__AVX__)
   PetscCall(SwarmInterpSetWeights_AVX256(ctx,sw));
 #else
