@@ -25,6 +25,7 @@ struct _p_Partition {
 
 PetscErrorCode PartitionCreate(PartitionOfUnity pu, Partition **partition);
 PetscErrorCode PartitionDestroy(PartitionOfUnity pu, Partition **partition);
+PetscErrorCode PartitionRBFMatClear(Partition p);
 PetscErrorCode LagRBF_PartitionsSetUp(LagRBFCtx ctx, DM swd, DM swi);
 PetscErrorCode PartitionFillDataPointsIdx(Partition p, DM swarm);
 /* Getters and setters */

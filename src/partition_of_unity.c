@@ -22,6 +22,7 @@ PetscErrorCode PUCreate(PartitionOfUnity *pu)
   p->n          = NULL;
   p->npart      = 0;
   p->npg        = 0;
+  p->nnp        = 0;
   p->ptos       = NULL;
   p->O          = NULL;
   p->L          = NULL;
@@ -260,6 +261,7 @@ PetscErrorCode PartitionOfUnityCreate(PartitionOfUnity *pu)
   PetscCall(PUCreateDMDALocal(p));
   /* Set the epsilon factor for RBF */
   PetscCall(PartitionOfUnityComputeEpsilon(p));
+  PetscCall(PUSetNodesPerPoint(p));
 
   *pu = p;
   PetscFunctionReturn(PETSC_SUCCESS);
@@ -337,6 +339,23 @@ PetscErrorCode PUAttachPartitionFunctions(PartitionOfUnity pu, ASolveMethod smet
   }
   pu->psetup_set = PETSC_TRUE;
 
+  PetscFunctionReturn(PETSC_SUCCESS);
+}
+
+PetscErrorCode PUSetNodesPerPoint(PartitionOfUnity pu)
+{
+  PetscInt dim;
+  PetscFunctionBeginUser;
+  PetscCall(PUGetDimension(pu,&dim));
+  pu->nnp = PetscPowInt(2,dim) * PetscPowInt(2,dim); // max number of nodes per partition
+  PetscFunctionReturn(PETSC_SUCCESS);
+}
+
+PetscErrorCode PUGetNodesPerPoint(PartitionOfUnity pu, PetscInt *nnp)
+{
+  PetscFunctionBeginUser;
+  PetscCheck(pu,PETSC_COMM_SELF,PETSC_ERR_ARG_NULL,"Partition of Unity structure is NULL. Call PartitionOfUnityCreate() first.");
+  if (nnp) { *nnp = pu->nnp; }
   PetscFunctionReturn(PETSC_SUCCESS);
 }
 

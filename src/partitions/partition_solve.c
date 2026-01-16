@@ -59,13 +59,17 @@ PetscErrorCode PartitionAssembleRBFMatrix(
   PetscFunctionReturn(PETSC_SUCCESS);
 }
 
-PetscErrorCode PartitionSolveInterpolationCoefficients(PartitionOfUnity pu, Partition *partitions, DM swarm, const char *fieldname)
+PetscErrorCode PartitionSolveInterpolationCoefficients(LagRBFCtx ctx, DM swarm, const char *fieldname)
 {
-  PetscInt  n,npart,nfields;
-  PetscReal *values;
+  PartitionOfUnity pu;
+  Partition        *partitions;
+  PetscInt         n,npart,nfields;
+  PetscReal        *values;
   PetscFunctionBeginUser;
   PetscCall(PetscLogEventBegin(LAGRBF_PartitionSolveInterpolationCoefficients,0,0,0,0));
   PetscPrintf(PETSC_COMM_WORLD,"[[ %s ]]\n",PETSC_FUNCTION_NAME);
+  PetscCall(LagRBFGetPartitionOfUnity(ctx,&pu));
+  PetscCall(LagRBFGetPartitions(ctx,&partitions));
   PetscCall(PUGetNPartitionsLocal(pu,&npart));
   PetscCall(DMSwarmGetField(swarm,fieldname,&nfields,NULL,(void **)&values));
   for (n=0; n<npart; n++) {
@@ -76,7 +80,7 @@ PetscErrorCode PartitionSolveInterpolationCoefficients(PartitionOfUnity pu, Part
     PetscCall(PartitionGetDataPointsIdx(p,&npoints,NULL));
     if (npoints == 0) continue; // no data points in this partition, skip
     /* Solve for the interpolation coefficients in this partition */
-    PetscCall(pu->psolve(p,nfields,values));
+    PetscCall(pu->psolve(ctx,p,nfields,values));
   }
   /* Restore the field */
   PetscCall(DMSwarmRestoreField(swarm,fieldname,&nfields,NULL,(void **)&values));

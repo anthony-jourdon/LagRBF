@@ -1,6 +1,7 @@
 #include <petsc.h>
 #include "partitions/partition.h"
 #include "partitions/partition_solve.h"
+#include "partitions/partition_io.h"
 
 PetscLogEvent LAGRBF_FactorRBFMatrix;
 PetscLogEvent LAGRBF_MatSetRHS_Fac;
@@ -81,7 +82,7 @@ static PetscErrorCode PartitionMatSetRHS_Columnwise(Partition p, PetscInt nfield
   PetscFunctionReturn(PETSC_SUCCESS);
 }
 #endif
-PetscErrorCode PartitionSolveLocalCoefficientsFactor(Partition p, PetscInt nfields, PetscReal fval[])
+PetscErrorCode PartitionSolveLocalCoefficientsFactor(LagRBFCtx ctx, Partition p, PetscInt nfields, PetscReal fval[])
 {
   Mat      A,B,X;
   PetscFunctionBeginUser;
@@ -97,15 +98,21 @@ PetscErrorCode PartitionSolveLocalCoefficientsFactor(Partition p, PetscInt nfiel
   PetscFunctionReturn(PETSC_SUCCESS);
 }
 
-PetscErrorCode PartitionSetUpRBFMatrix_Factor(
-  Partition p, 
-  PetscInt  dim, 
-  PetscReal epsilon,
-  PetscReal coords[],
-  PetscReal (*kernel_fn)(PetscReal,PetscReal)
-)
+PetscErrorCode PartitionSetUpRBFMatrix_Factor(LagRBFCtx ctx, Partition p, PetscReal *coords)
 {
+  PartitionOfUnity pu;
+  KernelType       ktype;
+  PetscInt         dim;
+  PetscReal        epsilon;
+  PetscReal        (*kernel_fn)(PetscReal,PetscReal);
   PetscFunctionBeginUser;
+
+  PetscCall(LagRBFGetPartitionOfUnity(ctx,&pu));
+  PetscCall(PUGetEpsilon(pu,&epsilon));
+  PetscCall(PUGetDimension(pu,&dim));
+  PetscCall(LagRBFGetKernelType(ctx,&ktype));
+  PetscCall(KernelGetFunction(ktype,&kernel_fn));
+  /* Create the RBF matrix, fill it and factor it */
   PetscCall(PartitionCreateRBFMatrix(p));
   PetscCall(PartitionAssembleRBFMatrix(p,dim,epsilon,coords,kernel_fn));
   PetscCall(PartitionFactorRBFMatrix(p));

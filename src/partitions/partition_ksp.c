@@ -85,7 +85,7 @@ static PetscErrorCode PartitionSetFieldRHS(Partition p, PetscInt nfields, PetscI
   PetscFunctionReturn(PETSC_SUCCESS);
 }
 
-PetscErrorCode PartitionSolveLocalCoefficientsKSP(Partition p, PetscInt nfields, PetscReal fval[])
+PetscErrorCode PartitionSolveLocalCoefficientsKSP(LagRBFCtx ctx, Partition p, PetscInt nfields, PetscReal fval[])
 {
   PSolve_KSPData *data_ctx = (PSolve_KSPData*)p->data;
   Mat            A,X;
@@ -106,16 +106,20 @@ PetscErrorCode PartitionSolveLocalCoefficientsKSP(Partition p, PetscInt nfields,
   PetscFunctionReturn(PETSC_SUCCESS);
 }
 
-PetscErrorCode PartitionSetUpRBFMatrix_KSP(
-  Partition p, 
-  PetscInt  dim, 
-  PetscReal epsilon,
-  PetscReal coords[],
-  PetscReal (*kernel_fn)(PetscReal,PetscReal)
-)
+PetscErrorCode PartitionSetUpRBFMatrix_KSP(LagRBFCtx ctx, Partition p, PetscReal *coords)
 {
-  PSolve_KSPData *data_ctx;
+  PartitionOfUnity pu;
+  KernelType       ktype;
+  PSolve_KSPData   *data_ctx;
+  PetscInt         dim;
+  PetscReal        epsilon;
+  PetscReal        (*kernel_fn)(PetscReal,PetscReal);
   PetscFunctionBeginUser;
+  PetscCall(LagRBFGetPartitionOfUnity(ctx,&pu));
+  PetscCall(PUGetEpsilon(pu,&epsilon));
+  PetscCall(PUGetDimension(pu,&dim));
+  PetscCall(LagRBFGetKernelType(ctx,&ktype));
+  PetscCall(KernelGetFunction(ktype,&kernel_fn));
   /* Method-specific context */
   PetscCall(PartitionKSPCreateCtx(&data_ctx));
   /* Create and assemble RBF matrix */

@@ -11,6 +11,7 @@ struct _p_PartitionOfUnity {
   PetscInt  *n;    // Number of partitions in each dimension
   PetscInt  npart; // Rank-local number of partitions
   PetscInt  npg;   // Global number of partitions
+  PetscInt  nnp;   // Number of nodes a point is connected to 
   PetscInt  *ptos; // Parallel to sequential mapping of elements
   PetscReal *O,*L; // Origin and Length of the partition of unity mesh
   PetscReal epsilon; // Epsilon factor for the RBF kernel
@@ -19,9 +20,9 @@ struct _p_PartitionOfUnity {
   
   // Partitions methods
   PetscBool      psetup_set;
-  PetscErrorCode (*psetup)(Partition,PetscInt,PetscReal,PetscReal*,PetscReal (*)(PetscReal,PetscReal));
+  PetscErrorCode (*psetup)(LagRBFCtx,Partition,PetscReal*);
   PetscErrorCode (*pdestroy)(Partition);
-  PetscErrorCode (*psolve)(Partition,PetscInt,PetscReal*);
+  PetscErrorCode (*psolve)(LagRBFCtx,Partition,PetscInt,PetscReal*);
 };
 
 PetscErrorCode PUCreate(PartitionOfUnity *pu);
@@ -31,7 +32,9 @@ PetscErrorCode PartitionOfUnityCreate(PartitionOfUnity *pu);
 PetscErrorCode PartitionOfUnityDestroy(PartitionOfUnity *pu);
 PetscErrorCode PartitionOfUnityComputeEpsilon(PartitionOfUnity pu);
 PetscErrorCode PUAttachPartitionFunctions(PartitionOfUnity pu, ASolveMethod smethod);
+PetscErrorCode PUSetNodesPerPoint(PartitionOfUnity pu);
 /* Getters */
+PetscErrorCode PUGetNodesPerPoint(PartitionOfUnity pu, PetscInt *nnp);
 PetscErrorCode PUGetDMDA(PartitionOfUnity pu, DM *dap);
 PetscErrorCode PUGetDMDALocal(PartitionOfUnity pu, DM *das);
 PetscErrorCode PUGetNPartitionsLocal(PartitionOfUnity pu, PetscInt *npart);

@@ -132,9 +132,6 @@ PetscErrorCode PartitionCreate_SinglePartition(Partition *partition)
   p->idx      = -1; // Index of the partition
   p->setup    = PETSC_FALSE;
   p->data     = NULL;
-  //p->epsilon  = 1.0; // Default epsilon for the RBF kernel
-  //p->destroy  = NULL;
-  //p->solve    = NULL;
   
   *partition = p;
 
@@ -158,11 +155,19 @@ PetscErrorCode PartitionDestroy_SinglePartition(Partition *partition, PetscError
   PetscFunctionReturn(PETSC_SUCCESS);
 }
 
+PetscErrorCode PartitionRBFMatClear(Partition p)
+{
+  PetscFunctionBeginUser;
+  if (p->A) { PetscCall(MatDestroy(&p->A)); }
+  p->A = NULL;
+  PetscFunctionReturn(PETSC_SUCCESS);
+}
+
 PetscErrorCode PartitionCreate(PartitionOfUnity pu, Partition **partition)
 {
   Partition *p;
   PetscInt  n,npart;
-  PetscReal epsilon;
+  //PetscReal epsilon;
   PetscFunctionBeginUser;
   PetscPrintf(PETSC_COMM_WORLD,"[[ %s ]]\n",PETSC_FUNCTION_NAME);
 
@@ -254,26 +259,16 @@ PetscErrorCode PartitionSetUp_SinglePartition(LagRBFCtx ctx, DM swarm, Partition
 {
   PartitionOfUnity pu;
   DMSwarmCellDM    celldm;
-  ASolveMethod     smethod;
-  KernelType       ktype;
-  PetscInt         dim,nfields;
-  PetscReal        epsilon;
+  PetscInt         nfields;
   PetscReal        *coords,*values;
-  PetscReal        (*kernel_fn)(PetscReal,PetscReal);
   const char       **coordFieldsName;
   PetscFunctionBeginUser;
 
   if (p->setup) { PetscFunctionReturn(PETSC_SUCCESS); }
-  PetscPrintf(PETSC_COMM_WORLD,"[[ %s ]]: Setting up Partition[%" PetscInt_FMT "]\n",PETSC_FUNCTION_NAME,p->idx);
+  //PetscPrintf(PETSC_COMM_WORLD,"[[ %s ]]: Setting up Partition[%" PetscInt_FMT "]\n",PETSC_FUNCTION_NAME,p->idx);
   PetscCall(LagRBFGetPartitionOfUnity(ctx,&pu));
-  PetscCall(LagRBFGetSolveMethod(ctx,&smethod));
-  PetscCall(LagRBFGetKernelType(ctx,&ktype));
-  PetscCall(KernelGetFunction(ktype,&kernel_fn));
-  PetscCall(PUGetEpsilon(pu,&epsilon));
-
   /* Swarm */
   PetscCall(DMSwarmSortGetAccess(swarm));
-  PetscCall(DMGetDimension(swarm,&dim));
   /* Setup for coords */
   PetscCall(DMSwarmGetCellDMActive(swarm, &celldm));
   PetscCall(DMSwarmCellDMGetCoordinateFields(celldm, NULL, &coordFieldsName));
@@ -284,7 +279,7 @@ PetscErrorCode PartitionSetUp_SinglePartition(LagRBFCtx ctx, DM swarm, Partition
   /* Setup partition */
   PetscCall(PartitionFillDataPointsIdx(p,swarm));
   PetscCall(PartitionCreateCoefficientsMat(p,nfields));
-  PetscCall(pu->psetup(p,dim,epsilon,coords,kernel_fn));
+  PetscCall(pu->psetup(ctx,p,coords));
 
   /* Restore */
   PetscCall(DMSwarmSortRestoreAccess(swarm));
