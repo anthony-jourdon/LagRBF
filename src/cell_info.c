@@ -6,11 +6,12 @@ PetscErrorCode CellInfoCreate_SingleCell(CellInfo *ci)
   CellInfo c;
   PetscFunctionBeginUser;
   PetscCall(PetscNew(&c));
-  c->idx        = -1; // Cell index
-  c->nneigh     = 0;  // Number of neighbours
-  c->neighbours = NULL; // Neighbour cells indices
-  c->ndata      = 0; // Number of data points connected to the cell (include neighbours)
-  c->data_idx   = NULL; // Data points indices connected to the cell (include neighbours)
+  c->idx          = -1; // Cell index
+  c->nneigh       = 0;  // Number of neighbours
+  c->neighbours   = NULL; // Neighbour cells indices
+  c->ndata        = 0; // Number of data points connected to the cell (include neighbours)
+  c->data_idx     = NULL; // Data points indices connected to the cell (include neighbours)
+  c->node_stencil = NULL; // Node stencil indices for the cell
   *ci = c;
   PetscFunctionReturn(PETSC_SUCCESS);
 }
@@ -20,8 +21,9 @@ PetscErrorCode CellInfoDestroy_SingleCell(CellInfo *ci)
   CellInfo c = *ci;
   PetscFunctionBeginUser;
   if (!c) { PetscFunctionReturn(PETSC_SUCCESS); }
-  if (c->neighbours) { PetscCall(PetscFree(c->neighbours)); }
-  if (c->data_idx)   { PetscCall(PetscFree(c->data_idx)); }
+  if (c->neighbours)   { PetscCall(PetscFree(c->neighbours)); }
+  if (c->data_idx)     { PetscCall(PetscFree(c->data_idx)); }
+  if (c->node_stencil) { PetscCall(PetscFree(c->node_stencil)); }
   PetscCall(PetscFree(c));
   *ci = NULL;
   PetscFunctionReturn(PETSC_SUCCESS);
@@ -43,6 +45,7 @@ PetscErrorCode CellInfoCreate(PartitionOfUnity pu, CellInfo **cellinfo)
   for (iel=0; iel<nel; iel++) { PetscCall(CellInfoCreate_SingleCell(&ci[iel])); }
   PetscCall(DMDARestoreElements(da,&nel,&nen,&elidx));
   PetscCall(CellInfoCreateNeighbourElements(pu,ci));
+  //PetscCall(CellInfoCreateNodeStencils(pu,ci));
   *cellinfo = ci;
   PetscFunctionReturn(PETSC_SUCCESS);
 }
@@ -292,6 +295,146 @@ PetscErrorCode CellInfoCreateNeighbourElements(PartitionOfUnity pu, CellInfo *ci
   PetscFunctionReturn(PETSC_SUCCESS);
 }
 
+static PetscErrorCode CellInfoNodeStencil_2D(CellInfo *ci, DM da)
+{
+  PetscInt i,j;
+  PetscInt size[2];
+  PetscFunctionBeginUser;
+  PetscCall(DMDAGetElementsSizes(da,&size[0],&size[1],NULL));
+  for (j=0; j<size[1]; j++) {
+    for (i=0; i<size[0]; i++) {
+      CellInfo cell_info;
+      PetscInt eidx,start_eidx,start_nidx,ii,jj,sw;
+      PetscInt leidx[2],lseidx[2],stencil_width[] = {4,4};
+      PetscInt *stencil;
+      /* Cell index */
+      eidx      = i + j*size[0];
+      cell_info = ci[eidx];
+      /* Allocate the array to hold the stencil */
+      sw = stencil_width[0]*stencil_width[1];
+      PetscCall(PetscMalloc1(sw,&stencil));
+      for (ii=0; ii<sw; ii++) { stencil[ii] = -1; } // Initialize to invalid
+      /* Get the logical indices (i,j,k) of the element */
+      PetscCall(DMDAGetElementLogicalIndex(da,eidx,&leidx[0],&leidx[1],NULL));
+      /* Ensure that we do not count nodes and elements outside the domain */
+      if (leidx[0] == 0) {
+        leidx[0] = 1;
+        stencil_width[0] -= 1;
+      }
+      if (leidx[1] == 0) {
+        leidx[1] = 1;
+        stencil_width[1] -= 1;
+      }
+      if (leidx[0] == size[0]-1) {
+        stencil_width[0] -= 1;
+      }
+      if (leidx[1] == size[1]-1) {
+        stencil_width[1] -= 1;
+      }
+      start_eidx = (leidx[0]-1) + (leidx[1]-1)*size[0];
+      PetscCall(DMDAGetElementLogicalIndex(da,start_eidx,&lseidx[0],&lseidx[1],NULL));
+      start_nidx = start_eidx + lseidx[1];
+      /* Fill the stencil */
+      for (jj=0; jj<stencil_width[1]; jj++) {
+        for (ii=0; ii<stencil_width[0]; ii++) {
+          PetscInt nidx = start_nidx + ii + jj*(size[0]+1);
+          stencil[ ii + jj*stencil_width[0] ] = nidx;
+        }
+      }
+      cell_info->node_stencil = stencil;
+    }
+  }
+  PetscFunctionReturn(PETSC_SUCCESS);
+}
+
+static PetscErrorCode CellInfoNodeStencil_3D(CellInfo *ci, DM da)
+{
+  PetscInt i,j,k,sw;
+  PetscInt size[3];
+  PetscFunctionBeginUser;
+  PetscCall(DMDAGetElementsSizes(da,&size[0],&size[1],&size[2]));
+  for (k=0; k<size[2]; k++) {
+    for (j=0; j<size[1]; j++) {
+      for (i=0; i<size[0]; i++) {
+        CellInfo cell_info;
+        PetscInt eidx,start_eidx,start_nidx,ii,jj,kk;
+        PetscInt leidx[3],lseidx[3],stencil_width[] = {4,4,4};
+        PetscInt *stencil;
+        /* Cell index */
+        eidx      = i + j*size[0] + k*size[0]*size[1];
+        cell_info = ci[eidx];
+        /* Allocate the array to hold the stencil */
+        sw = stencil_width[0]*stencil_width[1]*stencil_width[2];
+        PetscCall(PetscMalloc1(sw,&stencil));
+        for (ii=0; ii<sw; ii++) { stencil[ii] = -1; } // Initialize to invalid
+        /* Get the logical indices (i,j,k) of the element */
+        PetscCall(DMDAGetElementLogicalIndex(da,eidx,&leidx[0],&leidx[1],&leidx[2]));
+        /* Ensure that we do not count nodes and elements outside the domain */
+        if (leidx[0] == 0) {
+          leidx[0] = 1;
+          stencil_width[0] -= 1;
+        }
+        if (leidx[1] == 0) {
+          leidx[1] = 1;
+          stencil_width[1] -= 1;
+        }
+        if (leidx[2] == 0) {
+          leidx[2] = 1;
+          stencil_width[2] -= 1;
+        }
+        if (leidx[0] == size[0]-1) {
+          stencil_width[0] -= 1;
+        }
+        if (leidx[1] == size[1]-1) {
+          stencil_width[1] -= 1;
+        }
+        if (leidx[2] == size[2]-1) {
+          stencil_width[2] -= 1;
+        }
+        start_eidx = (leidx[0]-1) + (leidx[1]-1)*size[0] + (leidx[2]-1)*size[0]*size[1];
+        PetscCall(DMDAGetElementLogicalIndex(da,start_eidx,&lseidx[0],&lseidx[1],&lseidx[2]));
+        start_nidx = start_eidx + lseidx[1] + lseidx[2]*(size[0]+1);
+        /* Fill the stencil */
+        for (kk=0; kk<stencil_width[2]; kk++) {
+          for (jj=0; jj<stencil_width[1]; jj++) {
+            for (ii=0; ii<stencil_width[0]; ii++) {
+              PetscInt nidx = start_nidx + ii + jj*(size[0]+1) + kk*(size[0]+1)*(size[1]+1);
+              stencil[ ii + jj*stencil_width[0] + kk*stencil_width[0]*stencil_width[1] ] = nidx;
+            }
+          }
+        }
+        cell_info->node_stencil = stencil;
+      }
+    }
+  }
+  PetscFunctionReturn(PETSC_SUCCESS);
+}
+
+PetscErrorCode CellInfoCreateNodeStencils(PartitionOfUnity pu, CellInfo *ci)
+{
+  DM             da = NULL;
+  PetscInt       dim;
+  PetscFunctionBeginUser;
+  PetscPrintf(PETSC_COMM_WORLD,"[[ %s ]]\n",PETSC_FUNCTION_NAME);
+  PetscCall(PUGetDMDALocal(pu,&da));
+  PetscCall(DMGetDimension(da,&dim));
+
+  switch (dim) {
+  case 2:
+    PetscCall(CellInfoNodeStencil_2D(ci,da));
+    break;
+
+  case 3:
+    PetscCall(CellInfoNodeStencil_3D(ci,da));
+    break;
+  
+  default:
+    SETERRQ(PETSC_COMM_SELF,PETSC_ERR_ARG_OUTOFRANGE,"[[ %s ]]: Spatial dimension must be 2 or 3. Found: %" PetscInt_FMT,PETSC_FUNCTION_NAME,dim);
+    break;
+  }
+  PetscFunctionReturn(PETSC_SUCCESS);
+}
+
 PetscErrorCode CellInfoFillDataIdx(CellInfo ci, DM swarm)
 {
   PetscInt iel,eidx,nneigh,offset;
@@ -360,5 +503,47 @@ PetscErrorCode CellInfoGetDataPointsIdx(CellInfo ci, PetscInt *ndata, PetscInt *
   if (ndata)                      { *ndata = ci->ndata; }
   if (ci->ndata == 0 && data_idx) { *data_idx = NULL;}
   else if (data_idx)              { *data_idx = ci->data_idx; }
+  PetscFunctionReturn(PETSC_SUCCESS);
+}
+
+PetscErrorCode DMDAGetElementLogicalIndex(DM da, PetscInt eidx, PetscInt *ix, PetscInt *iy, PetscInt *iz)
+{
+  PetscInt dim,i,j,k;
+  PetscInt size[3];
+  PetscFunctionBeginUser;
+
+  PetscCall(DMGetDimension(da,&dim));
+  PetscCall(DMDAGetElementsSizes(da,&size[0],&size[1],&size[2]));
+  i = j = k = -1;
+  switch (dim) {
+    case 2:
+      j = (PetscInt)(eidx / size[0]); // j
+      i = (PetscInt)(eidx - j*size[0]); // i
+      //PetscPrintf(PETSC_COMM_WORLD,"[[ %s ]] size = [%d, %d], indices = [%" PetscInt_FMT ", %" PetscInt_FMT "]\n",
+      //  PETSC_FUNCTION_NAME,size[0],size[1],i,j);
+      break;
+    
+    case 3:
+      k = (PetscInt)(eidx / (size[0]*size[1])); // k
+      j = (PetscInt)((eidx - k*size[0]*size[1]) / size[0]); // j
+      i = (PetscInt)(eidx - k*size[0]*size[1] - j*size[0]); // i
+      break;
+    default:
+      SETERRQ(PETSC_COMM_SELF,PETSC_ERR_ARG_OUTOFRANGE,"[[ %s ]]: Spatial dimension must be 2 or 3. Found: %" PetscInt_FMT,PETSC_FUNCTION_NAME,dim);
+      break;
+  }
+  if (ix) { *ix = i; }
+  if (iy) { *iy = j; }
+  if (iz) { *iz = k; }
+
+  PetscFunctionReturn(PETSC_SUCCESS);
+}
+
+PetscErrorCode CellInfoGetStencilNodes(CellInfo ci, PetscInt **stencil)
+{
+  PetscFunctionBeginUser;
+  PetscCheck(ci,PETSC_COMM_SELF,PETSC_ERR_ARG_NULL,"CellInfo structure is NULL. Call CellInfoCreate() first.");
+  PetscCheck(ci->node_stencil,PETSC_COMM_SELF,PETSC_ERR_ARG_WRONGSTATE,"CellInfo node stencil array not created yet. Call CellInfoCreateNodeStencils() first.");
+  if (stencil) { *stencil = ci->node_stencil; }
   PetscFunctionReturn(PETSC_SUCCESS);
 }
