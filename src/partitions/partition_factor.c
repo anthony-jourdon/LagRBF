@@ -1,7 +1,6 @@
 #include <petsc.h>
 #include "partitions/partition.h"
 #include "partitions/partition_solve.h"
-#include "partitions/partition_io.h"
 
 PetscLogEvent LAGRBF_FactorRBFMatrix;
 PetscLogEvent LAGRBF_MatSetRHS_Fac;
