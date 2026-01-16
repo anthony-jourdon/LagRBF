@@ -353,13 +353,14 @@ static PetscErrorCode SphericalParameters_Halton(
   PetscReal params[]
 )
 {
-  PetscReal u,v;
+  PetscReal u,v,w;
   PetscFunctionBeginUser;
   u = halton_sequence(pidx+1,2);
   v = halton_sequence(pidx+1,3);
-  params[0] = PetscSqrtReal( ( max[0]*max[0] - min[0]*min[0] )*u + min[0]*min[0] ); // R
+  w = halton_sequence(pidx+1,5);
+  params[0] = PetscPowReal( ( max[0]*max[0]*max[0] - min[0]*min[0]*min[0] )*u + min[0]*min[0]*min[0], 1.0/3.0 ); // R
   params[1] = PetscAcosReal(1.0 - 2.0*v); // theta
-  params[2] = min[2] + pidx * dx[2];  // phi
+  params[2] = min[2] + w * (max[2] - min[2]); // phi
   PetscFunctionReturn(PETSC_SUCCESS);
 }
 
