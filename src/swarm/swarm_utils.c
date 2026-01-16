@@ -704,3 +704,40 @@ PetscErrorCode DMSwarmMigrate_Push_DuplicatePoints(DM swarm, PetscInt point_star
   }
   PetscFunctionReturn(PETSC_SUCCESS);
 }
+
+PetscErrorCode DMSwarmPICSetCellId(DM sw)
+{
+  DMSwarmCellDM     celldm;
+  DMSwarmType       stype;
+  PetscSF           sfcell = NULL;
+  const PetscSFNode *LA_sfcell;
+  DM                dm;
+  Vec               pos;
+  PetscInt          p,npoints;
+  PetscInt          *cellid;
+  const char        **coordFields,*cellFieldName;
+  PetscFunctionBeginUser;
+  PetscCall(DMSwarmGetType(sw,&stype));
+  PetscCheck(stype == DMSWARM_PIC, PetscObjectComm((PetscObject)sw), PETSC_ERR_ARG_WRONG, "DMSwarm type must be DMSWARM_PIC");
+  /* Get DM containing cells in which points need to be located */
+  PetscCall(DMSwarmGetCellDMActive(sw,&celldm));
+  PetscCall(DMSwarmCellDMGetDM(celldm,&dm));
+  /* Get coord field name */
+  PetscCall(DMSwarmCellDMGetCoordinateFields(celldm, NULL, &coordFields));  
+  /* Locate points */
+  PetscCall(DMSwarmCreateLocalVectorFromField(sw,coordFields[0],&pos));
+  PetscCall(DMLocatePoints(dm,pos,DM_POINTLOCATION_NONE,&sfcell));
+  PetscCall(DMSwarmDestroyLocalVectorFromField(sw,coordFields[0],&pos));
+  PetscCall(PetscSFGetGraph(sfcell, NULL, NULL, NULL, &LA_sfcell));
+
+  PetscCall(DMSwarmCellDMGetCellID(celldm,&cellFieldName));
+  PetscCall(DMSwarmGetField(sw, cellFieldName, NULL, NULL, (void **)&cellid));
+  PetscCall(DMSwarmGetLocalSize(sw,&npoints));
+  for (p=0; p<npoints; p++) {
+    //DMLOCATEPOINT_POINT_NOT_FOUND
+    cellid[p] = LA_sfcell[p].index;
+  }
+  PetscCall(DMSwarmRestoreField(sw, cellFieldName, NULL, NULL, (void **)&cellid));
+  PetscCall(PetscSFDestroy(&sfcell));
+  PetscFunctionReturn(PETSC_SUCCESS);
+}
