@@ -265,7 +265,6 @@ PetscErrorCode PartitionSetUp_SinglePartition(LagRBFCtx ctx, DM swarm, Partition
   PetscFunctionBeginUser;
 
   if (p->setup) { PetscFunctionReturn(PETSC_SUCCESS); }
-  //PetscPrintf(PETSC_COMM_WORLD,"[[ %s ]]: Setting up Partition[%" PetscInt_FMT "]\n",PETSC_FUNCTION_NAME,p->idx);
   PetscCall(LagRBFGetPartitionOfUnity(ctx,&pu));
   /* Swarm */
   PetscCall(DMSwarmSortGetAccess(swarm));

@@ -110,7 +110,7 @@ PetscErrorCode PartitionSetUpRBFMatrix_KSP(LagRBFCtx ctx, Partition p, PetscReal
 {
   PartitionOfUnity pu;
   KernelType       ktype;
-  PSolve_KSPData   *data_ctx;
+  PSolve_KSPData   *data_ctx = NULL;
   PetscInt         dim;
   PetscReal        epsilon;
   PetscReal        (*kernel_fn)(PetscReal,PetscReal);
