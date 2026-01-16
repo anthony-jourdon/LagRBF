@@ -44,13 +44,13 @@ PetscErrorCode TestDirectory(const char dirname[], char mode, PetscBool *_exists
   PetscBool exists = PETSC_FALSE;
 
   PetscFunctionBeginUser;
-  PetscCall(MPI_Comm_rank(PETSC_COMM_WORLD,&rank));
+  PetscCallMPI(MPI_Comm_rank(PETSC_COMM_WORLD,&rank));
 
   if (rank == 0) {
     PetscCall(PetscTestDirectory(dirname,mode,&exists));
     i_exists = (int)exists;
   }
-  PetscCall(MPI_Bcast(&i_exists,1,MPI_INT,0,PETSC_COMM_WORLD));
+  PetscCallMPI(MPI_Bcast(&i_exists,1,MPI_INT,0,PETSC_COMM_WORLD));
 
   if (i_exists == 1) { *_exists = PETSC_TRUE; }
   else               { *_exists = PETSC_FALSE; }
@@ -63,13 +63,13 @@ PetscErrorCode TestFile(const char filename[], char mode, PetscBool *_exists)
   int i_exists = 0;
   PetscBool exists = PETSC_FALSE;
   PetscFunctionBeginUser;
-  PetscCall(MPI_Comm_rank(PETSC_COMM_WORLD,&rank));
+  PetscCallMPI(MPI_Comm_rank(PETSC_COMM_WORLD,&rank));
 
   if (rank == 0) {
     PetscCall(PetscTestFile(filename,mode,&exists));
     i_exists = (int)exists;
   }
-  PetscCall(MPI_Bcast(&i_exists,1,MPI_INT,0,PETSC_COMM_WORLD));
+  PetscCallMPI(MPI_Bcast(&i_exists,1,MPI_INT,0,PETSC_COMM_WORLD));
 
   if (i_exists == 1) { *_exists = PETSC_TRUE; }
   else               { *_exists = PETSC_FALSE; }
@@ -83,7 +83,7 @@ PetscErrorCode ParaviewPVDOpen(const char pvdfilename[])
   FILE        *fp;
   PetscFunctionBeginUser;
   /* only master generates this file */
-  PetscCall(MPI_Comm_rank(PETSC_COMM_WORLD,&rank));
+  PetscCallMPI(MPI_Comm_rank(PETSC_COMM_WORLD,&rank));
   if(rank != 0) { PetscFunctionReturn(0); }
 
   fp = fopen(pvdfilename,"w");
@@ -117,7 +117,7 @@ PetscErrorCode ParaviewPVDAppend(
   char        key[] = "</Collection>";
   PetscFunctionBeginUser;
   /* only master generates this file */
-  PetscCall(MPI_Comm_rank(PETSC_COMM_WORLD,&rank));
+  PetscCallMPI(MPI_Comm_rank(PETSC_COMM_WORLD,&rank));
   if (rank != 0) { PetscFunctionReturn(PETSC_SUCCESS); }
 
   fp = fopen(pvdfilename,"r+");
