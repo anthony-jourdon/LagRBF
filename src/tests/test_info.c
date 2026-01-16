@@ -4,6 +4,8 @@
 #include "partitions/partition_solve.h"
 #include "partitions/partition.h"
 #include "io_utils.h"
+#include "partition_of_unity.h"
+#include "cell_info.h"
 #include "swarm/swarm_utils.h"
 #include "swarm/swarm_interp.h"
 #include "swarm/swarm_data.h"
@@ -529,6 +531,51 @@ PetscErrorCode TestMemoryUsage()
   PetscFunctionReturn(PETSC_SUCCESS);
 }
 
+PetscErrorCode Test_CellInfo()
+{
+  LagRBFCtx        ctx;
+  PartitionOfUnity pu;
+  Partition        *partitions;
+  CellInfo         *cellinfo;
+  DM               das;
+  PetscInt         nel,nen,iel,sw,dim;
+  const PetscInt   *elidx;
+  PetscMPIInt      rank;
+  PetscFunctionBeginUser;
+
+  PetscCallMPI(MPI_Comm_rank(PETSC_COMM_WORLD,&rank));
+
+  PetscCall(LagRBFCtxCreate(&ctx));
+  PetscCall(LagRBFSetFromOptions(ctx));
+  PetscCall(LagRBF_PartitionOfUnityCreate(ctx));
+  PetscCall(LagRBF_PartitionCreate(ctx));
+  PetscCall(LagRBF_CellInfoCreate(ctx));
+
+  PetscCall(LagRBFGetPartitionOfUnity(ctx,&pu));
+  PetscCall(LagRBFGetPartitions(ctx,&partitions));
+  PetscCall(LagRBFGetCellInfo(ctx,&cellinfo));
+
+  PetscCall(PUGetDMDALocal(pu,&das));
+  PetscCall(DMDAGetElements(das,&nel,&nen,&elidx));
+  PetscCall(PUGetNodesPerPoint(pu,&sw));
+  PetscCall(DMGetDimension(das,&dim));
+  #if 1
+  for (iel=0; iel<nel; iel++) {
+    CellInfo ci = cellinfo[iel];
+    PetscInt *stencil = ci->node_stencil;
+
+    PetscPrintf(PETSC_COMM_SELF,
+      "Rank[%d]: CellInfo[%" PetscInt_FMT "]: element index = %" PetscInt_FMT ", stencil: [",
+      rank,iel,ci->idx);
+    for (PetscInt ii=0; ii<sw; ii++) {
+      PetscPrintf(PETSC_COMM_SELF,"%" PetscInt_FMT " ",stencil[ii]);
+    }
+    PetscPrintf(PETSC_COMM_SELF,"]\n");
+  }
+  #endif
+  PetscFunctionReturn(PETSC_SUCCESS);
+}
+
 int main(int argc, char *argv[])
 {
   PetscFunctionBeginUser;
@@ -539,7 +586,8 @@ int main(int argc, char *argv[])
   //PetscCall(Test_Parallel_2());
   //PetscCall(Test_3());
   //PetscCall(Test_4());
-  PetscCall(TestMemoryUsage());
+  //PetscCall(TestMemoryUsage());
+  PetscCall(Test_CellInfo());
   PetscCall(PetscFinalize());
   
   return 0;

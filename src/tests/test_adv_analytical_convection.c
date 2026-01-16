@@ -286,7 +286,7 @@ static PetscErrorCode Test()
     PetscCall(LagRBFSetStep(ctx,step));
     PetscCall(PetscPrintf(PETSC_COMM_WORLD,"[[ STEP: %" PetscInt_FMT " ]], time: %g\n",step,time));
     /* Interpolate */
-    PetscCall(PartitionSolveInterpolationCoefficients(pu,partitions,swarm_data,"fields"));
+    PetscCall(PartitionSolveInterpolationCoefficients(ctx,swarm_data,"fields"));
     PetscCall(RBFInterpolation(ctx,swarm_interp,swarm_data,"fields"));
     /* Output */
     if (step % output_frequency == 0) {

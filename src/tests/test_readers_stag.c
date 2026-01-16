@@ -650,7 +650,7 @@ static PetscErrorCode TestStagBinMain()
   PetscMPIInt rank;
   //const char *output_fields[] = { DMSwarmPICField_coor, "fields" };
   const char *fname[] = { "/mnt/c/Users/jourdon/Documents/Scripts/PostProc/StagYY/PJB6_YS1_Rh32_vp00039" };
-  const char *output_fields[] = {"DMSwarm_pid","fields"};
+  const char *output_fields[] = {"DMSwarm_pid","fields","velocity"};
   PetscFunctionBeginUser;
 
   PetscCall(LagRBFCtxCreate(&ctx));
@@ -665,6 +665,8 @@ static PetscErrorCode TestStagBinMain()
   PetscCall(LagRBFGetPartitionOfUnity(ctx,&pu));
   PetscCall(LagRBFGetCellInfo(ctx,&cellinfo));
   PetscCall(LagRBFGetPartitions(ctx,&partitions));
+
+  PetscCall(PartitionOfUnityMeshView(pu));
 
   PetscCall(SwarmDataCreate(ctx,&swarm_data));
   PetscCall(MPI_Comm_rank(PETSC_COMM_WORLD,&rank));
@@ -726,14 +728,16 @@ static PetscErrorCode TestStagBinMain()
   PetscCall(SwarmInterpSetUp(ctx,&swarm_interp));
   PetscCall(DMSwarmGetLocalSize(swarm_interp,&npoints_i));
   PetscCall(SwarmFieldAssignUniqueIndex(swarm_interp,DMSwarmField_pid,0,npoints_i));
+
+#if 0
   /* Set up Partition data structure */
   PetscCall(LagRBF_PartitionsSetUp(ctx,swarm_data,swarm_interp));
   /* Interpolate */
-  PetscCall(PartitionSolveInterpolationCoefficients(pu,partitions,swarm_data,"fields"));
+  PetscCall(PartitionSolveInterpolationCoefficients(ctx,swarm_data,"fields"));
   PetscCall(RBFInterpolation(ctx,swarm_interp,swarm_data,"fields"));
-
+#endif
   //PetscCall(SwarmOutput(ctx,swarm_data,2,output_fields,PETSC_FALSE));
-  PetscCall(SwarmOutput(ctx,swarm_interp,2,output_fields,PETSC_FALSE));
+  PetscCall(SwarmOutput(ctx,swarm_interp,3,output_fields,PETSC_FALSE));
 
   PetscCall(DMDestroy(&swarm_data));
   PetscCall(DMDestroy(&swarm_interp));

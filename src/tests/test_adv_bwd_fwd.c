@@ -238,7 +238,7 @@ static PetscErrorCode Test()
     /* Set the weights for the interpolation points */
     PetscCall(SwarmInterpSetWeights(ctx,swarm_interp));
     /* Interpolate */
-    PetscCall(PartitionSolveInterpolationCoefficients(pu,partitions,swarm_data,"fields"));
+    PetscCall(PartitionSolveInterpolationCoefficients(ctx,swarm_data,"fields"));
     PetscCall(RBFInterpolation(ctx,swarm_interp,swarm_data,"fields"));
     /* Output (for debugging) */
     //PetscCall(SwarmOutput(ctx,swarm_interp,1,data_output,PETSC_FALSE));
@@ -264,7 +264,7 @@ static PetscErrorCode Test()
     /* Set the weights for the interpolation points */
     //PetscCall(SwarmInterpSetWeights(ctx,swarm_interp));
     /* Interpolate */
-    PetscCall(PartitionSolveInterpolationCoefficients(pu,partitions,swarm_data,"fields"));
+    PetscCall(PartitionSolveInterpolationCoefficients(ctx,swarm_data,"fields"));
     PetscCall(RBFInterpolation(ctx,swarm_interp,swarm_data,"fields"));
     /* Output */
     PetscCall(SwarmOutput(ctx,swarm_interp,2,output_fields,PETSC_TRUE));
