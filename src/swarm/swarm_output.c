@@ -62,6 +62,7 @@ PetscErrorCode SwarmOutputFieldPetscIS_FromName(DM sw, const char *field_name, c
   PetscViewer    viewer;
   IS             is;
   PetscInt       npoints;
+  PetscInt       *_idx = NULL;
   const PetscInt *idx;
   PetscDataType  type;
   MPI_Comm       comm;
@@ -86,7 +87,6 @@ PetscErrorCode SwarmOutputFieldPetscIS_FromName(DM sw, const char *field_name, c
   } else if (type == PETSC_INT64) {
     PetscInt64 *data64 = (PetscInt64 *)data;
     PetscInt   np;
-    PetscInt   *_idx;
     PetscMalloc1(npoints,&_idx);
     for (np=0; np<npoints; np++) {
       PetscIntCast(data64[np],&_idx[np]);
@@ -106,6 +106,7 @@ PetscErrorCode SwarmOutputFieldPetscIS_FromName(DM sw, const char *field_name, c
   PetscCall(PetscViewerDestroy(&viewer));
   PetscCall(ISDestroy(&is));
   PetscCall(DMSwarmRestoreField(sw,field_name,NULL,&type,&data));
+  if (_idx) PetscFree(_idx);
   PetscFunctionReturn(PETSC_SUCCESS);
 }
 /*
