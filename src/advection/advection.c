@@ -215,7 +215,7 @@ PetscErrorCode AdvectionExplicit(
 )
 {
   PetscFunctionBeginUser;
-#if defined(__AVX__)
+#if 0 //defined(__AVX__)
   PetscCall(AdvectionExplicit_AVX256(coords, x0, velocity, dt, npoints, dim));
 #else
   PetscCall(AdvectionExplicit_Scalar(coords, x0, velocity, dt, npoints, dim));
