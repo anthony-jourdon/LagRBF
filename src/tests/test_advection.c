@@ -339,7 +339,7 @@ static PetscErrorCode Test_advection()
   PetscReal        Radius[] = {1.0,2.0};
   PetscBool        exists;
   const char       *data_output[] = {"fields"};
-  const char       *output_fields[] = {"DMSwarm_pid","fields","velocity"}; //"pidx"
+  const char       *output_fields[] = {"DMSwarm_pid","fields","velocity","DMSwarm_rank"}; //"pidx"
   PetscFunctionBeginUser;
 
   PetscCall(LagRBFCtxCreate(&ctx));
@@ -380,7 +380,7 @@ static PetscErrorCode Test_advection()
 
   PetscCall(CreateSwarmInterp(ctx, &ctx->swi));
   swarm_interp = ctx->swi;
-  PetscCall(SwarmOutput(ctx,swarm_interp,3,output_fields,PETSC_FALSE));
+  PetscCall(SwarmOutput(ctx,swarm_interp,4,output_fields,PETSC_FALSE));
   /* Count zeros in RBF matrix */
   //PetscCall(CountZerosInRBFMatrix(ctx,swarm_data));
 #if 1
@@ -391,7 +391,7 @@ static PetscErrorCode Test_advection()
   /* Copy the first dim fields into "velocity" */
   PetscCall(AdvectionInitializeTimestepVelocity(ctx,swarm_interp));
   /* Output */
-  PetscCall(SwarmOutput(ctx,swarm_interp,3,output_fields,PETSC_FALSE));
+  PetscCall(SwarmOutput(ctx,swarm_interp,4,output_fields,PETSC_FALSE));
   output_frequency = 100;
   PetscCall(PetscOptionsGetInt(NULL,NULL,"-output_frequency",&output_frequency,NULL));
   time_last_output = 0.0;
@@ -415,12 +415,12 @@ static PetscErrorCode Test_advection()
     PetscCall(AdvectionInitializeTimestepVelocity(ctx,swarm_interp));
     /* Output */
     if (step % output_frequency == 0) {
-      PetscCall(SwarmOutput(ctx,swarm_interp,3,output_fields,PETSC_FALSE));
+      PetscCall(SwarmOutput(ctx,swarm_interp,4,output_fields,PETSC_FALSE));
     }
     /* Output every given dt_output */
     if (output_dt > 0.0) {
       if (time - time_last_output >= output_dt - 1e-10) {
-        PetscCall(SwarmOutput(ctx,swarm_interp,3,output_fields,PETSC_FALSE));
+        PetscCall(SwarmOutput(ctx,swarm_interp,4,output_fields,PETSC_FALSE));
         time_last_output = time;
       }
     }

@@ -16,6 +16,7 @@ static const char help[] = "Test to read HDF5 files.\n\n";
 #include "partition_of_unity.h"
 #include "interpolation.h"
 #include "cell_info.h"
+#include "advection/advection_ctx.h"
 
 #if 0
 static PetscErrorCode StagReshapeVelocity(PetscInt dim, StagFieldInfo fdata, PetscReal *velocity)
@@ -701,13 +702,14 @@ static PetscErrorCode TestStagBinMain()
   Partition *partitions;
   CellInfo  *cellinfo;
   DM        swarm_data,swarm_interp;
-  PetscInt  np,cnt,npoints_i,npoints_d;
+  PetscInt  np,cnt,npoints_i,npoints_d,output_frequency,step,nsteps;
   PetscInt  *rm_idx;
+  PetscReal time,time_final,time_last_output,output_dt,dt;
   PetscBool exists;
   PetscMPIInt rank;
   //const char *output_fields[] = { DMSwarmPICField_coor, "fields" };
   const char *fname[] = { "/home/jourdon/data/LagRBF_input/PJB6_YS1_Rh32_vp00039" };
-  const char *output_fields[] = {"DMSwarm_pid","fields","velocity"};
+  const char *output_fields[] = {"DMSwarm_pid","fields","velocity","DMSwarm_rank"};
   PetscFunctionBeginUser;
 
   PetscCall(LagRBFCtxCreate(&ctx));
@@ -725,7 +727,7 @@ static PetscErrorCode TestStagBinMain()
   PetscCall(LagRBFGetPartitions(ctx,&partitions));
 
   PetscCall(PartitionOfUnityMeshView(pu));
-
+#if 1
   PetscCall(SwarmDataCreate(ctx,&swarm_data));
   PetscCall(MPI_Comm_rank(PETSC_COMM_WORLD,&rank));
   /* Read data only on rank 0 */
@@ -738,9 +740,10 @@ static PetscErrorCode TestStagBinMain()
   PetscCall(SwarmDataAssignMigrateDuplicateGhostPoints(ctx,swarm_data));
   /* Set cell IDs */
   PetscCall(DMSwarmPICSetCellId(swarm_data));
+  ctx->swd = swarm_data;
 
-  PetscCall(CountZerosInRBFMatrix(ctx, swarm_data));
-#if 0
+  //PetscCall(CountZerosInRBFMatrix(ctx, swarm_data));
+
   PetscCall(DMSwarmGetLocalSize(swarm_data,&npoints_d));
   //PetscPrintf(PETSC_COMM_SELF,"Rank[%d]: swarm data contains: %" PetscInt_FMT " points\n",rank,npoints_d);
 
@@ -750,20 +753,111 @@ static PetscErrorCode TestStagBinMain()
   PetscCall(SwarmInterpSetUp(ctx,&swarm_interp));
   PetscCall(DMSwarmGetLocalSize(swarm_interp,&npoints_i));
   PetscCall(SwarmFieldAssignUniqueIndex(swarm_interp,DMSwarmField_pid,0,npoints_i));
+  ctx->swi = swarm_interp;
   //PetscPrintf(PETSC_COMM_SELF,"Rank[%d]: swarm interp contains: %" PetscInt_FMT " points\n",rank,npoints_i);
 #if 1
   /* Set up Partition data structure */
-  PetscPrintf(PETSC_COMM_WORLD,"Setting up partitions...\n");
+  //PetscPrintf(PETSC_COMM_WORLD,"Setting up partitions...\n");
   PetscCall(LagRBF_PartitionsSetUp(ctx,swarm_data,swarm_interp));
   /* Interpolate */
   PetscCall(PartitionSolveInterpolationCoefficients(ctx,swarm_data,"fields"));
   PetscCall(RBFInterpolation(ctx,swarm_interp,swarm_data,"fields"));
 #endif
-  PetscCall(SwarmOutput(ctx,swarm_data,2,output_fields,PETSC_FALSE));
-  PetscCall(SwarmOutput(ctx,swarm_interp,3,output_fields,PETSC_FALSE));
+  //PetscCall(SwarmOutput(ctx,swarm_data,2,output_fields,PETSC_FALSE));
+  PetscCall(SwarmOutput(ctx,swarm_interp,4,output_fields,PETSC_FALSE));
+#if 0
+  /* Migrate test */
+  for (step=1; step<5; step++){
+    DMSwarmCellDM  celldm;
+    DM       dmda;
+    PetscInt npp;
+    long int np_before_local, np_before_global;
+    long int np_after_local,  np_after_global;
+    const char *dmda_name;
+
+    PetscCall(LagRBFSetStep(ctx,step));
+    PetscCall(PetscPrintf(PETSC_COMM_WORLD,"=================== MIGRATION STEP %d ===================\n",step));
+    PetscCall(DMSwarmGetLocalSize(swarm_interp,&npp));
+    np_before_local = (long int)npp;
+    PetscCallMPI(MPI_Allreduce(&np_before_local,&np_before_global,1,MPI_LONG,MPI_SUM,PETSC_COMM_WORLD));
+
+    PetscCall(DMSwarmGetCellDMActive(swarm_interp,&celldm));
+    PetscCall(DMSwarmCellDMGetDM(celldm,&dmda));
+    PetscCall(PetscObjectGetName((PetscObject)dmda,&dmda_name));
+    PetscPrintf(PETSC_COMM_WORLD,"[[ Migration ]]: Using cell dm %s\n",dmda_name);
+
+  PetscCall(DMSwarmMigrate(swarm_interp,PETSC_TRUE)); // update cell ids and MPI ranks
+
+    PetscCall(DMSwarmGetLocalSize(swarm_interp,&npp));
+    np_after_local = (long int)npp;
+    PetscCallMPI(MPI_Allreduce(&np_after_local,&np_after_global,1,MPI_LONG,MPI_SUM,PETSC_COMM_WORLD));
+    PetscPrintf(PETSC_COMM_WORLD,"[[ Migration ]]: Stage %d: Migrated points: before = %ld, after = %ld\n",step,np_before_global,np_after_global);
+
+    PetscCall(SwarmOutput(ctx,swarm_interp,4,output_fields,PETSC_FALSE));
+  }
+#endif
+#if 1
+  /* Advection */
+  /* Copy the first dim fields into "velocity" */
+  PetscCall(AdvectionInitializeTimestepVelocity(ctx,swarm_interp));
+  /* Output */
+  PetscCall(SwarmOutput(ctx,swarm_interp,4,output_fields,PETSC_FALSE));
+  output_frequency = 100;
+  PetscCall(PetscOptionsGetInt(NULL,NULL,"-output_frequency",&output_frequency,NULL));
+  time_last_output = 0.0;
+  output_dt = 0.1;
+  PetscCall(PetscOptionsGetReal(NULL,NULL,"-output_dt",&output_dt,NULL));
+  dt = 1.0e-2;
+  PetscCall(PetscOptionsGetReal(NULL,NULL,"-dt",&dt,NULL));
+  time_final = 1.0;
+  PetscCall(PetscOptionsGetReal(NULL,NULL,"-time_final",&time_final,NULL));
+  nsteps = 10000;
+  PetscCall(PetscOptionsGetInt(NULL,NULL,"-nsteps",&nsteps,NULL));
+  time = 0.0;
+  PetscCall(LagRBFSetTime(ctx,time));
+  PetscCall(LagRBFSetTimeStep(ctx,dt));
+  step = 1;
+  while (time < time_final) {
+    PetscCall(LagRBFSetStep(ctx,step));
+    PetscCall(PetscPrintf(PETSC_COMM_WORLD,"[[ STEP: %" PetscInt_FMT " ]], time: %g\n",step,time));
+    /* Interpolate */
+    PetscCall(LagRBF_PartitionsSetUp(ctx,swarm_data,swarm_interp));
+    PetscCall(PartitionSolveInterpolationCoefficients(ctx,swarm_data,"fields"));
+    PetscCall(RBFInterpolation(ctx,swarm_interp,swarm_data,"fields"));
+    PetscCall(AdvectionInitializeTimestepVelocity(ctx,swarm_interp));
+    /* Output */
+    if (step % output_frequency == 0) {
+      PetscCall(SwarmOutput(ctx,swarm_interp,4,output_fields,PETSC_FALSE));
+    }
+    /* Output every given dt_output */
+    if (output_dt > 0.0) {
+      if (time - time_last_output >= output_dt - 1e-10) {
+        PetscCall(SwarmOutput(ctx,swarm_interp,4,output_fields,PETSC_FALSE));
+        time_last_output = time;
+      }
+    }
+    /* Advect */
+    PetscCall(LagRBF_AdvectSwarm(ctx,swarm_interp,swarm_data));
+    PetscCall(LagRBFGetTimeStep(ctx,&dt));
+    if (time + dt > time_final) {
+      dt = time_final - time;
+      PetscCall(LagRBFSetTimeStep(ctx,dt));
+    }
+    time += dt;
+    PetscCall(LagRBFSetTime(ctx,time));
+    step++;
+    if (step > nsteps) { break; }
+  }
+  /* 
+  For now I only make tests on a single stag time step,
+  but when other stag time step will be taken into account 
+  I will need to re-solve the partitions for each stag time step (but not for each advection step)
+  */
+  PetscCall(LagRBF_PartitionsResetSolved(ctx));
 #endif
   PetscCall(DMDestroy(&swarm_data));
   PetscCall(DMDestroy(&swarm_interp));
+#endif
   PetscCall(LagRBFCtxDestroy(&ctx));
   PetscFunctionReturn(PETSC_SUCCESS);
 }
