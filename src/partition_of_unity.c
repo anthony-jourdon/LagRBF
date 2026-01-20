@@ -427,6 +427,28 @@ PetscErrorCode PUGetEpsilon(PartitionOfUnity pu, PetscReal *epsilon)
     -pu_mesh_view vtk:pu_mesh.vts:VTK_VTS:write
   See PetscOptionsCreateViewer() manual page for more details.
 */
+static PetscErrorCode PartitionOfUnity_DMDAView_coor(DM da)
+{
+  PetscViewer       viewer = NULL;
+  PetscViewerFormat format;
+  DM                cda;
+  Vec               coords;
+  const char        *dm_name;
+  char              prefix[PETSC_MAX_PATH_LEN];
+  PetscFunctionBeginUser;
+
+  PetscCall(PetscObjectGetName((PetscObject)da,&dm_name));
+  PetscCall(PetscSNPrintf(prefix,PETSC_MAX_PATH_LEN-1,"%s_",dm_name));
+  PetscCall(PetscOptionsCreateViewer(PetscObjectComm((PetscObject)da),NULL,prefix,"-view",&viewer,&format,NULL));
+  /* Get coordinates */
+  PetscCall(DMGetCoordinateDM(da,&cda));
+  PetscCall(DMGetCoordinates(da,&coords));
+  PetscCall(VecView(coords,viewer));
+  PetscCall(PetscViewerDestroy(&viewer));
+
+  PetscFunctionReturn(PETSC_SUCCESS);
+}
+
 static PetscErrorCode PartitionOfUnity_DMDAView(DM da)
 {
   PetscViewer       viewer;
@@ -454,7 +476,8 @@ PetscErrorCode PartitionOfUnityMeshView(PartitionOfUnity pu)
   DM dap=NULL;
   PetscFunctionBeginUser;
   PetscCall(PUGetDMDA(pu,&dap));
-  PetscCall(PartitionOfUnity_DMDAView(dap));
+  PetscCall(PartitionOfUnity_DMDAView_coor(dap));
+  //PetscCall(PartitionOfUnity_DMDAView(dap));
   PetscFunctionReturn(PETSC_SUCCESS);
 }
 
