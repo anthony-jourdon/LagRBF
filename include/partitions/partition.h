@@ -20,6 +20,7 @@ struct _p_Partition {
   PetscInt  idx; // Index of the partition
   PetscInt  *data_idx; // Indices of data points in the partition
   PetscBool setup;
+  PetscBool solved;
   void      *data;
 };
 
@@ -28,6 +29,7 @@ PetscErrorCode PartitionDestroy(PartitionOfUnity pu, Partition **partition);
 PetscErrorCode PartitionRBFMatClear(Partition p);
 PetscErrorCode LagRBF_PartitionsSetUp(LagRBFCtx ctx, DM swd, DM swi);
 PetscErrorCode PartitionFillDataPointsIdx(Partition p, DM swarm);
+PetscErrorCode LagRBF_PartitionsResetSolved(LagRBFCtx ctx);
 /* Getters and setters */
 PetscErrorCode PartitionGetMap(Partition p, PetscInt *ncells, PetscInt **map);
 PetscErrorCode PartitionGetDataPointsIdx(Partition p, PetscInt *ndata, PetscInt **data_idx);

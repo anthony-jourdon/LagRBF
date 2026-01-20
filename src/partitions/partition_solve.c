@@ -77,10 +77,12 @@ PetscErrorCode PartitionSolveInterpolationCoefficients(LagRBFCtx ctx, DM swarm, 
     PetscInt  npoints;
 
     if (!p->setup) continue; // partition not setup, skip
+    if (p->solved) continue; // partition already solved, skip
     PetscCall(PartitionGetDataPointsIdx(p,&npoints,NULL));
     if (npoints == 0) continue; // no data points in this partition, skip
     /* Solve for the interpolation coefficients in this partition */
     PetscCall(pu->psolve(ctx,p,nfields,values));
+    p->solved = PETSC_TRUE;
   }
   /* Restore the field */
   PetscCall(DMSwarmRestoreField(swarm,fieldname,&nfields,NULL,(void **)&values));

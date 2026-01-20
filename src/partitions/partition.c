@@ -131,6 +131,7 @@ PetscErrorCode PartitionCreate_SinglePartition(Partition *partition)
   p->data_idx = NULL; // Initialize the data points indices
   p->idx      = -1; // Index of the partition
   p->setup    = PETSC_FALSE;
+  p->solved   = PETSC_FALSE;
   p->data     = NULL;
   
   *partition = p;
@@ -342,6 +343,21 @@ PetscErrorCode LagRBF_PartitionsSetUp(LagRBFCtx ctx, DM swd, DM swi)
   }
   PetscCall(DMSwarmRestoreField(swi, cellFieldName_i, NULL, NULL, (void **)&cellid_i));
   PetscCall(DMDARestoreElements(das,&nel,&nen,&elidx));
+  PetscFunctionReturn(PETSC_SUCCESS);
+}
+
+PetscErrorCode LagRBF_PartitionsResetSolved(LagRBFCtx ctx)
+{
+  PartitionOfUnity pu;
+  Partition       *partitions;
+  PetscInt         npart,n;
+  PetscFunctionBeginUser;
+  PetscCall(LagRBFGetPartitionOfUnity(ctx,&pu));
+  PetscCall(LagRBFGetPartitions(ctx,&partitions));
+  PetscCall(PUGetNPartitionsLocal(pu,&npart));
+  for (n=0; n<npart; n++) {
+    partitions[n]->solved = PETSC_FALSE;
+  }
   PetscFunctionReturn(PETSC_SUCCESS);
 }
 
