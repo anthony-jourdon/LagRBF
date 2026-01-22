@@ -35,6 +35,12 @@ def PetscISLoadFromFile(fname,**kwargs):
     v = io.readIS(fp)
   return v
 
+def PetscMatDenseLoadFromFile(fname, **kwargs):
+  io = PetscBinaryIO.PetscBinaryIO(**kwargs) # Instantiate a petsc binary loader
+  with open(fname) as fp:
+    objecttype = io.readObjectType(fp)
+    m = io.readMatDense(fp)
+  return m
 
 def test():
   import matplotlib.pyplot as plt
