@@ -714,8 +714,12 @@ static PetscErrorCode TestStagBinMain()
 
   PetscCall(LagRBFCtxCreate(&ctx));
   PetscCall(LagRBFSetFromOptions(ctx));
-  PetscCall(TestDirectory(ctx->output_dir,'w',&exists));
-  if (!exists) { PetscCall(CreateDirectory(ctx->output_dir)); }
+
+  PetscCall(PetscTestDirectory(ctx->output_dir,'w',&exists));
+  if (!exists) { CreateDirectory(ctx->output_dir); }
+  PetscCall(PetscTestDirectory(ctx->mat_dir,'w',&exists));
+  if (!exists) { CreateDirectory(ctx->mat_dir); }
+
   /* Create data structures */
   ctx->mtype = GEODYNAMICS; // Set the model type
   PetscCall(LagRBF_PartitionOfUnityCreate(ctx));
@@ -760,7 +764,7 @@ static PetscErrorCode TestStagBinMain()
   //PetscPrintf(PETSC_COMM_WORLD,"Setting up partitions...\n");
   PetscCall(LagRBF_PartitionsSetUp(ctx,swarm_data,swarm_interp));
   /* Interpolate */
-  PetscCall(PartitionSolveInterpolationCoefficients(ctx,swarm_data,"fields"));
+  //PetscCall(PartitionSolveInterpolationCoefficients(ctx,swarm_data,"fields"));
   PetscCall(RBFInterpolation(ctx,swarm_interp,swarm_data,"fields"));
 #endif
   //PetscCall(SwarmOutput(ctx,swarm_data,2,output_fields,PETSC_FALSE));
@@ -822,7 +826,7 @@ static PetscErrorCode TestStagBinMain()
     PetscCall(PetscPrintf(PETSC_COMM_WORLD,"[[ STEP: %" PetscInt_FMT " ]], time: %g\n",step,time));
     /* Interpolate */
     PetscCall(LagRBF_PartitionsSetUp(ctx,swarm_data,swarm_interp));
-    PetscCall(PartitionSolveInterpolationCoefficients(ctx,swarm_data,"fields"));
+    //PetscCall(PartitionSolveInterpolationCoefficients(ctx,swarm_data,"fields"));
     PetscCall(RBFInterpolation(ctx,swarm_interp,swarm_data,"fields"));
     PetscCall(AdvectionInitializeTimestepVelocity(ctx,swarm_interp));
     /* Output */
@@ -853,7 +857,7 @@ static PetscErrorCode TestStagBinMain()
   but when other stag time step will be taken into account 
   I will need to re-solve the partitions for each stag time step (but not for each advection step)
   */
-  PetscCall(LagRBF_PartitionsResetSolved(ctx));
+  PetscCall(LagRBF_PartitionsReset(ctx));
 #endif
   PetscCall(DMDestroy(&swarm_data));
   PetscCall(DMDestroy(&swarm_interp));

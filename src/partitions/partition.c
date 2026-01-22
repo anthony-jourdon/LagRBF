@@ -156,11 +156,20 @@ PetscErrorCode PartitionDestroy_SinglePartition(Partition *partition, PetscError
   PetscFunctionReturn(PETSC_SUCCESS);
 }
 
-PetscErrorCode PartitionRBFMatClear(Partition p)
+static PetscErrorCode PartitionReset_SinglePartition(Partition p, PetscErrorCode (*destroy)(Partition))
 {
   PetscFunctionBeginUser;
-  if (p->A) { PetscCall(MatDestroy(&p->A)); }
-  p->A = NULL;
+  if (!p) { PetscFunctionReturn(PETSC_SUCCESS); }
+  p->solved = PETSC_FALSE;
+  p->setup  = PETSC_FALSE;
+  if (p->data_idx) { 
+    PetscCall(PetscFree(p->data_idx)); 
+    p->data_idx = NULL;
+    p->ndata    = 0;
+  }
+  if (p->X)    { PetscCall(MatDestroy(&p->X));      }
+  if (p->A)    { PetscCall(MatDestroy(&p->A));      }
+  if (destroy) { PetscCall(destroy(p));             }
   PetscFunctionReturn(PETSC_SUCCESS);
 }
 
@@ -249,69 +258,32 @@ static PetscErrorCode PartitionCreateCoefficientsMat(Partition p, PetscInt nfiel
   PetscFunctionReturn(PETSC_SUCCESS);
 }
 
-/* 
-  PetscErrorCode PartitionSetUp(LagRBFCtx ctx, DM swarm, Partition p)
-  For the partition:
-    - fill the data points indices belonging to the partition
-    - create the matrix to hold the solution
-    - fill (and factor) the RBF matrix for the partition
-*/
-PetscErrorCode PartitionSetUp_SinglePartition(LagRBFCtx ctx, DM swarm, Partition p)
+static PetscErrorCode PartitionSetUp_SinglePartition(LagRBFCtx ctx, Partition p, DM swarm, PetscInt nfields, PetscReal *coords)
 {
   PartitionOfUnity pu;
-  DMSwarmCellDM    celldm;
-  PetscInt         nfields;
-  PetscReal        *coords,*values;
-  const char       **coordFieldsName;
   PetscFunctionBeginUser;
-
   if (p->setup) { PetscFunctionReturn(PETSC_SUCCESS); }
   PetscCall(LagRBFGetPartitionOfUnity(ctx,&pu));
-  /* Swarm */
-  PetscCall(DMSwarmSortGetAccess(swarm));
-  /* Setup for coords */
-  PetscCall(DMSwarmGetCellDMActive(swarm, &celldm));
-  PetscCall(DMSwarmCellDMGetCoordinateFields(celldm, NULL, &coordFieldsName));
-  /* Get fields */
-  PetscCall(DMSwarmGetField(swarm, coordFieldsName[0], NULL, NULL, (void **)&coords));
-  PetscCall(DMSwarmGetField(swarm,"fields",&nfields,NULL,(void **)&values));
-
-  /* Setup partition */
   PetscCall(PartitionFillDataPointsIdx(p,swarm));
   PetscCall(PartitionCreateCoefficientsMat(p,nfields));
   PetscCall(pu->psetup(ctx,p,coords));
-
-  /* Restore */
-  PetscCall(DMSwarmSortRestoreAccess(swarm));
-  PetscCall(DMSwarmRestoreField(swarm,coordFieldsName[0],NULL,NULL,(void **)&coords));
-  PetscCall(DMSwarmRestoreField(swarm,"fields",&nfields,NULL,(void **)&values));
-
   p->setup = PETSC_TRUE;
-
   PetscFunctionReturn(PETSC_SUCCESS);
 }
 
-/*
-  PetscErrorCode LagRBF_PartitionsSetUp(LagRBFCtx ctx, DM swd, DM swi)
-
-  Iterates over the points in the interpolation swarm to identify the partitions to which they are connected.
-  This avoids setting up partitions that are not needed for the interpolation.
-  Needs to be called after each update of the interpolation swarm.
-*/
 PetscErrorCode LagRBF_PartitionsSetUp(LagRBFCtx ctx, DM swd, DM swi)
 {
   PartitionOfUnity pu;
-  DMSwarmCellDM    celldm_i;
+  DMSwarmCellDM    celldm_i,celldm_d;
   Partition        *partitions;
   DM               das;
-  PetscInt         np,npoints_i;
-  PetscInt         nel,nen;
+  PetscInt         np,nfields,nel,nen,npoints_i;
   PetscInt         *gtol_elidx,*cellid_i;
   const PetscInt   *elidx;
-  const char       *cellFieldName_i;
+  PetscReal        *coords_d,*values_d;
+  const char       **coordFieldsName_d,*cellFieldName_i;
   PetscFunctionBeginUser;
   PetscPrintf(PETSC_COMM_WORLD,"[[ %s ]]\n",PETSC_FUNCTION_NAME);
-  
   PetscCall(LagRBFGetPartitionOfUnity(ctx,&pu));
   PetscCall(LagRBFGetPartitions(ctx,&partitions));
   /* Local DMDA info */
@@ -324,6 +296,15 @@ PetscErrorCode LagRBF_PartitionsSetUp(LagRBFCtx ctx, DM swd, DM swi)
   PetscCall(DMSwarmGetCellDMActive(swi,&celldm_i));
   PetscCall(DMSwarmCellDMGetCellID(celldm_i,&cellFieldName_i));
   PetscCall(DMSwarmGetField(swi, cellFieldName_i, NULL, NULL, (void **)&cellid_i));
+
+  /* Data swarm info */
+  PetscCall(DMSwarmSortGetAccess(swd));
+  /* Setup for coords */
+  PetscCall(DMSwarmGetCellDMActive(swd, &celldm_d));
+  PetscCall(DMSwarmCellDMGetCoordinateFields(celldm_d, NULL, &coordFieldsName_d));
+  /* Get fields */
+  PetscCall(DMSwarmGetField(swd, coordFieldsName_d[0], NULL, NULL, (void **)&coords_d));
+  PetscCall(DMSwarmGetField(swd,"fields",&nfields,NULL,(void **)&values_d));
 
   for (np=0; np<npoints_i; np++) {
     PetscInt k,cidx,local_cidx;
@@ -338,15 +319,22 @@ PetscErrorCode LagRBF_PartitionsSetUp(LagRBFCtx ctx, DM swd, DM swi)
       puidx = elidx[nen*local_cidx + k];
       p     = partitions[puidx];
       /* Setup the partition (internal check if already setup) */
-      PetscCall(PartitionSetUp_SinglePartition(ctx,swd,p));
+      PetscCall(PartitionSetUp_SinglePartition(ctx,p,swd,nfields,coords_d));
+      /* Solve for coefficients (internal check if already solved for) */
+      PetscCall(PartitionSolveInterpolationCoefficients_SinglePartition(ctx,p,nfields,values_d));
     }
-  }
+  }  
+  /* Restore */
+  PetscCall(DMSwarmSortRestoreAccess(swd));
+  PetscCall(DMSwarmRestoreField(swd,coordFieldsName_d[0],NULL,NULL,(void **)&coords_d));
+  PetscCall(DMSwarmRestoreField(swd,"fields",&nfields,NULL,(void **)&values_d));
   PetscCall(DMSwarmRestoreField(swi, cellFieldName_i, NULL, NULL, (void **)&cellid_i));
   PetscCall(DMDARestoreElements(das,&nel,&nen,&elidx));
+
   PetscFunctionReturn(PETSC_SUCCESS);
 }
 
-PetscErrorCode LagRBF_PartitionsResetSolved(LagRBFCtx ctx)
+PetscErrorCode LagRBF_PartitionsReset(LagRBFCtx ctx)
 {
   PartitionOfUnity pu;
   Partition       *partitions;
@@ -355,8 +343,24 @@ PetscErrorCode LagRBF_PartitionsResetSolved(LagRBFCtx ctx)
   PetscCall(LagRBFGetPartitionOfUnity(ctx,&pu));
   PetscCall(LagRBFGetPartitions(ctx,&partitions));
   PetscCall(PUGetNPartitionsLocal(pu,&npart));
-  for (n=0; n<npart; n++) {
-    partitions[n]->solved = PETSC_FALSE;
+
+  switch (ctx->solve_method) {
+    case A_FACTOR:
+    case A_KSP:
+      for (n=0; n<npart; n++) {
+        partitions[n]->solved = PETSC_FALSE;
+      }
+      break;
+
+    case A_KSP_ASMB:
+      for (n=0; n<npart; n++) {
+        PetscCall(PartitionReset_SinglePartition(partitions[n],pu->pdestroy));
+      }
+      break;
+    
+    default:
+      SETERRQ(PETSC_COMM_SELF,PETSC_ERR_ARG_OUTOFRANGE,"Unknown solve method %" PetscInt_FMT,ctx->solve_method);
+      break;
   }
   PetscFunctionReturn(PETSC_SUCCESS);
 }

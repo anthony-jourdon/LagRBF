@@ -28,6 +28,7 @@ PetscErrorCode LagRBFCtxCreate(LagRBFCtx *ctx)
   p->advection    = PETSC_FALSE;
   p->solve_method = A_FACTOR;
   PetscCall(PetscSNPrintf(p->output_dir, PETSC_MAX_PATH_LEN-1, "output"));
+  PetscCall(PetscSNPrintf(p->mat_dir, PETSC_MAX_PATH_LEN-1, "%s/MatRBF", p->output_dir));
 
   *ctx = p;
 
@@ -93,6 +94,7 @@ PetscErrorCode LagRBFSetFromOptions(LagRBFCtx ctx)
   PetscSNPrintf(option_name, PETSC_MAX_PATH_LEN-1, "-n_interpolation_fields");
   PetscCall(PetscOptionsGetInt(NULL, NULL, option_name, &ctx->n_ifields, NULL));
   PetscCall(PetscOptionsGetString(NULL,NULL,"-output_path",ctx->output_dir,PETSC_MAX_PATH_LEN-1,NULL));
+  PetscCall(PetscSNPrintf(ctx->mat_dir, PETSC_MAX_PATH_LEN-1, "%s/MatRBF", ctx->output_dir));
   PetscCall(PetscOptionsGetInt(NULL,NULL,"-kernel_type",&kernel_type,&found));
   if (found) { PetscCall(LagRBFSetKernelType(ctx,(KernelType)kernel_type)); }
   PetscCall(PetscOptionsGetInt(NULL,NULL,"-solve_method",&solve_method,&found));

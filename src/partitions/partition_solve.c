@@ -59,33 +59,21 @@ PetscErrorCode PartitionAssembleRBFMatrix(
   PetscFunctionReturn(PETSC_SUCCESS);
 }
 
-PetscErrorCode PartitionSolveInterpolationCoefficients(LagRBFCtx ctx, DM swarm, const char *fieldname)
+PetscErrorCode PartitionSolveInterpolationCoefficients_SinglePartition(LagRBFCtx ctx, Partition p, PetscInt nfields, PetscReal *values)
 {
   PartitionOfUnity pu;
-  Partition        *partitions;
-  PetscInt         n,npart,nfields;
-  PetscReal        *values;
+  PetscInt npoints;
   PetscFunctionBeginUser;
-  PetscCall(PetscLogEventBegin(LAGRBF_PartitionSolveInterpolationCoefficients,0,0,0,0));
-  PetscPrintf(PETSC_COMM_WORLD,"[[ %s ]]\n",PETSC_FUNCTION_NAME);
+  /* Partition is not setup, which means it is not needed, skip */
+  if (!p->setup) { PetscFunctionReturn(PETSC_SUCCESS); }
+  /* Partition as already been solved for, we don't need to re-solve */
+  if (p->solved)  { PetscFunctionReturn(PETSC_SUCCESS); }
+  PetscCall(PartitionGetDataPointsIdx(p,&npoints,NULL));
+  /* Partition does not contain any data points, skip */
+  if (npoints == 0) { PetscFunctionReturn(PETSC_SUCCESS); }
   PetscCall(LagRBFGetPartitionOfUnity(ctx,&pu));
-  PetscCall(LagRBFGetPartitions(ctx,&partitions));
-  PetscCall(PUGetNPartitionsLocal(pu,&npart));
-  PetscCall(DMSwarmGetField(swarm,fieldname,&nfields,NULL,(void **)&values));
-  for (n=0; n<npart; n++) {
-    Partition p = partitions[n];
-    PetscInt  npoints;
-
-    if (!p->setup) continue; // partition not setup, skip
-    if (p->solved) continue; // partition already solved, skip
-    PetscCall(PartitionGetDataPointsIdx(p,&npoints,NULL));
-    if (npoints == 0) continue; // no data points in this partition, skip
-    /* Solve for the interpolation coefficients in this partition */
-    PetscCall(pu->psolve(ctx,p,nfields,values));
-    p->solved = PETSC_TRUE;
-  }
-  /* Restore the field */
-  PetscCall(DMSwarmRestoreField(swarm,fieldname,&nfields,NULL,(void **)&values));
-  PetscCall(PetscLogEventEnd(LAGRBF_PartitionSolveInterpolationCoefficients,0,0,0,0));
+  /* Solve for the interpolation coefficients in this partition */
+  PetscCall(pu->psolve(ctx,p,nfields,values));
+  p->solved = PETSC_TRUE; // mark as solved
   PetscFunctionReturn(PETSC_SUCCESS);
 }

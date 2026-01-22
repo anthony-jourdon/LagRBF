@@ -26,10 +26,9 @@ struct _p_Partition {
 
 PetscErrorCode PartitionCreate(PartitionOfUnity pu, Partition **partition);
 PetscErrorCode PartitionDestroy(PartitionOfUnity pu, Partition **partition);
-PetscErrorCode PartitionRBFMatClear(Partition p);
 PetscErrorCode LagRBF_PartitionsSetUp(LagRBFCtx ctx, DM swd, DM swi);
 PetscErrorCode PartitionFillDataPointsIdx(Partition p, DM swarm);
-PetscErrorCode LagRBF_PartitionsResetSolved(LagRBFCtx ctx);
+PetscErrorCode LagRBF_PartitionsReset(LagRBFCtx ctx);
 /* Getters and setters */
 PetscErrorCode PartitionGetMap(Partition p, PetscInt *ncells, PetscInt **map);
 PetscErrorCode PartitionGetDataPointsIdx(Partition p, PetscInt *ndata, PetscInt **data_idx);

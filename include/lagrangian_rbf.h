@@ -19,7 +19,7 @@ typedef enum {
 typedef enum {
   A_FACTOR=0, // Direct solver with matrix factorization
   A_KSP,      // KSP (direct or iterative) but matrix doesn't change
-  A_ASMB_KSP  // KSP with matrix assembled each time (no reuse)
+  A_KSP_ASMB  // KSP with matrix re-assembled and solved for each time (no reuse)
 } ASolveMethod;
 
 struct _p_LagRBFCtx {
@@ -38,6 +38,7 @@ struct _p_LagRBFCtx {
   PetscBool        restart; // Flag to indicate if the interpolation points coordinates should be loaded from a file
   PetscBool        advection; // Flag to indicate if advection is activated
   char             output_dir[PETSC_MAX_PATH_LEN]; // Directory to write output files
+  char             mat_dir[PETSC_MAX_PATH_LEN]; // Directory to read/write factored matrices
 };
 
 PetscErrorCode LagRBFCtxCreate(LagRBFCtx *ctx);

@@ -8,7 +8,7 @@
 PetscErrorCode PartitionCreateRBFMatrix(Partition p);
 PetscErrorCode PartitionAssembleRBFMatrix(Partition p,PetscInt dim,PetscReal epsilon,PetscReal coords[],PetscReal (*kernel_fn)(PetscReal,PetscReal));
 PetscErrorCode PartitionMatSetRHS(Partition p, PetscInt nfields, PetscReal fval[], Mat *B);
-PetscErrorCode PartitionSolveInterpolationCoefficients(LagRBFCtx ctx, DM swarm, const char *fieldname);
+PetscErrorCode PartitionSolveInterpolationCoefficients_SinglePartition(LagRBFCtx ctx, Partition p, PetscInt nfields, PetscReal *values);
 
 /* Cholesky Factor methods */
 PetscErrorCode PartitionSetUpRBFMatrix_Factor(LagRBFCtx ctx, Partition p, PetscReal *coords);
@@ -20,5 +20,6 @@ PetscErrorCode PartitionSolveLocalCoefficientsKSP(LagRBFCtx ctx, Partition p, Pe
 PetscErrorCode PartitionKSPDestroyCtx(Partition p);
 
 /* KSP re-assembled will go here */
+PetscErrorCode PartitionSolveLocalCoefficientsKSP_ASMB(LagRBFCtx ctx, Partition p, PetscInt nfields, PetscReal fval[]);
 
 #endif

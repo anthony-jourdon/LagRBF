@@ -11,7 +11,6 @@ struct _p_PartitionOfUnity {
   PetscInt  *n;    // Number of partitions in each dimension
   PetscInt  npart; // Rank-local number of partitions
   PetscInt  npg;   // Global number of partitions
-  PetscInt  nnp;   // Number of nodes a point is connected to 
   PetscInt  *ptos; // Parallel to sequential mapping of elements
   PetscReal *O,*L; // Origin and Length of the partition of unity mesh
   PetscReal epsilon; // Epsilon factor for the RBF kernel
@@ -32,9 +31,7 @@ PetscErrorCode PartitionOfUnityCreate(PartitionOfUnity *pu);
 PetscErrorCode PartitionOfUnityDestroy(PartitionOfUnity *pu);
 PetscErrorCode PartitionOfUnityComputeEpsilon(PartitionOfUnity pu);
 PetscErrorCode PUAttachPartitionFunctions(PartitionOfUnity pu, ASolveMethod smethod);
-PetscErrorCode PUSetNodesPerPoint(PartitionOfUnity pu);
 /* Getters */
-PetscErrorCode PUGetNodesPerPoint(PartitionOfUnity pu, PetscInt *nnp);
 PetscErrorCode PUGetDMDA(PartitionOfUnity pu, DM *dap);
 PetscErrorCode PUGetDMDALocal(PartitionOfUnity pu, DM *das);
 PetscErrorCode PUGetNPartitionsLocal(PartitionOfUnity pu, PetscInt *npart);

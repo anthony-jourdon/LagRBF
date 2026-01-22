@@ -383,10 +383,11 @@ static PetscErrorCode Test_advection()
   PetscCall(SwarmOutput(ctx,swarm_interp,4,output_fields,PETSC_FALSE));
   /* Count zeros in RBF matrix */
   //PetscCall(CountZerosInRBFMatrix(ctx,swarm_data));
-#if 1
   PetscCall(LagRBF_PartitionsSetUp(ctx,swarm_data,swarm_interp));
+#if 1
+  
   /* Interpolate */
-  PetscCall(PartitionSolveInterpolationCoefficients(ctx,swarm_data,"fields"));
+  //PetscCall(PartitionSolveInterpolationCoefficients(ctx,swarm_data,"fields"));
   PetscCall(RBFInterpolation(ctx,swarm_interp,swarm_data,"fields"));
   /* Copy the first dim fields into "velocity" */
   PetscCall(AdvectionInitializeTimestepVelocity(ctx,swarm_interp));
@@ -410,7 +411,7 @@ static PetscErrorCode Test_advection()
     PetscCall(PetscPrintf(PETSC_COMM_WORLD,"[[ STEP: %" PetscInt_FMT " ]], time: %g\n",step,time));
     /* Interpolate */
     PetscCall(LagRBF_PartitionsSetUp(ctx,swarm_data,swarm_interp));
-    PetscCall(PartitionSolveInterpolationCoefficients(ctx,swarm_data,"fields"));
+    //PetscCall(PartitionSolveInterpolationCoefficients(ctx,swarm_data,"fields"));
     PetscCall(RBFInterpolation(ctx,swarm_interp,swarm_data,"fields"));
     PetscCall(AdvectionInitializeTimestepVelocity(ctx,swarm_interp));
     /* Output */

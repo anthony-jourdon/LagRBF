@@ -106,6 +106,18 @@ PetscErrorCode PartitionSolveLocalCoefficientsKSP(LagRBFCtx ctx, Partition p, Pe
   PetscFunctionReturn(PETSC_SUCCESS);
 }
 
+PetscErrorCode PartitionSolveLocalCoefficientsKSP_ASMB(LagRBFCtx ctx, Partition p, PetscInt nfields, PetscReal fval[])
+{
+  PSolve_KSPData *data_ctx = (PSolve_KSPData*)p->data;
+  PetscFunctionBeginUser;
+  PetscCall(PartitionSolveLocalCoefficientsKSP(ctx,p,nfields,fval));
+  /* Free memory after solve */
+  PetscCall(KSPReset(data_ctx->ksp));
+  PetscCall(MatDestroy(&p->A));
+  p->A = NULL; // Mark the RBF matrix as destroyed in the partition structure
+  PetscFunctionReturn(PETSC_SUCCESS);
+}
+
 PetscErrorCode PartitionSetUpRBFMatrix_KSP(LagRBFCtx ctx, Partition p, PetscReal *coords)
 {
   PartitionOfUnity pu;

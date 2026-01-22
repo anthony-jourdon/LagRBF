@@ -557,22 +557,8 @@ PetscErrorCode Test_CellInfo()
 
   PetscCall(PUGetDMDALocal(pu,&das));
   PetscCall(DMDAGetElements(das,&nel,&nen,&elidx));
-  PetscCall(PUGetNodesPerPoint(pu,&sw));
   PetscCall(DMGetDimension(das,&dim));
-  #if 1
-  for (iel=0; iel<nel; iel++) {
-    CellInfo ci = cellinfo[iel];
-    PetscInt *stencil = ci->node_stencil;
-
-    PetscPrintf(PETSC_COMM_SELF,
-      "Rank[%d]: CellInfo[%" PetscInt_FMT "]: element index = %" PetscInt_FMT ", stencil: [",
-      rank,iel,ci->idx);
-    for (PetscInt ii=0; ii<sw; ii++) {
-      PetscPrintf(PETSC_COMM_SELF,"%" PetscInt_FMT " ",stencil[ii]);
-    }
-    PetscPrintf(PETSC_COMM_SELF,"]\n");
-  }
-  #endif
+  
   PetscFunctionReturn(PETSC_SUCCESS);
 }
 

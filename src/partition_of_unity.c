@@ -22,7 +22,6 @@ PetscErrorCode PUCreate(PartitionOfUnity *pu)
   p->n          = NULL;
   p->npart      = 0;
   p->npg        = 0;
-  p->nnp        = 0;
   p->ptos       = NULL;
   p->O          = NULL;
   p->L          = NULL;
@@ -261,7 +260,6 @@ PetscErrorCode PartitionOfUnityCreate(PartitionOfUnity *pu)
   PetscCall(PUCreateDMDALocal(p));
   /* Set the epsilon factor for RBF */
   PetscCall(PartitionOfUnityComputeEpsilon(p));
-  PetscCall(PUSetNodesPerPoint(p));
 
   *pu = p;
   PetscFunctionReturn(PETSC_SUCCESS);
@@ -303,7 +301,7 @@ PetscErrorCode PartitionOfUnityComputeEpsilon(PartitionOfUnity pu)
   for (d=0; d<dim; d++) {
     box_length = PetscMax(box_length,(pu->L[d] - pu->O[d]));
   }
-  overlap = 1.5*box_length;
+  overlap = 1.0*box_length;
   radius  = overlap / PetscPowReal(global_npart,1.0/dim);
   pu->epsilon = 1.0 / radius;
   PetscFunctionReturn(PETSC_SUCCESS);
@@ -328,34 +326,19 @@ PetscErrorCode PUAttachPartitionFunctions(PartitionOfUnity pu, ASolveMethod smet
     pu->psolve   = PartitionSolveLocalCoefficientsKSP;
     pu->pdestroy = PartitionKSPDestroyCtx;
     break;
-  case A_ASMB_KSP:
+  case A_KSP_ASMB:
     PetscPrintf(PETSC_COMM_WORLD,"Solve method selected: KSP re-assembling RBF matrix\n");
-    SETERRQ(PETSC_COMM_SELF,PETSC_ERR_ARG_WRONG,"Solve method A_ASMB_KSP not implemented yet.");
+    pu->psetup   = PartitionSetUpRBFMatrix_KSP;
+    pu->psolve   = PartitionSolveLocalCoefficientsKSP_ASMB;
+    pu->pdestroy = PartitionKSPDestroyCtx;
     break;
-  
+
   default:
     SETERRQ(PETSC_COMM_SELF,PETSC_ERR_ARG_OUTOFRANGE,"Unknown method type: %" PetscInt_FMT,smethod);
     break;
   }
   pu->psetup_set = PETSC_TRUE;
 
-  PetscFunctionReturn(PETSC_SUCCESS);
-}
-
-PetscErrorCode PUSetNodesPerPoint(PartitionOfUnity pu)
-{
-  PetscInt dim;
-  PetscFunctionBeginUser;
-  PetscCall(PUGetDimension(pu,&dim));
-  pu->nnp = PetscPowInt(2,dim) * PetscPowInt(2,dim); // max number of nodes per partition
-  PetscFunctionReturn(PETSC_SUCCESS);
-}
-
-PetscErrorCode PUGetNodesPerPoint(PartitionOfUnity pu, PetscInt *nnp)
-{
-  PetscFunctionBeginUser;
-  PetscCheck(pu,PETSC_COMM_SELF,PETSC_ERR_ARG_NULL,"Partition of Unity structure is NULL. Call PartitionOfUnityCreate() first.");
-  if (nnp) { *nnp = pu->nnp; }
   PetscFunctionReturn(PETSC_SUCCESS);
 }
 

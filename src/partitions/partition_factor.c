@@ -1,6 +1,7 @@
 #include <petsc.h>
 #include "partitions/partition.h"
 #include "partitions/partition_solve.h"
+#include "partitions/partition_io.h"
 
 PetscLogEvent LAGRBF_FactorRBFMatrix;
 PetscLogEvent LAGRBF_MatSetRHS_Fac;
@@ -81,11 +82,17 @@ static PetscErrorCode PartitionMatSetRHS_Columnwise(Partition p, PetscInt nfield
   PetscFunctionReturn(PETSC_SUCCESS);
 }
 #endif
+/*
+Solve for the interpolation coefficients using the factored RBF matrix stored on disk
+and destroy the RBF matrix after solve to free memory.
+*/
 PetscErrorCode PartitionSolveLocalCoefficientsFactor(LagRBFCtx ctx, Partition p, PetscInt nfields, PetscReal fval[])
 {
   Mat      A,B,X;
   PetscFunctionBeginUser;
   PetscCall(PetscLogEventBegin(LAGRBF_SolveLocalCoefficients_Fac,0,0,0,0));
+  /* Load Factored matrix from disk */
+  PetscCall(PartitionLoadFactoredMatrix_SeqDense(p,ctx->mat_dir));
   PetscCall(PartitionGetCoefficientsMat(p,&X));
   PetscCall(PartitionGetRBFMatrix(p,&A));
   PetscCall(PartitionMatSetRHS(p,nfields,fval,&B));
@@ -93,6 +100,9 @@ PetscErrorCode PartitionSolveLocalCoefficientsFactor(LagRBFCtx ctx, Partition p,
   PetscCall(MatMatSolve(A,B,X));
   /* Clean-up */
   PetscCall(MatDestroy(&B));
+  PetscCall(MatDestroy(&A));
+  p->A = NULL; // Mark the RBF matrix as destroyed in the partition structure
+
   PetscCall(PetscLogEventEnd(LAGRBF_SolveLocalCoefficients_Fac,0,0,0,0));
   PetscFunctionReturn(PETSC_SUCCESS);
 }
@@ -115,6 +125,7 @@ PetscErrorCode PartitionSetUpRBFMatrix_Factor(LagRBFCtx ctx, Partition p, PetscR
   PetscCall(PartitionCreateRBFMatrix(p));
   PetscCall(PartitionAssembleRBFMatrix(p,dim,epsilon,coords,kernel_fn));
   PetscCall(PartitionFactorRBFMatrix(p));
-
+  /* Write matrix to disk and free space */
+  PetscCall(PartitionWriteFactoredMatrix(p,ctx->mat_dir));
   PetscFunctionReturn(PETSC_SUCCESS);
 }
