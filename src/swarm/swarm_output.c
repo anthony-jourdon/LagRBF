@@ -164,6 +164,9 @@ PetscErrorCode SwarmOutput(LagRBFCtx ctx, DM sw, PetscInt nfields, const char *f
   PetscCall(ParaviewPVDOpenAppend(beenhere,ctx->step,pvdfname,ctx->time, vtkfname, stepdir));
   beenhere = PETSC_TRUE;
 
+  if (ctx->forward)  { PetscCall(PetscSNPrintf(stepprefix, PETSC_MAX_PATH_LEN-1, "step%06" PetscInt_FMT "_forward", ctx->step)); }
+  if (ctx->backward) { PetscCall(PetscSNPrintf(stepprefix, PETSC_MAX_PATH_LEN-1, "step%06" PetscInt_FMT "_backward", ctx->step)); }
+
   /* If Swarm type is PIC: */
   { /* Coordinates */
     DM_Swarm *swarm = (DM_Swarm*)sw->data;
