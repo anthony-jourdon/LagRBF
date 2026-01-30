@@ -477,7 +477,7 @@ PetscErrorCode TestMemoryUsage()
     PetscCall(StagBinSwarmSetFromFiles(swarm_data, fname, 1, PETSC_FALSE));
   }
   /* Send data to other ranks */
-  PetscCall(SwarmDataAssignMigrateBasic(ctx,swarm_data));
+  PetscCall(DMSwarmAssignMigrateBasic(ctx,swarm_data));
   /* Duplicate ghost points */
   PetscCall(SwarmDataAssignMigrateDuplicateGhostPoints(ctx,swarm_data));
   {
@@ -562,6 +562,52 @@ PetscErrorCode Test_CellInfo()
   PetscFunctionReturn(PETSC_SUCCESS);
 }
 
+static PetscErrorCode Test_Load()
+{
+  LagRBFCtx        ctx;
+  DM               swarm_interp;
+  PetscMPIInt      rank;
+  PetscBool        exists,found;
+  char             restart_dir[PETSC_MAX_PATH_LEN];
+  const char       *output_fields[] = {"DMSwarm_pid"};
+  PetscFunctionBeginUser;
+
+  PetscCallMPI(MPI_Comm_rank(PETSC_COMM_WORLD,&rank));
+  PetscCall(PetscOptionsGetString(NULL,NULL,"-restart_directory",restart_dir,PETSC_MAX_PATH_LEN-1,&found));
+  PetscCall(PetscTestDirectory(restart_dir,'r',&exists));
+  PetscCheck(exists,PETSC_COMM_WORLD,PETSC_ERR_ARG_WRONG,"Restart directory %s not found.",restart_dir);
+
+  PetscCall(LagRBFCtxCreate(&ctx));
+  PetscCall(LagRBFSetFromOptions(ctx));
+
+  /* Create the output directory */
+  PetscCall(PetscTestDirectory(ctx->output_dir,'w',&exists));
+  if (!exists) { CreateDirectory(ctx->output_dir); }
+
+  PetscCall(LagRBF_PartitionOfUnityCreate(ctx));
+  PetscCall(LagRBF_PartitionCreate(ctx));
+  PetscCall(LagRBF_CellInfoCreate(ctx));
+
+  /* Create the swarm to interpolate on */
+  PetscCall(SwarmInterpCreate(ctx,&swarm_interp));
+
+  PetscCall(PetscOptionsGetInt(NULL,NULL,"-restart_step",&ctx->step,&found));
+  PetscCheck(found,PETSC_COMM_WORLD,PETSC_ERR_ARG_WRONG,"Option -restart_step not found.");
+
+  /* Load */
+  //if (rank == 0) {
+    PetscCall(SwarmInterpLoadFromFile(ctx, swarm_interp, restart_dir, PETSC_TRUE));
+  //}
+  //PetscCall(DMSwarmMigrate(swarm_interp,PETSC_TRUE));
+  PetscCall(SwarmInterpSetWeights(ctx,swarm_interp));
+  /* Write */
+  PetscCall(SwarmOutput(ctx,swarm_interp,1,output_fields,PETSC_FALSE));
+
+  PetscCall(DMDestroy(&swarm_interp));
+  PetscCall(LagRBFCtxDestroy(&ctx));
+  PetscFunctionReturn(PETSC_SUCCESS);
+}
+
 int main(int argc, char *argv[])
 {
   PetscFunctionBeginUser;
@@ -573,7 +619,8 @@ int main(int argc, char *argv[])
   //PetscCall(Test_3());
   //PetscCall(Test_4());
   //PetscCall(TestMemoryUsage());
-  PetscCall(Test_CellInfo());
+  //PetscCall(Test_CellInfo());
+  PetscCall(Test_Load());
   PetscCall(PetscFinalize());
   
   return 0;

@@ -434,6 +434,7 @@ static PetscErrorCode Test_advection()
     }
     time += dt;
     PetscCall(LagRBFSetTime(ctx,time));
+    PetscCall(LagRBF_PartitionsReset(ctx));
     step++;
   }
 #endif
