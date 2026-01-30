@@ -739,7 +739,7 @@ static PetscErrorCode TestStagBinMain()
     PetscCall(StagBinSwarmSetFromFiles(swarm_data, fname, 1, PETSC_FALSE));
   }
   /* Send data to other ranks */
-  PetscCall(SwarmDataAssignMigrateBasic(ctx,swarm_data));
+  PetscCall(DMSwarmAssignMigrateBasic(ctx,swarm_data));
   /* Duplicate ghost points */
   PetscCall(SwarmDataAssignMigrateDuplicateGhostPoints(ctx,swarm_data));
   /* Set cell IDs */
