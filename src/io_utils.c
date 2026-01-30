@@ -191,3 +191,52 @@ PetscErrorCode ParaviewPVDOpenAppend(
   }
   PetscFunctionReturn(PETSC_SUCCESS);
 }
+
+PetscErrorCode VecLoadFromFile(Vec v, const char *name)
+{
+  PetscViewer    viewer;
+  PetscFunctionBeginUser;
+
+  PetscCall(PetscViewerCreate(PetscObjectComm((PetscObject)v),&viewer));
+  PetscCall(PetscViewerSetType(viewer,PETSCVIEWERBINARY));
+  PetscCall(PetscViewerFileSetMode(viewer,FILE_MODE_READ));
+  PetscCall(PetscViewerFileSetName(viewer,name));
+  PetscCall(VecLoad(v,viewer));
+  PetscCall(PetscViewerDestroy(&viewer));
+  PetscCall(PetscOptionsClearValue(NULL,"-vecload_block_size"));
+
+  PetscFunctionReturn(PETSC_SUCCESS);
+}
+
+PetscErrorCode ISLoadFromFile(IS is, const char *name)
+{
+  PetscViewer    viewer;
+  PetscFunctionBeginUser;
+
+  PetscCall(PetscViewerCreate(PetscObjectComm((PetscObject)is),&viewer));
+  PetscCall(PetscViewerSetType(viewer,PETSCVIEWERBINARY));
+  PetscCall(PetscViewerFileSetMode(viewer,FILE_MODE_READ));
+  PetscCall(PetscViewerFileSetName(viewer,name));
+  PetscCall(ISLoad(is,viewer));
+  PetscCall(PetscViewerDestroy(&viewer));
+
+  PetscFunctionReturn(PETSC_SUCCESS);
+}
+#if 0
+PetscErrorCode GetOutputFieldsFromOptions(PetscInt *nfields, char ***fields)
+{
+  PetscBool found;
+  char      prefix[PETSC_MAX_PATH_LEN];
+  PetscFunctionBeginUser;
+  PetscCall(PetscSNPrintf(prefix,PETSC_MAX_PATH_LEN-1,"output_"));
+  PetscCall(PetscOptionsGetStringArray(NULL,prefix,"-output_fields",NULL,nfields,&found));
+  if (found) {
+    PetscCall(PetscMalloc1(*nfields,fields));
+    PetscCall(PetscOptionsGetStringArray(NULL,prefix,"-output_fields",*fields,nfields,&found));
+  } else {
+    *nfields = 0;
+    *fields  = NULL;
+  }
+  PetscFunctionReturn(PETSC_SUCCESS);
+}
+#endif
