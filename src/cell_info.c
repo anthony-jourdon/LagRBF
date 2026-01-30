@@ -1,6 +1,8 @@
 #include <petsc.h>
 #include "cell_info.h"
 
+PetscLogEvent LAGRBF_CellInfoSetUp;
+
 PetscErrorCode CellInfoCreate_SingleCell(CellInfo *ci)
 {
   CellInfo c;
@@ -75,7 +77,7 @@ PetscErrorCode CellInfoSetUp(PartitionOfUnity pu, CellInfo *ci, DM swarm)
   PetscInt       iel,nel,nen;
   const PetscInt *elidx;
   PetscFunctionBeginUser;
-
+  PetscLogEventBegin(LAGRBF_CellInfoSetUp,0,0,0,0);
   PetscCall(PUGetDMDALocal(pu,&da));
   PetscCall(DMDAGetElements(da,&nel,&nen,&elidx));
   PetscCall(DMSwarmSortGetAccess(swarm));
@@ -84,6 +86,7 @@ PetscErrorCode CellInfoSetUp(PartitionOfUnity pu, CellInfo *ci, DM swarm)
   }
   PetscCall(DMSwarmSortRestoreAccess(swarm));
   PetscCall(DMDARestoreElements(da,&nel,&nen,&elidx));
+  PetscLogEventEnd(LAGRBF_CellInfoSetUp,0,0,0,0);
   PetscFunctionReturn(PETSC_SUCCESS);
 }
 
@@ -470,6 +473,27 @@ PetscErrorCode CellInfoFillDataIdx(CellInfo ci, DM swarm)
   PetscFunctionReturn(PETSC_SUCCESS);
 }
 
+PetscErrorCode CellInfoReset(PartitionOfUnity pu, CellInfo *ci)
+{
+  DM             da;
+  PetscInt       iel,nel,nen;
+  const PetscInt *elidx;
+  PetscFunctionBeginUser;
+  PetscCall(PUGetDMDALocal(pu,&da));
+  PetscCall(DMDAGetElements(da,&nel,&nen,&elidx));
+  for (iel=0; iel<nel; iel++) {
+    CellInfo cell_info = ci[iel];
+    /* Reset data indices */
+    if (cell_info->data_idx) {
+      PetscCall(PetscFree(cell_info->data_idx));
+      cell_info->data_idx = NULL;
+      cell_info->ndata    = 0;
+    }
+  }
+  PetscCall(DMDARestoreElements(da,&nel,&nen,&elidx));
+  PetscFunctionReturn(PETSC_SUCCESS);
+}
+
 PetscErrorCode CellInfoGetIndex(CellInfo ci, PetscInt *idx)
 {
   PetscFunctionBeginUser;
@@ -519,8 +543,6 @@ PetscErrorCode DMDAGetElementLogicalIndex(DM da, PetscInt eidx, PetscInt *ix, Pe
     case 2:
       j = (PetscInt)(eidx / size[0]); // j
       i = (PetscInt)(eidx - j*size[0]); // i
-      //PetscPrintf(PETSC_COMM_WORLD,"[[ %s ]] size = [%d, %d], indices = [%" PetscInt_FMT ", %" PetscInt_FMT "]\n",
-      //  PETSC_FUNCTION_NAME,size[0],size[1],i,j);
       break;
     
     case 3:

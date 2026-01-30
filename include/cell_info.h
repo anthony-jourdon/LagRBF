@@ -19,6 +19,7 @@ PetscErrorCode CellInfoCreateNeighbourElements(PartitionOfUnity pu, CellInfo *ci
 PetscErrorCode CellInfoFillDataIdx(CellInfo ci, DM swarm);
 PetscErrorCode CellInfoSetUp(PartitionOfUnity pu, CellInfo *ci, DM swarm);
 PetscErrorCode CellInfoCreateNodeStencils(PartitionOfUnity pu, CellInfo *ci);
+PetscErrorCode CellInfoReset(PartitionOfUnity pu, CellInfo *ci);
 /* Getters */
 PetscErrorCode CellInfoGetIndex(CellInfo ci, PetscInt *idx);
 PetscErrorCode CellInfoGetNumberOfNeighbours(CellInfo ci, PetscInt *nneigh);
