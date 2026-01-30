@@ -4,6 +4,8 @@
 #include "swarm/swarm_utils.h"
 #include "interpolation.h"
 
+PetscLogEvent LAGRBF_AdvectionExplicit_scalar;
+
 PetscErrorCode AdvectionExplicit_Scalar(
   PetscReal *coords, 
   PetscReal *x0, 
@@ -14,23 +16,16 @@ PetscErrorCode AdvectionExplicit_Scalar(
 )
 {
   PetscInt       np,d;
-  PetscLogDouble time[2];
-  long int       npoints_local,npoints_global;
-  double         time_local,time_max;
   PetscFunctionBeginUser;
-  PetscCall(PetscTime(&time[0]));
+  PetscCall(PetscLogEventBegin(LAGRBF_AdvectionExplicit_scalar,0,0,0,0));
+  PetscPrintf(PETSC_COMM_WORLD,"[[ %s ]]\n",PETSC_FUNCTION_NAME);
   if (coords == x0) { SETERRQ(PETSC_COMM_WORLD, PETSC_ERR_ARG_WRONG, "coords and x0 point to same memory"); }
   for (np=0; np<npoints; np++) {
     for (d=0; d<dim; d++) {
       coords[dim*np + d] = x0[dim*np + d] + dt * velocity[dim*np + d];
     }
   }
-  PetscCall(PetscTime(&time[1]));
-  npoints_local = (long int)npoints;
-  PetscCallMPI(MPI_Allreduce(&npoints_local,&npoints_global,1,MPI_LONG,MPI_SUM,PETSC_COMM_WORLD));
-  time_local = (double)time[1]-(double)time[0];
-  PetscCallMPI(MPI_Allreduce(&time_local,&time_max,1,MPI_DOUBLE,MPI_MAX,PETSC_COMM_WORLD));
-  PetscPrintf(PETSC_COMM_WORLD,"[[ %s ]]: Advected %ld points in %g seconds\n",PETSC_FUNCTION_NAME,npoints_global,time[1]-time[0]);
+  PetscCall(PetscLogEventEnd(LAGRBF_AdvectionExplicit_scalar,0,0,0,0));
   PetscFunctionReturn(PETSC_SUCCESS);
 }
 
@@ -364,6 +359,144 @@ PetscErrorCode AdvectionEvaluateVelocity(LagRBFCtx ctx, DM swi, DM swd)
     default:
       SETERRQ(PETSC_COMM_SELF,PETSC_ERR_SUP,"AdvectionCtx->velocity_type has an invalid value: %d",adv_ctx->velocity_type);
       break;
+  }
+  PetscFunctionReturn(PETSC_SUCCESS);
+}
+
+PetscErrorCode AdvectionComputeTimestep_CFL(LagRBFCtx ctx, DM swarm)
+{
+  PartitionOfUnity pu;
+  AdvectionCtx     adv_ctx;
+  PetscInt         np,npoints,bs;
+  PetscReal        epsilon,radius,constant,dt;
+  PetscReal        *velocity;
+  const char       *velocity_name;
+  PetscFunctionBeginUser;
+
+  PetscCall(LagRBFGetPartitionOfUnity(ctx,&pu));
+  PetscCall(LagRBFGetAdvectionCtx(ctx,&adv_ctx));
+
+  PetscCall(PUGetEpsilon(pu,&epsilon));
+  radius = 1.0 / epsilon;
+  constant = 0.4; // CFL constant 0.3 - 0.6
+
+  PetscCall(DMSwarmGetLocalSize(swarm,&npoints));
+  PetscCall(AdvectionGetVelocityName(adv_ctx,&velocity_name));
+  PetscCall(DMSwarmGetField(swarm, velocity_name, &bs, NULL, (void **)&velocity));
+  dt = PETSC_MAX_REAL;
+  for (np=0; np<npoints; np++) {
+    PetscInt  d;
+    PetscReal norm_velocity,tol,dt_local;
+
+    tol = 1e-16;
+    norm_velocity = 0.0;
+    for (d=0; d<bs; d++) {
+      norm_velocity += velocity[bs*np + d] * velocity[bs*np + d];
+    }
+    norm_velocity = PetscSqrtReal(norm_velocity);
+    dt_local = constant * radius / (norm_velocity + tol);
+    dt = PetscMin(dt,dt_local);
+  }
+  PetscCall(DMSwarmRestoreField(swarm, velocity_name, &bs, NULL, (void **)&velocity));
+  /* Perform reduction to get the global min */
+  PetscCallMPI(MPI_Allreduce(MPI_IN_PLACE, &dt, 1, MPIU_REAL, MPIU_MIN, PetscObjectComm((PetscObject)swarm)));
+  PetscPrintf(PETSC_COMM_WORLD,"CFL timestep: dt = %g\n",dt);
+  PetscCall(LagRBFSetTimeStep(ctx,dt));
+  PetscFunctionReturn(PETSC_SUCCESS);
+}
+
+PetscErrorCode AdvectionProjectOntoSphereBoundary_Pointwise(PetscReal *coords, PetscInt  dim, PetscReal Rmin, PetscReal Rmax)
+{
+  PetscInt  d;
+  PetscReal pos;
+  PetscReal normal[3];
+  PetscFunctionBeginUser;
+  pos = 0.0;
+  for (d=0; d<dim; d++) { pos += coords[d]*coords[d]; }
+  if (pos < Rmax*Rmax && pos > Rmin*Rmin ) { PetscFunctionReturn(PETSC_SUCCESS); } 
+  pos = PetscSqrtReal(pos);
+  for (d=0; d<dim; d++) { normal[d] = coords[d] / pos; }
+  if (pos > Rmax) {
+    /* Project onto outer sphere */
+    for (d=0; d<dim; d++) { coords[d] = Rmax * normal[d]; }
+  } else {
+    /* Project onto inner sphere */
+    for (d=0; d<dim; d++) { coords[d] = Rmin * normal[d]; }
+  }
+  PetscFunctionReturn(PETSC_SUCCESS);
+}
+
+PetscErrorCode AdvectionProjectOntoSphereBoundary(PetscReal *coords, PetscInt  dim, PetscReal Rmin, PetscReal Rmax, PetscInt npoints)
+{
+  PetscInt np;
+  PetscFunctionBeginUser;
+  for (np=0; np<npoints; np++) {
+    PetscCall(AdvectionProjectOntoSphereBoundary_Pointwise(&coords[dim*np],dim,Rmin,Rmax));
+  }
+  PetscFunctionReturn(PETSC_SUCCESS);
+}
+/* Call after advection is done but before migrate */
+PetscErrorCode AdvectionCorrectSphereBoundaryPosition_Pointwise(
+  PetscReal *coords, 
+  PetscReal *x0, 
+  PetscReal *velocity, 
+  PetscReal dt, 
+  PetscInt  dim,
+  PetscReal Rmin2,
+  PetscReal Rmax2
+)
+{
+  PetscInt  d;
+  PetscReal R2,fac;
+  PetscFunctionBeginUser;
+
+  R2 = 0.0;
+  for (d=0; d<dim; d++) { R2 += coords[d]*coords[d]; }
+  if (R2 > Rmax2 || R2 < Rmin2) {
+    PetscReal a,b,c,r,delta;
+    /* Solve a quadratic equation for the intersection with the sphere */
+    if (R2 > Rmax2) { r = Rmax2; } 
+    else            { r = Rmin2; }
+    a = 0.0; b = 0.0; c = -r;
+    for (d=0; d<dim; d++) {
+      a += velocity[d]*velocity[d];
+      b += 2.0 * velocity[d]*x0[d];
+      c += x0[d]*x0[d];
+    }
+    delta = b*b - 4.0*a*c;
+    if (delta < 0.0) {
+      SETERRQ(PETSC_COMM_SELF,PETSC_ERR_PLIB,"Negative discriminant in sphere intersection computation: delta = %g",delta);
+    }
+    delta = PetscSqrtReal(delta);
+    /* We only keep the positive root */
+    fac = (-b + delta) / (2.0*a);
+    if (dt < 0.0) fac = -fac;  /* Reverse direction if going backwards in time */
+    /* Update position */
+    for (d=0; d<dim; d++) {
+      coords[d] = x0[d] + fac * velocity[d];
+    }
+  }
+  PetscFunctionReturn(PETSC_SUCCESS);
+}
+
+PetscErrorCode AdvectionCorrectSphereBoundaryPosition(
+  PetscReal *coords, 
+  PetscReal *x0, 
+  PetscReal *velocity, 
+  PetscReal dt, 
+  PetscInt  npoints, 
+  PetscInt  dim,
+  PetscReal Rmin,
+  PetscReal Rmax
+)
+{
+  PetscInt       np;
+  PetscReal      Rmin2,Rmax2;
+  PetscFunctionBeginUser;
+  Rmin2 = Rmin*Rmin;
+  Rmax2 = Rmax*Rmax;
+  for (np=0; np<npoints; np++) {
+    PetscCall(AdvectionCorrectSphereBoundaryPosition_Pointwise(&coords[dim*np],&x0[dim*np],&velocity[dim*np],dt,dim,Rmin2,Rmax2));
   }
   PetscFunctionReturn(PETSC_SUCCESS);
 }
