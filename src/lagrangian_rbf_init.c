@@ -12,11 +12,13 @@ extern PetscLogEvent LAGRBF_MatSetRHS_KSP;
 extern PetscLogEvent LAGRBF_SolveLocalCoefficients_Fac;
 extern PetscLogEvent LAGRBF_SolveLocalCoefficients_KSP;
 extern PetscLogEvent LAGRBF_PartitionSolveInterpolationCoefficients;
+extern PetscLogEvent LAGRBF_AdvectionExplicit_scalar;
 extern PetscLogEvent LAGRBF_AdvectionExplicit_RK1;
 extern PetscLogEvent LAGRBF_AdvectionExplicit_RK2;
 extern PetscLogEvent LAGRBF_AdvectionExplicit_RK4;
 extern PetscLogEvent LAGRBF_AdvectionExplicit_DOPRI;
 extern PetscLogEvent LAGRBF_SphericalCoordinates_Halton;
+extern PetscLogEvent LAGRBF_CellInfoSetUp;
 
 static PetscErrorCode LagRBFWriteInitialInfo(void)
 {
@@ -58,6 +60,7 @@ PetscErrorCode LagRBFInitialize(int *argc,char ***args,const char file[],const c
   PetscCall(PetscLogEventRegister("SolveLocalCoefficients_KSP",LAGRBF_CLASSID,&LAGRBF_SolveLocalCoefficients_KSP));
   PetscCall(PetscLogEventRegister("PartitionSolveInterpolationCoefficients",LAGRBF_CLASSID,&LAGRBF_PartitionSolveInterpolationCoefficients));
   /* Advection */
+  PetscCall(PetscLogEventRegister("AdvectionExplicit_scalar",LAGRBF_CLASSID,&LAGRBF_AdvectionExplicit_scalar));
   PetscCall(PetscLogEventRegister("AdvectionExplicit_RK1",LAGRBF_CLASSID,&LAGRBF_AdvectionExplicit_RK1));
   PetscCall(PetscLogEventRegister("AdvectionExplicit_RK2",LAGRBF_CLASSID,&LAGRBF_AdvectionExplicit_RK2));
   PetscCall(PetscLogEventRegister("AdvectionExplicit_RK4",LAGRBF_CLASSID,&LAGRBF_AdvectionExplicit_RK4));
@@ -65,6 +68,7 @@ PetscErrorCode LagRBFInitialize(int *argc,char ***args,const char file[],const c
 
   /* Utilities */
   PetscCall(PetscLogEventRegister("SphericalCoordinates_Halton",LAGRBF_CLASSID,&LAGRBF_SphericalCoordinates_Halton));
+  PetscCall(PetscLogEventRegister("CellInfoSetUp",LAGRBF_CLASSID,&LAGRBF_CellInfoSetUp));
 
   PetscFunctionReturn(PETSC_SUCCESS);
 }
