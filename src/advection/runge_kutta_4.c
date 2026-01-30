@@ -24,6 +24,7 @@ static PetscErrorCode AdvectionExplicit_SingleStage(LagRBFCtx ctx, DM swi, DM sw
   char          v_adv_name[PETSC_MAX_PATH_LEN];
   const char    *velocity_name,**coorFieldName;
   PetscFunctionBeginUser;
+  PetscPrintf(PETSC_COMM_WORLD,"[[ %s ]]\n",PETSC_FUNCTION_NAME);
   PetscCall(LagRBFGetAdvectionCtx(ctx,&adv));
   PetscCall(DMGetDimension(swi,&dim));
   PetscCall(DMSwarmGetLocalSize(swi,&npoints));
@@ -40,6 +41,7 @@ static PetscErrorCode AdvectionExplicit_SingleStage(LagRBFCtx ctx, DM swi, DM sw
   PetscCall(PetscArraycpy(velocity,v_i,npoints*dim));
   /* Advect points */
   PetscCall(AdvectionExplicit(coords,x0,velocity,dt,npoints,dim));
+  PetscCall(AdvectionProjectOntoSphereBoundary(coords,dim,ctx->rmin,ctx->rmax,npoints));
   /* Restore fields */
   PetscCall(DMSwarmRestoreField(swi, coorFieldName[0], NULL, NULL, (void **)&coords));
   PetscCall(DMSwarmRestoreField(swi, velocity_name,    NULL, NULL, (void **)&velocity));
@@ -107,6 +109,8 @@ PetscErrorCode AdvectionExplicit_RK4(LagRBFCtx ctx, DM swi, DM swd)
         sum[d] += RK4_weights[s] * v_i[s][dim*np + d];
       }
       coords[dim*np + d] = x0[dim*np + d] + dt/6.0 * sum[d];
+      /* This is a hack for stag, I need to do something more flexible */
+      PetscCall(AdvectionProjectOntoSphereBoundary_Pointwise(&coords[dim*np],dim,ctx->rmin,ctx->rmax));
     }
   }
   PetscCall(DMSwarmRestoreField(swi, coorFieldName[0], NULL, NULL, (void **)&coords));
