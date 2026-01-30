@@ -340,6 +340,7 @@ PetscErrorCode LagRBF_PartitionsReset(LagRBFCtx ctx)
   Partition       *partitions;
   PetscInt         npart,n;
   PetscFunctionBeginUser;
+  PetscPrintf(PETSC_COMM_WORLD,"[[ %s ]]\n",PETSC_FUNCTION_NAME);
   PetscCall(LagRBFGetPartitionOfUnity(ctx,&pu));
   PetscCall(LagRBFGetPartitions(ctx,&partitions));
   PetscCall(PUGetNPartitionsLocal(pu,&npart));
