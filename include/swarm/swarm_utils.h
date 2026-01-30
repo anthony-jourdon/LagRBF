@@ -18,4 +18,6 @@ PetscErrorCode DMSwarmSetPointsSphericalCoordinates(DM sw, PetscReal min[], Pets
 PetscErrorCode DMSwarmRemoveNPointsFromIndex(DM swarm, PetscInt nindices, PetscInt *indices);
 PetscErrorCode DMSwarmPICSetCellId(DM sw);
 PetscErrorCode DMSwarmMigrate_Push_DuplicatePoints(DM swarm, PetscInt point_start, PetscInt point_end);
+PetscErrorCode DMSwarmAssignRankFromDMDA(DM swarm, DM da);
+PetscErrorCode DMSwarmAssignMigrateBasic(LagRBFCtx ctx, DM swarm);
 #endif

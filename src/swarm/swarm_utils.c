@@ -613,6 +613,88 @@ PetscErrorCode DMSwarmRemoveNPointsFromIndex(DM swarm, PetscInt nindices, PetscI
   PetscFunctionReturn(PETSC_SUCCESS);
 }
 
+PetscErrorCode DMSwarmAssignRankFromDMDA(DM swarm, DM da)
+{
+  PetscInt    np,npoints,dim;
+  PetscReal   *pcoor;
+  PetscInt    *rankval;
+  PetscReal   dmp_min[3],dmp_max[3];
+  PetscReal   *all_dmp_min = NULL, *all_dmp_max = NULL;
+  PetscMPIInt nranks,rank;
+  MPI_Comm    comm;
+  PetscFunctionBeginUser;
+
+  /* Get MPI info */
+  PetscCall(PetscObjectGetComm((PetscObject)da,&comm));
+  PetscCallMPI(MPI_Comm_size(comm,&nranks));
+  PetscCallMPI(MPI_Comm_rank(comm,&rank));
+
+  PetscCall(DMGetDimension(da,&dim));
+  /* First we use the non-overlapping DMDA to distribute the swarm points UNIQUELY */
+  /* Get rank-local bounding box */
+  PetscCall(DMGetLocalBoundingBox(da,dmp_min,dmp_max));
+  PetscCall(PetscMalloc1(3*nranks,&all_dmp_min));
+  PetscCall(PetscMalloc1(3*nranks,&all_dmp_max));
+  /* Gather the information from all ranks */
+  PetscCallMPI(MPI_Allgather(dmp_min, 3, MPIU_REAL, all_dmp_min, 3, MPIU_REAL, comm));
+  PetscCallMPI(MPI_Allgather(dmp_max, 3, MPIU_REAL, all_dmp_max, 3, MPIU_REAL, comm));
+  /* Now check for each point if it is inside the local bounding box of the non-overlapping DMDA */
+  PetscCall(DMSwarmGetLocalSize(swarm,&npoints));
+  if (npoints < 0) { 
+    PetscCall(DMSwarmSetLocalSizes(swarm,0,-1)); 
+    npoints = 0; 
+  }
+
+  PetscCall(DMSwarmGetField(swarm, DMSwarmPICField_coor, NULL, NULL, (void **)&pcoor));
+  PetscCall(DMSwarmGetField(swarm, DMSwarmField_rank,    NULL, NULL, (void **)&rankval));
+  for (np=0; np<npoints; np++) {
+    PetscInt    d;
+    PetscMPIInt nr;
+    /* Find which rank the point belongs to */
+    rankval[np] = -1; // initialize to invalid rank
+    for (nr=0; nr<nranks; nr++) {
+      PetscBool point_inside = PETSC_TRUE;
+      for (d=0; d<dim; d++) {
+        if (pcoor[dim*np+d] < all_dmp_min[3*nr + d]) point_inside = PETSC_FALSE;
+        if (pcoor[dim*np+d] > all_dmp_max[3*nr + d]) point_inside = PETSC_FALSE;
+      }
+      if (point_inside) {
+        rankval[np] = nr;
+        break;
+      }
+    }
+    PetscCheck(rankval[np] != -1,PETSC_COMM_SELF,PETSC_ERR_ARG_WRONG,"Point %" PetscInt_FMT ", with coordinates (%g,%g) does not belong to any DMDA local bounding box.",np,pcoor[dim*np],pcoor[dim*np+1]);
+  }
+  PetscCall(DMSwarmRestoreField(swarm, DMSwarmPICField_coor, NULL, NULL, (void **)&pcoor));
+  PetscCall(DMSwarmRestoreField(swarm, DMSwarmField_rank,    NULL, NULL, (void **)&rankval));
+
+  PetscCall(PetscFree(all_dmp_min));
+  PetscCall(PetscFree(all_dmp_max));
+  PetscFunctionReturn(PETSC_SUCCESS);
+}
+
+PetscErrorCode DMSwarmAssignMigrateBasic(LagRBFCtx ctx, DM swarm)
+{
+  DMSwarmMigrateType migrate_type;
+  PartitionOfUnity   pu;
+  DM                 dap;
+  PetscFunctionBeginUser;
+  PetscCall(LagRBFGetPartitionOfUnity(ctx,&pu));
+  PetscCall(PUGetDMDA(pu,&dap)); // parallel non-overlapping DMDA
+  /* Assign ranks for migration based on the rank-local bounding box of the non-overlapping DMDA */
+  PetscCall(DMSwarmAssignRankFromDMDA(swarm,dap));
+  /* 
+    Now that each point has a unique rank assigned, 
+    we can use the basic migration and remove the points 
+    that do not belong to this rank 
+  */
+  PetscCall(DMSwarmGetMigrateType(swarm,&migrate_type));
+  /* Ensure we use the basic migration */
+  if (migrate_type != DMSWARM_MIGRATE_BASIC) { PetscCall(DMSwarmSetMigrateType(swarm,DMSWARM_MIGRATE_BASIC)); }
+  PetscCall(DMSwarmMigrate(swarm,PETSC_TRUE));
+  PetscFunctionReturn(PETSC_SUCCESS);
+}
+
 /* petsc "private" headers */
 #include <petsc/private/dmswarmimpl.h>
 #include "../src/dm/impls/swarm/data_bucket.h"

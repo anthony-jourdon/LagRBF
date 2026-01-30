@@ -6,6 +6,7 @@
 #include "swarm/swarm_utils.h"
 #include "swarm/swarm_interp.h"
 #include "cell_info.h"
+#include "io_utils.h" 
 
 PetscLogEvent LAGRBF_SwarmInterpSetWeights_AVX256;
 PetscLogEvent LAGRBF_SwarmInterpSetWeights_Scalar;
@@ -82,6 +83,8 @@ PetscErrorCode SwarmInterpCreate(LagRBFCtx ctx, DM *sw)
   // PetscCall(DMSwarmRegisterPetscDatatypeField(swarm,"pfields",ctx->n_pfields,PETSC_REAL));
   PetscCall(DMSwarmFinalizeFieldRegister(swarm));
   PetscCall(DMSetUp(swarm));
+  /* Initialize with no particles */
+  PetscCall(DMSwarmSetLocalSizes(swarm,0,-1));
 
   *sw = swarm;
   PetscFunctionReturn(PETSC_SUCCESS);
@@ -117,9 +120,120 @@ PetscErrorCode SwarmInterpSetCoordinatesFromOptions(PartitionOfUnity pu, DM sw, 
   PetscFunctionReturn(PETSC_SUCCESS);
 }
 
-static PetscErrorCode SwarmInterpLoadCoordinates(PartitionOfUnity pu, DM sw)
+PetscErrorCode SwarmInterpLoadCoordinatesFromFile(DM sw, const char *filename, MPI_Comm comm)
 {
+  DMSwarmCellDM celldm;
+  Vec           coor;
+  PetscInt      bs,size,npoints;
+  PetscReal     *pcoords,*coords;
+  const char    **coordFields;
   PetscFunctionBeginUser;
+  PetscPrintf(PETSC_COMM_WORLD,"[[ %s ]]\n",PETSC_FUNCTION_NAME);
+  /* Load coordinates from file */
+  PetscCall(VecCreate(comm, &coor));
+  PetscCall(VecLoadFromFile(coor, filename));
+  PetscCall(VecGetBlockSize(coor,&bs));
+  PetscCall(VecGetSize(coor,&size));
+  npoints = (PetscInt)(size / bs);
+  PetscPrintf(PETSC_COMM_WORLD,"  Loaded %" PetscInt_FMT " points of block size %" PetscInt_FMT " from file: %s\n",npoints,bs,filename);
+  /* Set swarm size */
+  PetscCall(DMSwarmSetLocalSizes(sw,npoints,-1));
+  /* Get swarm coordinates */
+  PetscCall(DMSwarmGetCellDMActive(sw,&celldm));
+  PetscCall(DMSwarmCellDMGetCoordinateFields(celldm, NULL, &coordFields));
+  PetscCall(DMSwarmGetField(sw, coordFields[0], NULL, NULL, (void **)&pcoords));
+  /* Copy coordinates from vector to swarm */
+  PetscCall(VecGetArray(coor,&coords));
+  PetscCall(PetscArraycpy(pcoords,coords,size));
+  PetscCall(VecRestoreArray(coor,&coords));
+  /* Clean up */
+  PetscCall(VecDestroy(&coor));
+  PetscCall(DMSwarmRestoreField(sw, coordFields[0], NULL, NULL, (void **)&pcoords));
+  PetscFunctionReturn(PETSC_SUCCESS);
+}
+
+PetscErrorCode SwarmInterpLoadPidxFromFile(DM sw, const char *filename, MPI_Comm comm)
+{
+  PetscLayout    map;
+  IS             pid;
+  PetscInt       np,N,npoints;
+  const PetscInt *is_pidx;
+  PetscInt64     *pidx;
+  PetscFunctionBeginUser;
+  PetscPrintf(PETSC_COMM_WORLD,"[[ %s ]]\n",PETSC_FUNCTION_NAME);
+  /* Load the point indices stored as Index Set (IS) */
+  PetscCall(ISCreate(comm, &pid));
+  PetscCall(ISSetType(pid,ISGENERAL));
+  PetscCall(ISLoadFromFile(pid, filename));
+  /* Check that IS is the same size than the swarm */
+  PetscCall(ISGetLayout(pid, &map));
+  PetscCall(PetscLayoutGetSize(map, &N));
+  PetscCall(DMSwarmGetLocalSize(sw, &npoints));
+  PetscCheck(N == npoints, PETSC_COMM_SELF, PETSC_ERR_ARG_SIZ, "[[ %s ]] Loaded point index size %" PetscInt_FMT " does not match swarm size %" PetscInt_FMT "", PETSC_FUNCTION_NAME, N, npoints);
+  /* Copy point indices into the swarm */
+  PetscCall(DMSwarmGetField(sw, DMSwarmField_pid, NULL, NULL, (void **)&pidx));
+  PetscCall(ISGetIndices(pid, &is_pidx));
+  for (np=0; np<npoints; np++) { pidx[np] = (PetscInt64)is_pidx[np]; }
+  PetscCall(ISRestoreIndices(pid, &is_pidx));
+  /* Clean up */
+  PetscCall(ISDestroy(&pid));
+  PetscCall(DMSwarmRestoreField(sw, DMSwarmField_pid, NULL, NULL, (void **)&pidx));
+  PetscFunctionReturn(PETSC_SUCCESS);
+}
+
+/*
+  PetscErrorCode SwarmInterpLoadFromFile(LagRBFCtx ctx, DM sw, const char *dirname, PetscBool load_pidx)
+  
+  Load the swarm coordinates and point indices from files located in 'dirname'.
+  The files are expected to be named according to the convention:
+    <stepprefix>.<dm_name>_<coord_field>.pbvec  for coordinates
+    <stepprefix>.<dm_name>_pid.pbis            for point indices
+  where <stepprefix> is derived from the current step in the LagRBFCtx context and potentially appended with "_forward" or "_backward" if advection is active.
+  The point loading is only performed on rank 0, followed by a broadcast to other ranks using a basic migration strategy.
+  The switch to a basic migration strategy is necessary because DMSWARM_MIGRATE_DMCELLNSCATTER only uses neighbor ranks for point migration,
+  which can result in incomplete data distribution.
+  After broadcasting, the migrate type is reset to DMSWARM_MIGRATE_DMCELLNSCATTER and cell IDs are assigned using the DMSwarmCellDM.
+*/
+PetscErrorCode SwarmInterpLoadFromFile(LagRBFCtx ctx, DM sw, const char *dirname, PetscBool load_pidx)
+{
+  DMSwarmCellDM celldm;
+  PetscInt step;
+  char filename[PETSC_MAX_PATH_LEN],stepprefix[PETSC_MAX_PATH_LEN];
+  const char *dm_name,**coordFields;
+  MPI_Comm    comm;
+  PetscMPIInt rank;
+  PetscFunctionBeginUser;
+  PetscPrintf(PETSC_COMM_WORLD,"[[ %s ]]\n",PETSC_FUNCTION_NAME);
+
+  PetscCall(PetscObjectGetComm((PetscObject)sw, &comm));
+  PetscCallMPI(MPI_Comm_rank(comm,&rank));
+
+  PetscCall(PetscObjectGetName((PetscObject)sw,&dm_name));
+  PetscCall(LagRBFGetStep(ctx,&step));
+  PetscCall(PetscSNPrintf(stepprefix,PETSC_MAX_PATH_LEN-1,"step%06" PetscInt_FMT "",step));
+  if (ctx->forward)  { PetscCall(PetscSNPrintf(stepprefix, PETSC_MAX_PATH_LEN-1, "step%06" PetscInt_FMT "_forward", step)); }
+  if (ctx->backward) { PetscCall(PetscSNPrintf(stepprefix, PETSC_MAX_PATH_LEN-1, "step%06" PetscInt_FMT "_backward", step)); }
+  
+  /* Load coordinates */
+  PetscCall(DMSwarmGetCellDMActive(sw,&celldm));
+  PetscCall(DMSwarmCellDMGetCoordinateFields(celldm, NULL, &coordFields));
+  PetscSNPrintf(filename, PETSC_MAX_PATH_LEN-1, "%s/%s.%s_%s.pbvec", dirname, stepprefix, dm_name, coordFields[0]);
+  if (rank == 0) {
+    PetscCall(SwarmInterpLoadCoordinatesFromFile(sw, filename, PETSC_COMM_SELF));
+    /* Load point indices */
+    if (load_pidx) {
+      PetscSNPrintf(filename, PETSC_MAX_PATH_LEN-1, "%s/%s.%s_%s.pbis", dirname, stepprefix, dm_name, DMSwarmField_pid);
+      PetscCall(SwarmInterpLoadPidxFromFile(sw, filename, PETSC_COMM_SELF));
+    }
+  }
+  /* Ensure that all ranks have reached this point before proceeding */
+  PetscCall(PetscBarrier((PetscObject)NULL));
+  /* Send to other ranks */
+  PetscCall(DMSwarmAssignMigrateBasic(ctx, sw));
+  /* Set back the migrate type to DMCELLNSCATTER */
+  PetscCall(DMSwarmSetMigrateType(sw,DMSWARM_MIGRATE_DMCELLNSCATTER));
+  /* Set cell IDs */
+  PetscCall(DMSwarmPICSetCellId(sw));
   PetscFunctionReturn(PETSC_SUCCESS);
 }
 
@@ -154,7 +268,7 @@ static PetscErrorCode SwarmInterpSetWeights_Scalar(LagRBFCtx ctx, DM sw)
   const char       **coordFields,*cellFieldName;
   PetscFunctionBeginUser;
   PetscCall(PetscLogEventBegin(LAGRBF_SwarmInterpSetWeights_Scalar,0,0,0,0));
-
+  PetscPrintf(PETSC_COMM_WORLD,"[[ %s ]]\n",PETSC_FUNCTION_NAME);
   /* Get data structures */
   PetscCall(LagRBFGetPartitionOfUnity(ctx,&pu));
   PetscCall(LagRBFGetPartitions(ctx,&partitions));
@@ -490,7 +604,7 @@ PetscErrorCode SwarmInterpSetWeights_AVX256(LagRBFCtx ctx, DM sw)
   const char       **coordFields,*cellFieldName;
   PetscFunctionBeginUser;
   PetscCall(PetscLogEventBegin(LAGRBF_SwarmInterpSetWeights_AVX256,0,0,0,0));
-
+  PetscPrintf(PETSC_COMM_WORLD,"[[ %s ]]\n",PETSC_FUNCTION_NAME);
   /* Get data structures */
   PetscCall(LagRBFGetPartitionOfUnity(ctx,&pu));
   PetscCall(LagRBFGetPartitions(ctx,&partitions));
