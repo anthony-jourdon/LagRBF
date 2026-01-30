@@ -91,18 +91,15 @@ PetscErrorCode PointwiseInterpolation_AVX256(
   PetscInt       *gtol_elidx;
   const PetscInt *elidx;
   PetscReal      *interpolant;
-  PetscLogDouble time[2];
   __m256d        epsilon;
   __m256d        *interpolant_vec;
   __m256d        (*compute_distance)(PetscReal*,PetscReal*,PetscInt,PetscInt*,PetscInt) = NULL;
   __m256d        (*kernel_avx)(__m256d,__m256d) = NULL;
   PetscReal      (*kernel_fn)(PetscReal,PetscReal) = NULL;
-  long int       npoints_global,npoints_local;
-  double         time_local,time_max;
   PetscFunctionBeginUser;
   /* Logging */
-  PetscCall(PetscTime(&time[0]));
   PetscCall(PetscLogEventBegin(LAGRBF_PointwiseInterpolation_AVX256,0,0,0,0));
+  PetscPrintf(PETSC_COMM_WORLD,"[[ %s ]]\n",PETSC_FUNCTION_NAME);
   /* Select the appropriate kernel */
   PetscCall(KernelGetFunction(ktype,&kernel_fn));
   PetscCall(KernelGetFunction_AVX256(ktype,&kernel_avx));
@@ -235,14 +232,6 @@ PetscErrorCode PointwiseInterpolation_AVX256(
   PetscCall(PetscFree(interpolant));
   _mm_free(interpolant_vec);
   PetscCall(DMDARestoreElements(da,&nel,&nen,&elidx));
-  PetscCall(PetscTime(&time[1]));
-  /* Need to perform a reduction to gather the total number of points */
-  npoints_local = (long int)npoints_i;
-  PetscCallMPI(MPI_Allreduce(&npoints_local,&npoints_global,1,MPI_LONG,MPI_SUM,PETSC_COMM_WORLD));
-  /* Perform reduction on time to get the max */
-  time_local = (double)time[1]-(double)time[0];
-  PetscCallMPI(MPI_Allreduce(&time_local,&time_max,1,MPI_DOUBLE,MPI_MAX,PETSC_COMM_WORLD));
-  PetscCall(PetscPrintf(PETSC_COMM_WORLD,"[[ %s ]] interpolated %ld points in %1.4e seconds\n",PETSC_FUNCTION_NAME,npoints_global,time_max));
   PetscCall(PetscLogEventEnd(LAGRBF_PointwiseInterpolation_AVX256,0,0,0,0));
   PetscFunctionReturn(PETSC_SUCCESS);
 }
