@@ -35,8 +35,11 @@ struct _p_LagRBFCtx {
   PetscInt         n_pfields; // Number of fields that are not resulting from interpolation
   PetscInt         step; // Current step in the model
   PetscReal        time; // Current time in the model
+  PetscReal        rmin,rmax; // Minimum and maximum radius for spherical domains
   PetscBool        restart; // Flag to indicate if the interpolation points coordinates should be loaded from a file
   PetscBool        advection; // Flag to indicate if advection is activated
+  PetscBool        forward; // Flag to indicate if advection is forward
+  PetscBool        backward; // Flag to indicate if advection is backward
   char             output_dir[PETSC_MAX_PATH_LEN]; // Directory to write output files
   char             mat_dir[PETSC_MAX_PATH_LEN]; // Directory to read/write factored matrices
 };

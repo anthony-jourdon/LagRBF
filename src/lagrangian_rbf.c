@@ -24,8 +24,12 @@ PetscErrorCode LagRBFCtxCreate(LagRBFCtx *ctx)
   p->n_pfields    = 0;
   p->step         = 0;
   p->time         = 0.0;
+  p->rmin         = PETSC_MIN_REAL;
+  p->rmax         = PETSC_MAX_REAL;
   p->restart      = PETSC_FALSE;
   p->advection    = PETSC_FALSE;
+  p->forward      = PETSC_FALSE;
+  p->backward     = PETSC_FALSE;
   p->solve_method = A_FACTOR;
   PetscCall(PetscSNPrintf(p->output_dir, PETSC_MAX_PATH_LEN-1, "output"));
   PetscCall(PetscSNPrintf(p->mat_dir, PETSC_MAX_PATH_LEN-1, "%s/MatRBF", p->output_dir));
@@ -99,6 +103,8 @@ PetscErrorCode LagRBFSetFromOptions(LagRBFCtx ctx)
   if (found) { PetscCall(LagRBFSetKernelType(ctx,(KernelType)kernel_type)); }
   PetscCall(PetscOptionsGetInt(NULL,NULL,"-solve_method",&solve_method,&found));
   if (found) { PetscCall(LagRBFSetSolveMethod(ctx,(ASolveMethod)solve_method)); }
+  PetscCall(PetscOptionsGetReal(NULL,NULL,"-rmin",&ctx->rmin,NULL));
+  PetscCall(PetscOptionsGetReal(NULL,NULL,"-rmax",&ctx->rmax,NULL));
   
   /* Check if advection is required, if not return */
   PetscCall(PetscOptionsGetBool(NULL,NULL,"-advection",&ctx->advection,NULL));
@@ -116,7 +122,7 @@ PetscErrorCode LagRBFSetFromOptions(LagRBFCtx ctx)
 
 PetscErrorCode LagRBF_AdvectSwarm(LagRBFCtx ctx, DM swi, DM swd)
 {
-  AdvectionCtx adv_ctx=NULL;
+  AdvectionCtx   adv_ctx=NULL;
   PetscFunctionBeginUser;
   PetscCall(LagRBFGetAdvectionCtx(ctx,&adv_ctx));
   /* Advect */
