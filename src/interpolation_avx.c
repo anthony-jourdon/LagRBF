@@ -182,8 +182,7 @@ PetscErrorCode PointwiseInterpolation_AVX256(
       PetscCall(PartitionGetCoefficientsMat(p,&X));
       PetscCall(MatDenseGetArray(X,&coeffs));
       /* Initialize the interpolant */
-      //for (f=0; f<nfields; f++) { interpolant_vec[f] = _mm256_setzero_pd(); }
-      memset(interpolant_vec, 0, nfields * sizeof(__m256d));
+      for (f=0; f<nfields; f++) { interpolant_vec[f] = _mm256_setzero_pd(); }
       /* Get the number of data points by chuck of 4 */
       nd_aligned = (ndata / 4) * 4;
       for (nd=0; nd<nd_aligned; nd+=4) {
