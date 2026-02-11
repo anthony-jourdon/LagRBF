@@ -6,6 +6,7 @@
 PetscErrorCode SwarmInterpCreateAdvectionFields(LagRBFCtx ctx, DM swarm);
 PetscErrorCode SwarmInterpCreate(LagRBFCtx ctx, DM *sw);
 PetscErrorCode SwarmInterpSetWeights(LagRBFCtx ctx, DM sw);
+//PetscErrorCode SwarmInterpSetWeights_Opt(LagRBFCtx ctx, DM sw);
 PetscErrorCode SwarmInterpSetUp(LagRBFCtx ctx, DM *sw);
 PetscErrorCode SwarmInterpSetCoordinatesFromOptions(PartitionOfUnity pu, DM sw, InsertMode mode);
 PetscErrorCode SwarmInterpAssignUniquePointIndex(DM sw, PetscInt start_idx, PetscInt end_idx);
@@ -13,4 +14,9 @@ PetscErrorCode SwarmInterpAddMarkersFromOptions(LagRBFCtx ctx, DM sw, InsertMode
 PetscErrorCode SwarmInterpLoadCoordinatesFromFile(DM sw, const char *filename, MPI_Comm comm);
 PetscErrorCode SwarmInterpLoadPidxFromFile(DM sw, const char *filename, MPI_Comm comm);
 PetscErrorCode SwarmInterpLoadFromFile(LagRBFCtx ctx, DM sw, const char *dirname, PetscBool load_pidx);
+
+#if defined (__AVX__)
+PetscErrorCode SwarmInterpSetWeights_AVX256(LagRBFCtx ctx, DM sw);
+#endif
+
 #endif
