@@ -5,7 +5,8 @@ extern PetscLogEvent LAGRBF_SwarmInterpSetWeights_Scalar;
 extern PetscLogEvent LAGRBF_SwarmInterpSetWeights_AVX256;
 extern PetscLogEvent LAGRBF_PointwiseInterpolation_Scalar;
 extern PetscLogEvent LAGRBF_PointwiseInterpolation_AVX256;
-extern PetscLogEvent LAGRBF_PartitionAssembleRBFMatrix;
+extern PetscLogEvent LAGRBF_PartitionAssembleRBFMatrix_Scalar;
+extern PetscLogEvent LAGRBF_PartitionAssembleRBFMatrix_AVX256;
 extern PetscLogEvent LAGRBF_FactorRBFMatrix;
 extern PetscLogEvent LAGRBF_MatSetRHS_Fac;
 extern PetscLogEvent LAGRBF_MatSetRHS_KSP;
@@ -52,7 +53,8 @@ PetscErrorCode LagRBFInitialize(int *argc,char ***args,const char file[],const c
   PetscCall(PetscLogEventRegister("PointwiseInterpolation_Scalar",LAGRBF_CLASSID,&LAGRBF_PointwiseInterpolation_Scalar));
   PetscCall(PetscLogEventRegister("PointwiseInterpolation_AVX256",LAGRBF_CLASSID,&LAGRBF_PointwiseInterpolation_AVX256));
   /* Coefficients solve */
-  PetscCall(PetscLogEventRegister("PartitionAssembleRBFMatrix",LAGRBF_CLASSID,&LAGRBF_PartitionAssembleRBFMatrix));
+  PetscCall(PetscLogEventRegister("PartitionAssembleRBFMatrix_Scalar",LAGRBF_CLASSID,&LAGRBF_PartitionAssembleRBFMatrix_Scalar));
+  PetscCall(PetscLogEventRegister("PartitionAssembleRBFMatrix_AVX256",LAGRBF_CLASSID,&LAGRBF_PartitionAssembleRBFMatrix_AVX256));
   PetscCall(PetscLogEventRegister("FactorRBFMatrix",LAGRBF_CLASSID,&LAGRBF_FactorRBFMatrix));
   PetscCall(PetscLogEventRegister("MatSetRHS_Fac",LAGRBF_CLASSID,&LAGRBF_MatSetRHS_Fac));
   PetscCall(PetscLogEventRegister("MatSetRHS_KSP",LAGRBF_CLASSID,&LAGRBF_MatSetRHS_KSP));

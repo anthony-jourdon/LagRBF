@@ -7,6 +7,7 @@ liblagrangian-offline-y.c += $(call thisdir, \
 	interpolation.c \
 	interpolation_avx.c \
 	cell_info.c \
+	interface.c \
 )
 
 lagrangian-offline-drivers-y.c += $(call thisdir, \

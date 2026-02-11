@@ -4,4 +4,5 @@ liblagrangian-offline-y.c += $(call thisdir, \
 	partition_factor.c \
 	partition_ksp.c \
 	partition_io.c \
+	partition_asmb_avx.c \
 )
