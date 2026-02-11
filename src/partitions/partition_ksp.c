@@ -125,18 +125,16 @@ PetscErrorCode PartitionSetUpRBFMatrix_KSP(LagRBFCtx ctx, Partition p, PetscReal
   PSolve_KSPData   *data_ctx = NULL;
   PetscInt         dim;
   PetscReal        epsilon;
-  PetscReal        (*kernel_fn)(PetscReal,PetscReal);
   PetscFunctionBeginUser;
   PetscCall(LagRBFGetPartitionOfUnity(ctx,&pu));
   PetscCall(PUGetEpsilon(pu,&epsilon));
   PetscCall(PUGetDimension(pu,&dim));
   PetscCall(LagRBFGetKernelType(ctx,&ktype));
-  PetscCall(KernelGetFunction(ktype,&kernel_fn));
   /* Method-specific context */
   PetscCall(PartitionKSPCreateCtx(&data_ctx));
   /* Create and assemble RBF matrix */
   PetscCall(PartitionCreateRBFMatrix(p));
-  PetscCall(PartitionAssembleRBFMatrix(p,dim,epsilon,coords,kernel_fn));
+  PetscCall(PartitionAssembleRBFMatrix(p,dim,epsilon,coords,ktype));
   /* Create KSP solver context */
   PetscCall(PartitionKSPCreate(p,&data_ctx->ksp));
   /* Create RHS vector */

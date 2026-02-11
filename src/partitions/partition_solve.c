@@ -1,11 +1,10 @@
 #include <petsc.h>
-
 #include "partition_of_unity.h"
 #include "partitions/partition.h"
 #include "kernels/kernels_rbf.h"
 #include "partitions/partition_solve.h"
 
-PetscLogEvent LAGRBF_PartitionAssembleRBFMatrix;
+PetscLogEvent LAGRBF_PartitionAssembleRBFMatrix_Scalar;
 PetscLogEvent LAGRBF_PartitionSolveInterpolationCoefficients;
 
 PetscErrorCode PartitionCreateRBFMatrix(Partition p)
@@ -18,21 +17,17 @@ PetscErrorCode PartitionCreateRBFMatrix(Partition p)
   PetscFunctionReturn(PETSC_SUCCESS);
 }
 
-PetscErrorCode PartitionAssembleRBFMatrix(
-  Partition p, 
-  PetscInt dim, 
-  PetscReal epsilon,
-  PetscReal coords[], 
-  PetscReal (*kernel_fn)(PetscReal,PetscReal)
-)
+PetscErrorCode PartitionAssembleRBFMatrix_Scalar(Partition p, PetscInt dim, PetscReal epsilon, PetscReal *coords, KernelType ktype)
 {
   Mat       A;
   PetscInt  i,j,d,npoints;
   PetscInt  *pidx;
   PetscReal *rbf;
+  PetscReal (*kernel_fn)(PetscReal,PetscReal) = NULL;
   PetscFunctionBeginUser;
 
-  PetscCall(PetscLogEventBegin(LAGRBF_PartitionAssembleRBFMatrix,0,0,0,0));
+  PetscCall(PetscLogEventBegin(LAGRBF_PartitionAssembleRBFMatrix_Scalar,0,0,0,0));
+  PetscCall(KernelGetFunction(ktype,&kernel_fn));
   PetscCall(PartitionGetRBFMatrix(p,&A));
   PetscCheck(A,PETSC_COMM_SELF,PETSC_ERR_ARG_WRONGSTATE,"RBF matrix not created yet. Call PartitionCreateRBFMatrix() first.");
   PetscCall(PartitionGetDataPointsIdx(p,&npoints,&pidx));
@@ -55,7 +50,18 @@ PetscErrorCode PartitionAssembleRBFMatrix(
     }
   }
   PetscCall(MatDenseRestoreArray(A,&rbf));
-  PetscCall(PetscLogEventEnd(LAGRBF_PartitionAssembleRBFMatrix,0,0,0,0));
+  PetscCall(PetscLogEventEnd(LAGRBF_PartitionAssembleRBFMatrix_Scalar,0,0,0,0));
+  PetscFunctionReturn(PETSC_SUCCESS);
+}
+
+PetscErrorCode PartitionAssembleRBFMatrix(Partition p, PetscInt dim, PetscReal epsilon, PetscReal *coords, KernelType ktype)
+{
+  PetscFunctionBeginUser;
+#if defined(__AVX__)
+  PetscCall(PartitionAssembleRBFMatrix_AVX256(p,dim,epsilon,coords,ktype));
+#else
+  PetscCall(PartitionAssembleRBFMatrix_Scalar(p,dim,epsilon,coords,ktype));
+#endif
   PetscFunctionReturn(PETSC_SUCCESS);
 }
 

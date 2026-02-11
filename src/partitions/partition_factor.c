@@ -113,17 +113,15 @@ PetscErrorCode PartitionSetUpRBFMatrix_Factor(LagRBFCtx ctx, Partition p, PetscR
   KernelType       ktype;
   PetscInt         dim;
   PetscReal        epsilon;
-  PetscReal        (*kernel_fn)(PetscReal,PetscReal);
   PetscFunctionBeginUser;
 
   PetscCall(LagRBFGetPartitionOfUnity(ctx,&pu));
   PetscCall(PUGetEpsilon(pu,&epsilon));
   PetscCall(PUGetDimension(pu,&dim));
   PetscCall(LagRBFGetKernelType(ctx,&ktype));
-  PetscCall(KernelGetFunction(ktype,&kernel_fn));
   /* Create the RBF matrix, fill it and factor it */
   PetscCall(PartitionCreateRBFMatrix(p));
-  PetscCall(PartitionAssembleRBFMatrix(p,dim,epsilon,coords,kernel_fn));
+  PetscCall(PartitionAssembleRBFMatrix(p,dim,epsilon,coords,ktype));
   PetscCall(PartitionFactorRBFMatrix(p));
   /* Write matrix to disk and free space */
   PetscCall(PartitionWriteFactoredMatrix(p,ctx->mat_dir));

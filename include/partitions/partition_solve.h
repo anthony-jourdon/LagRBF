@@ -4,9 +4,13 @@
 #include <petsc.h>
 #include "lagrangian_rbf.h"
 #include "partition.h"
+#include "kernels/kernels_rbf.h"
 
 PetscErrorCode PartitionCreateRBFMatrix(Partition p);
-PetscErrorCode PartitionAssembleRBFMatrix(Partition p,PetscInt dim,PetscReal epsilon,PetscReal coords[],PetscReal (*kernel_fn)(PetscReal,PetscReal));
+PetscErrorCode PartitionAssembleRBFMatrix(Partition p, PetscInt dim, PetscReal epsilon, PetscReal *coords, KernelType ktype);
+#if defined(__AVX__)
+PetscErrorCode PartitionAssembleRBFMatrix_AVX256(Partition p, PetscInt dim, PetscReal epsilon, PetscReal *coords, KernelType ktype);
+#endif
 PetscErrorCode PartitionMatSetRHS(Partition p, PetscInt nfields, PetscReal fval[], Mat *B);
 PetscErrorCode PartitionSolveInterpolationCoefficients_SinglePartition(LagRBFCtx ctx, Partition p, PetscInt nfields, PetscReal *values);
 
