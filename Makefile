@@ -9,7 +9,7 @@
 # PETSc variables (assumes PETSC_DIR and PETSC_ARCH are set in your environment)
 include ${PETSC_DIR}/${PETSC_ARCH}/lib/petsc/conf/petscvariables
 
-all : info tests drivers save_config
+all : info liblagrangian tests drivers save_config
 
 # Compilation options are to be placed in makefile.arch;
 # if that (untracked) file does not exist, defaults are copied there
@@ -70,11 +70,13 @@ else # Show the full command line
   quiet = $($1)
 endif
 
-.PHONY: liblagrangian tests drivers
+.PHONY: liblagrangian liblagrangian-static liblagrangian-shared tests drivers
 
-liblagrangian = $(LIBDIR)/liblagrangian.$(AR_LIB_SUFFIX)
-liblagrangian : $(liblagrangian)
-$(liblagrangian) : $(liblagrangian-offline-y.c:%.c=$(OBJDIR)/%.o) 
+liblagrangian-static = $(LIBDIR)/liblagrangian.$(AR_LIB_SUFFIX)
+liblagrangian-shared = $(LIBDIR)/liblagrangian.so
+liblagrangian : $(liblagrangian-static) $(liblagrangian-shared)
+$(liblagrangian-static) : $(liblagrangian-offline-y.c:%.c=$(OBJDIR)/%.o)
+$(liblagrangian-shared) : $(liblagrangian-offline-y.c:%.c=$(OBJDIR)/%.o) 
 
 info:
 	-@echo "—————————————————————————————————————————————————————————————————"
@@ -87,6 +89,9 @@ info:
 	$(call quiet,AR) $(AR_FLAGS) $@ $^
 	$(call quiet,RANLIB) $@
 
+%.so : | $$(@D)/.DIR
+	$(call quiet,$(cc_name)) -shared -o $@ $^ $(PETSC_SNES_LIB)
+
 # Set the compiler
 ifeq ($(PETSC_LANGUAGE),CXXONLY)
   cc_name := CXX
@@ -96,17 +101,19 @@ endif
 
 # GNU extensions flag
 LAG_CFLAGS_EXTENSIONS+=-D_GNU_SOURCE
+# Position-independent code flag for shared libraries
+LAG_CFLAGS_PIC+=-fPIC
 # Compiler command for compiling C files, includes the makefile.arch flags
-LAG_COMPILE.c = $(call quiet,$(cc_name)) -c $(PCC_FLAGS) $(CCPPFLAGS) $(LAG_CFLAGS) $(LAG_INC) $(CFLAGS) $(C_DEPFLAGS) $(LAG_CFLAGS_EXTENSIONS)
+LAG_COMPILE.c = $(call quiet,$(cc_name)) -c $(PCC_FLAGS) $(CCPPFLAGS) $(LAG_CFLAGS) $(LAG_CFLAGS_PIC) $(LAG_INC) $(CFLAGS) $(C_DEPFLAGS) $(LAG_CFLAGS_EXTENSIONS)
 
 # Test executables
 tests: $(lagrangian-offline-tests-y.c:%.c=$(BINDIR)/%.app)
-$(lagrangian-offline-tests-y.c:%.c=$(BINDIR)/%.app) : $(liblagrangian)
+$(lagrangian-offline-tests-y.c:%.c=$(BINDIR)/%.app) : $(liblagrangian-static)
 .SECONDARY: $(lagrangian-offline-tests-y.c:%.c=$(OBJDIR)/%.o)
 
 # Drivers
 drivers: $(lagrangian-offline-drivers-y.c:%.c=$(BINDIR)/%.app)
-$(lagrangian-offline-drivers-y.c:%.c=$(BINDIR)/%.app) : $(liblagrangian)
+$(lagrangian-offline-drivers-y.c:%.c=$(BINDIR)/%.app) : $(liblagrangian-static)
 .SECONDARY: $(lagrangian-offline-drivers-y.c:%.c=$(OBJDIR)/%.o)
 
 $(BINDIR)/%.app : $(OBJDIR)/%.o | $$(@D)/.DIR

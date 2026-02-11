@@ -4,6 +4,8 @@
 #include <petsc.h>
 #include "kernels/kernels_rbf.h"
 
+#define LAGRBF_EXPORT __attribute__((visibility("default")))
+
 typedef struct _p_LagRBFCtx        *LagRBFCtx;
 typedef struct _p_Partition        *Partition;
 typedef struct _p_PartitionOfUnity *PartitionOfUnity;
@@ -69,4 +71,7 @@ PetscErrorCode LagRBFGetTime(LagRBFCtx ctx, PetscReal *time);
 PetscErrorCode LagRBFGetAdvectionCtx(LagRBFCtx ctx, AdvectionCtx *adv_ctx);
 PetscErrorCode LagRBFGetSwarmData(LagRBFCtx ctx, DM *swd);
 PetscErrorCode LagRBFGetSwarmInterp(LagRBFCtx ctx, DM *swi);
+
+LAGRBF_EXPORT void lagrbf_interpolate(int ndata, double *data_coords, double *data_values, int npoints, double *points_coords, double *points_values, char *options_file);
+
 #endif
