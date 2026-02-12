@@ -54,15 +54,9 @@ PetscErrorCode LagRBFInitialize(int *argc,char ***args,const char file[],const c
 
   /* Interpolation */
   PetscCall(PetscLogEventRegister("SwarmInterpSetWeights_Scalar",LAGRBF_CLASSID,&LAGRBF_SwarmInterpSetWeights_Scalar));
-  PetscCall(PetscLogEventRegister("SwarmInterpSetWeights_AVX256",LAGRBF_CLASSID,&LAGRBF_SwarmInterpSetWeights_AVX256));
-  PetscCall(PetscLogEventRegister("SwarmInterpSetWeights_AVX512",LAGRBF_CLASSID,&LAGRBF_SwarmInterpSetWeights_AVX512));
   PetscCall(PetscLogEventRegister("PointwiseInterpolation_Scalar",LAGRBF_CLASSID,&LAGRBF_PointwiseInterpolation_Scalar));
-  PetscCall(PetscLogEventRegister("PointwiseInterpolation_AVX256",LAGRBF_CLASSID,&LAGRBF_PointwiseInterpolation_AVX256));
-  PetscCall(PetscLogEventRegister("PointwiseInterpolation_AVX512",LAGRBF_CLASSID,&LAGRBF_PointwiseInterpolation_AVX512));
   /* Coefficients solve */
   PetscCall(PetscLogEventRegister("PartitionAssembleRBFMatrix_Scalar",LAGRBF_CLASSID,&LAGRBF_PartitionAssembleRBFMatrix_Scalar));
-  PetscCall(PetscLogEventRegister("PartitionAssembleRBFMatrix_AVX256",LAGRBF_CLASSID,&LAGRBF_PartitionAssembleRBFMatrix_AVX256));
-  PetscCall(PetscLogEventRegister("PartitionAssembleRBFMatrix_AVX512",LAGRBF_CLASSID,&LAGRBF_PartitionAssembleRBFMatrix_AVX512));
   PetscCall(PetscLogEventRegister("FactorRBFMatrix",LAGRBF_CLASSID,&LAGRBF_FactorRBFMatrix));
   PetscCall(PetscLogEventRegister("MatSetRHS_Fac",LAGRBF_CLASSID,&LAGRBF_MatSetRHS_Fac));
   PetscCall(PetscLogEventRegister("MatSetRHS_KSP",LAGRBF_CLASSID,&LAGRBF_MatSetRHS_KSP));
@@ -76,6 +70,16 @@ PetscErrorCode LagRBFInitialize(int *argc,char ***args,const char file[],const c
   PetscCall(PetscLogEventRegister("AdvectionExplicit_RK4",LAGRBF_CLASSID,&LAGRBF_AdvectionExplicit_RK4));
   PetscCall(PetscLogEventRegister("AdvectionExplicit_DOPRI",LAGRBF_CLASSID,&LAGRBF_AdvectionExplicit_DOPRI));
 
+#if defined (__AVX__)
+  PetscCall(PetscLogEventRegister("SwarmInterpSetWeights_AVX256",LAGRBF_CLASSID,&LAGRBF_SwarmInterpSetWeights_AVX256));
+  PetscCall(PetscLogEventRegister("PointwiseInterpolation_AVX256",LAGRBF_CLASSID,&LAGRBF_PointwiseInterpolation_AVX256));
+  PetscCall(PetscLogEventRegister("PartitionAssembleRBFMatrix_AVX256",LAGRBF_CLASSID,&LAGRBF_PartitionAssembleRBFMatrix_AVX256));
+#endif
+#if defined (__AVX512F__)
+  PetscCall(PetscLogEventRegister("SwarmInterpSetWeights_AVX512",LAGRBF_CLASSID,&LAGRBF_SwarmInterpSetWeights_AVX512));
+  PetscCall(PetscLogEventRegister("PointwiseInterpolation_AVX512",LAGRBF_CLASSID,&LAGRBF_PointwiseInterpolation_AVX512));
+  PetscCall(PetscLogEventRegister("PartitionAssembleRBFMatrix_AVX512",LAGRBF_CLASSID,&LAGRBF_PartitionAssembleRBFMatrix_AVX512));
+#endif
   /* Utilities */
   PetscCall(PetscLogEventRegister("SphericalCoordinates_Halton",LAGRBF_CLASSID,&LAGRBF_SphericalCoordinates_Halton));
   PetscCall(PetscLogEventRegister("CellInfoSetUp",LAGRBF_CLASSID,&LAGRBF_CellInfoSetUp));

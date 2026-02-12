@@ -18,18 +18,18 @@ makefile.arch:
 	-@cp config/makefile.arch.default $@
 -include makefile.arch
 
-HAVE_AVX512 := $(shell $(CC) -mavx512f -E - </dev/null >/dev/null 2>&1 && echo 1 || echo 0)
-HAVE_AVX256 := $(shell $(CC) -mavx -E - </dev/null >/dev/null 2>&1 && echo 1 || echo 0)
+HAVE_AVX512 := $(shell grep -q 'avx512f' /proc/cpuinfo && echo 1 || echo 0)
+HAVE_AVX256 := $(shell grep -q 'avx2\|avx' /proc/cpuinfo && echo 1 || echo 0)
 AVX_INFO_MSG :=
 ifeq ($(HAVE_AVX512),1)
   LAG_CFLAGS += -mavx512f
-  AVX_INFO_MSG += "AVX-512 detected - optimized kernels will be used."
+  AVX_INFO_MSG += "AVX-512 detected - optimized kernels will be compiled."
 else ifeq ($(HAVE_AVX256),1)
   LAG_CFLAGS += -mavx
-  AVX_INFO_MSG += "AVX-256 detected - optimized kernels will be used."
+  AVX_INFO_MSG += "AVX-256 detected - optimized kernels will be compiled."
 else
   LAG_CFLAGS += 
-	AVX_INFO_MSG += "AVX not detected - scalar kernels will be used."
+	AVX_INFO_MSG += "AVX not detected - scalar kernels will be compiled."
 endif
 # installation is into a local directory named $(PETSC_ARCH), or for prefix
 #  installs when this value is empy, directly into the local directory.
