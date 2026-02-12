@@ -5,9 +5,7 @@
 #include "partitions/partition_solve.h"
 #include "cell_info.h"
 #include "kernels/kernels_rbf.h"
-#if defined(__AVX__)
-#include "interpolation_avx.h"
-#endif
+#include "interpolation.h"
 
 PetscLogEvent LAGRBF_PointwiseInterpolation_Scalar;
 
@@ -167,7 +165,22 @@ PetscErrorCode RBFInterpolation(LagRBFCtx ctx, DM swi, DM swd, const char *field
   PetscCall(DMSwarmGetField(swd, "rbf", NULL, NULL, (void **)&rbf_d));
 
   /* Perform the interpolation */
-#if defined(__AVX__)
+#if defined(__AVX512F__)
+  PetscCall(PointwiseInterpolation_AVX512(
+    pu,
+    partitions,
+    cellinfo,
+    ktype,
+    nfields,
+    npoints_i,
+    cellid_i,
+    coords_i,
+    coords_d,
+    rbf_d,
+    weights,
+    values_i
+  ));
+#elif defined(__AVX__)
   PetscCall(PointwiseInterpolation_AVX256(
     pu,
     partitions,
