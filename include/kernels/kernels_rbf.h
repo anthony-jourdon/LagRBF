@@ -24,5 +24,9 @@ PetscErrorCode KernelGetFunction(KernelType ktype, PetscReal (**kernel_fn)(Petsc
 #include "kernels/kernels_rbf_avx.h"
 PetscErrorCode KernelGetFunction_AVX256(KernelType ktype, __m256d (**kernel_avx)(__m256d,__m256d));
 #endif
+#if defined(__AVX512F__)
+#include "kernels/kernels_rbf_avx512.h"
+PetscErrorCode KernelGetFunction_AVX512(KernelType ktype, __m512d (**kernel_avx)(__m512d,__m512d));
+#endif
 
 #endif

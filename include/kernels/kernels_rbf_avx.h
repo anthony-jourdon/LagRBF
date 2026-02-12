@@ -1,6 +1,7 @@
 #ifndef __softname_kernels_rbf_avx_h
 #define __softname_kernels_rbf_avx_h
 
+#if defined(__AVX__)
 #include <immintrin.h>
 
 inline __m256d KernelLinear_AVX256(__m256d r, __m256d epsilon)
@@ -28,5 +29,5 @@ inline __m256d KernelWendlandC2_AVX256(__m256d r, __m256d epsilon)
   rbf    = _mm256_blendv_pd(_mm256_setzero_pd(), rbf, mask);  // apply mask to zero out values where u < 0
   return rbf;
 }
-
+#endif
 #endif

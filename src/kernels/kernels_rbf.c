@@ -90,3 +90,23 @@ PetscErrorCode KernelGetFunction_AVX256(KernelType ktype, __m256d (**kernel_avx)
   PetscFunctionReturn(PETSC_SUCCESS);
 }
 #endif
+
+#if defined(__AVX512F__)
+#include "kernels/kernels_rbf_avx512.h"
+PetscErrorCode KernelGetFunction_AVX512(KernelType ktype, __m512d (**kernel_avx)(__m512d,__m512d))
+{
+  PetscFunctionBeginUser;
+  switch (ktype) {
+    case KERNEL_LINEAR:
+      *kernel_avx = KernelLinear_AVX512;
+      break;
+    case KERNEL_WENDLAND_C2:
+      *kernel_avx = KernelWendlandC2_AVX512;
+      break;
+    default:
+      SETERRQ(PETSC_COMM_SELF,PETSC_ERR_ARG_OUTOFRANGE,"Unknown kernel type %d for AVX512",ktype);
+      break;
+  }
+  PetscFunctionReturn(PETSC_SUCCESS);
+}
+#endif
