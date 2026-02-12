@@ -84,7 +84,7 @@ PetscErrorCode SwarmInterpSetWeights_AVX256(LagRBFCtx ctx, DM sw)
 
   PetscFunctionBeginUser;
   PetscCall(PetscLogEventBegin(LAGRBF_SwarmInterpSetWeights_AVX256,0,0,0,0));
-  PetscPrintf(PETSC_COMM_WORLD,"[[ %s Optimized ]]\n",PETSC_FUNCTION_NAME);
+  PetscPrintf(PETSC_COMM_WORLD,"[[ %s ]]\n",PETSC_FUNCTION_NAME);
   /* Get data structures */
   PetscCall(LagRBFGetPartitionOfUnity(ctx,&pu));
   PetscCall(LagRBFGetPartitions(ctx,&partitions));
@@ -214,6 +214,230 @@ PetscErrorCode SwarmInterpSetWeights_AVX256(LagRBFCtx ctx, DM sw)
   PetscCall(PetscLogEventEnd(LAGRBF_SwarmInterpSetWeights_AVX256,0,0,0,0));
   PetscFunctionReturn(PETSC_SUCCESS);
 }
+
+static inline __m256d ComputeDistance_AVX256_Points_2D(__m256d *cx, PetscReal *pcoords, PetscInt *pt_idx)
+{
+  __m256d px,py,dx,dy,dist2,dist;
+  
+  /* Load 4 x-coordinates from points */
+  px = _mm256_set_pd(
+    pcoords[2*pt_idx[3]    ],
+    pcoords[2*pt_idx[2]    ],
+    pcoords[2*pt_idx[1]    ],
+    pcoords[2*pt_idx[0]    ]
+  );
+  py = _mm256_set_pd(
+    pcoords[2*pt_idx[3] + 1],
+    pcoords[2*pt_idx[2] + 1],
+    pcoords[2*pt_idx[1] + 1],
+    pcoords[2*pt_idx[0] + 1]
+  );
+  
+  /* Compute distances */
+  dx    = _mm256_sub_pd(px, cx[0]);
+  dy    = _mm256_sub_pd(py, cx[1]);
+  dist2 = _mm256_fmadd_pd(dx, dx, _mm256_mul_pd(dy, dy));
+  dist  = _mm256_sqrt_pd(dist2);
+  return dist;
+}
+
+static inline __m256d ComputeDistance_AVX256_Points_3D(__m256d *cx, PetscReal *pcoords, PetscInt *pt_idx)
+{
+  __m256d px,py,pz,dx,dy,dz,dist2,dist;
+  
+  /* Load 4 x-coordinates from points */
+  px = _mm256_set_pd(
+    pcoords[3*pt_idx[3]    ],
+    pcoords[3*pt_idx[2]    ],
+    pcoords[3*pt_idx[1]    ],
+    pcoords[3*pt_idx[0]    ]
+  );
+  py = _mm256_set_pd(
+    pcoords[3*pt_idx[3] + 1],
+    pcoords[3*pt_idx[2] + 1],
+    pcoords[3*pt_idx[1] + 1],
+    pcoords[3*pt_idx[0] + 1]
+  );
+  pz = _mm256_set_pd(
+    pcoords[3*pt_idx[3] + 2],
+    pcoords[3*pt_idx[2] + 2],
+    pcoords[3*pt_idx[1] + 2],
+    pcoords[3*pt_idx[0] + 2]
+  );
+  
+  /* Compute distances */
+  dx    = _mm256_sub_pd(px, cx[0]);
+  dy    = _mm256_sub_pd(py, cx[1]);
+  dz    = _mm256_sub_pd(pz, cx[2]);
+  dist2 = _mm256_fmadd_pd(dx, dx, _mm256_fmadd_pd(dy, dy, _mm256_mul_pd(dz, dz)));
+  dist  = _mm256_sqrt_pd(dist2);
+  return dist;
+}
+
+PetscErrorCode SwarmInterpSetWeights_AVX256_PointVectorized(LagRBFCtx ctx, DM sw)
+{
+  PartitionOfUnity pu;
+  Partition        *partitions;
+  DMSwarmCellDM    celldm;
+  DM               das,cdas;
+  Vec              coords;
+  PetscReal        *pcoords,*weights,*LA_coords,*sum_w;
+  PetscInt         d,k,m,n,np,dim,npart,npoints,npoints_aligned,nn,nel,nen;
+  PetscInt         *cellid,*gtol_elidx;
+  const PetscInt   *elidx;
+  const char       **coordFields,*cellFieldName;
+  __m256d epsilon;
+  __m256d (*compute_distance)(__m256d *, PetscReal *, PetscInt *);
+
+  PetscFunctionBeginUser;
+  PetscCall(PetscLogEventBegin(LAGRBF_SwarmInterpSetWeights_AVX256,0,0,0,0));
+  PetscPrintf(PETSC_COMM_WORLD,"[[ %s ]]\n",PETSC_FUNCTION_NAME);
+  
+  /* Get data structures */
+  PetscCall(LagRBFGetPartitionOfUnity(ctx,&pu));
+  PetscCall(LagRBFGetPartitions(ctx,&partitions));
+  /* Get the rank-local DMDA (overlapping between processes) */
+  PetscCall(PUGetDMDALocal(pu,&das));
+  PetscCall(DMGetDimension(das,&dim));
+  PetscCall(DMDAGetElements(das,&nel,&nen,&elidx));
+  /* Get partitions centre coordinates (DMDA's nodes) */
+  PetscCall(DMGetCoordinateDM(das,&cdas));
+  PetscCall(DMGetCoordinates(das,&coords));
+  PetscCall(VecGetArray(coords,&LA_coords));
+  /* Get the number of nodes in the sequential DMDA */
+  PetscCall(PUGetNPartitionsLocal(pu,&npart));
+  /* Get the parallel DMDA to sequential DMDA element map */
+  PetscCall(PUGetGlobalToLocalElementMap(pu,&gtol_elidx));
+
+  /* Interpolation points */
+  PetscCall(DMSwarmGetLocalSize(sw,&npoints)); // rank local points
+  PetscCall(DMSwarmGetCellDMActive(sw,&celldm));
+  /* Setup for coords */
+  PetscCall(DMSwarmCellDMGetCoordinateFields(celldm, NULL, &coordFields));
+  PetscCall(DMSwarmGetField(sw, coordFields[0], NULL, NULL, (void **)&pcoords));
+  /* Cell id */
+  PetscCall(DMSwarmCellDMGetCellID(celldm,&cellFieldName));
+  PetscCall(DMSwarmGetField(sw, cellFieldName, NULL, NULL, (void **)&cellid));
+  /* Weights */
+  PetscCall(DMSwarmGetField(sw, "weights", &nn, NULL, (void **)&weights));
+  PetscCall(PetscCalloc1(npoints,&sum_w));
+  
+  switch (dim) {
+  case 2:
+    compute_distance = ComputeDistance_AVX256_Points_2D;
+    break;
+  
+  case 3:
+    compute_distance = ComputeDistance_AVX256_Points_3D;
+    break;
+  
+  default:
+    SETERRQ(PETSC_COMM_WORLD,PETSC_ERR_SUP,"AVX256 point-vectorized weights only implemented for 2D and 3D, found dim = %" PetscInt_FMT "",dim);
+    break;
+  }
+
+  epsilon = _mm256_set1_pd(pu->epsilon);
+  npoints_aligned = (npoints/4)*4; // number of points that can be processed with AVX256 (4 at a time)
+  /* Process each partition */
+  for (n=0; n<npart; n++) {
+    PetscInt puidx = partitions[n]->idx;
+    __m256d  centre[3];
+    /* Load partition center into AVX256 register (reused for all 4 points) */
+    for (d=0; d<dim; d++) {
+      centre[d] = _mm256_set1_pd(LA_coords[dim*puidx + d]);
+    }
+    /* Process 4 points at a time using AVX256 */
+    for (np=0; np<npoints_aligned; np+=4) {
+      PetscInt  pt_idx[4];
+      double    w_arr[4] __attribute__((aligned(32)));
+      __m256d   dist,rbf;
+
+      /* Set up point indices */
+      for (k=0; k<4; k++) { pt_idx[k] = np + k; }
+      
+      /* Compute distances from partition to 4 points */
+      dist = compute_distance(centre, pcoords, pt_idx);
+      
+      /* Compute RBF weights */
+      rbf = KernelWendlandC2_AVX256(dist, epsilon);
+      
+      /* Store weights */
+      _mm256_store_pd(w_arr, rbf);
+      
+      /* Process all 4 points */
+      for (k=0; k<4; k++) {
+        PetscInt       pt = pt_idx[k];
+        PetscInt       eidx,eidx_local;
+        const PetscInt *elem_nodes;
+        PetscReal      weight = (PetscReal)w_arr[k];
+        
+        sum_w[pt] += weight;
+        
+        /* Get element info for this point */
+        eidx       = cellid[pt];
+        eidx_local = gtol_elidx[eidx];
+        elem_nodes = &elidx[nen*eidx_local];
+        
+        /* Store weight in element if partition is a node in this element */
+        for (m=0; m<nen; m++) {
+          if (elem_nodes[m] == puidx) {
+            weights[pt*nen + m] = weight;
+            break;
+          }
+        }
+      }
+    }
+    
+    /* Handle remaining points (not aligned to 4) */
+    for (; np<npoints; np++) {
+      PetscInt       eidx,eidx_local;
+      const PetscInt *elem_nodes;
+      PetscReal      dist = 0.0, weight;
+      
+      /* Compute distance */
+      for (d=0; d<dim; d++) {
+        dist += (pcoords[dim*np + d] - LA_coords[dim*puidx + d]) * (pcoords[dim*np + d] - LA_coords[dim*puidx + d]);
+      }
+      dist   = PetscSqrtReal(dist);
+      weight = KernelWendlandC2(dist, pu->epsilon);
+      sum_w[np] += weight;
+
+      /* Get element info */
+      eidx       = cellid[np];
+      eidx_local = gtol_elidx[eidx];
+      elem_nodes = &elidx[nen*eidx_local];
+      
+      /* Store the weight only for the nodes connected to this element */
+      for (k=0; k<nen; k++) {
+        if (elem_nodes[k] == puidx) {
+          weights[np*nen + k] = weight;
+          break;
+        }
+      }
+    }
+  }
+
+  /* Normalize weights */
+  for (np=0; np<npoints; np++) {
+    for (k=0; k<nen; k++) {
+      if (sum_w[np] > 0.0) {
+        weights[np*nen + k] /= sum_w[np];
+      } else {
+        weights[np*nen + k] = 0.0;
+      }
+    }
+  }
+  
+  PetscCall(PetscFree(sum_w));
+  PetscCall(DMSwarmRestoreField(sw, cellFieldName, NULL, NULL, (void **)&cellid));
+  PetscCall(DMSwarmRestoreField(sw,"weights",NULL,NULL,(void **)&weights));
+  PetscCall(DMSwarmRestoreField(sw,coordFields[0],NULL,NULL,(void **)&pcoords));
+  PetscCall(VecRestoreArray(coords,&LA_coords));
+
+  PetscCall(PetscLogEventEnd(LAGRBF_SwarmInterpSetWeights_AVX256,0,0,0,0));
+  PetscFunctionReturn(PETSC_SUCCESS);
+}
+
 
 #if 0
 static PetscErrorCode SwarmInterpSetWeights_AVX256_2D_Opt(
