@@ -11,6 +11,9 @@ PetscErrorCode PartitionAssembleRBFMatrix(Partition p, PetscInt dim, PetscReal e
 #if defined(__AVX__)
 PetscErrorCode PartitionAssembleRBFMatrix_AVX256(Partition p, PetscInt dim, PetscReal epsilon, PetscReal *coords, KernelType ktype);
 #endif
+#if defined(__AVX512F__)
+PetscErrorCode PartitionAssembleRBFMatrix_AVX512(Partition p, PetscInt dim, PetscReal epsilon, PetscReal *coords, KernelType ktype);
+#endif
 PetscErrorCode PartitionMatSetRHS(Partition p, PetscInt nfields, PetscReal fval[], Mat *B);
 PetscErrorCode PartitionSolveInterpolationCoefficients_SinglePartition(LagRBFCtx ctx, Partition p, PetscInt nfields, PetscReal *values);
 
