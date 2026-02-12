@@ -3,10 +3,13 @@
 PetscClassId LAGRBF_CLASSID;
 extern PetscLogEvent LAGRBF_SwarmInterpSetWeights_Scalar;
 extern PetscLogEvent LAGRBF_SwarmInterpSetWeights_AVX256;
+extern PetscLogEvent LAGRBF_SwarmInterpSetWeights_AVX512;
 extern PetscLogEvent LAGRBF_PointwiseInterpolation_Scalar;
 extern PetscLogEvent LAGRBF_PointwiseInterpolation_AVX256;
+extern PetscLogEvent LAGRBF_PointwiseInterpolation_AVX512;
 extern PetscLogEvent LAGRBF_PartitionAssembleRBFMatrix_Scalar;
 extern PetscLogEvent LAGRBF_PartitionAssembleRBFMatrix_AVX256;
+extern PetscLogEvent LAGRBF_PartitionAssembleRBFMatrix_AVX512;
 extern PetscLogEvent LAGRBF_FactorRBFMatrix;
 extern PetscLogEvent LAGRBF_MatSetRHS_Fac;
 extern PetscLogEvent LAGRBF_MatSetRHS_KSP;
@@ -25,10 +28,12 @@ static PetscErrorCode LagRBFWriteInitialInfo(void)
 {
   PetscFunctionBeginUser;
 
-#if defined(__AVX__)
-  PetscPrintf(PETSC_COMM_WORLD,"** AVX detected - optimized kernels will be used\n");
+#if defined(__AVX512F__) 
+  PetscPrintf(PETSC_COMM_WORLD,"** AVX-512 detected - optimized kernels will be used.\n");
+#elif defined(__AVX__)
+  PetscPrintf(PETSC_COMM_WORLD,"** AVX detected - optimized kernels will be used.\n");
 #else
-  PetscPrintf(PETSC_COMM_WORLD,"** AVX not detected - optimized kernels will not be used.\n");
+  PetscPrintf(PETSC_COMM_WORLD,"** AVX not detected - scalar kernels will be used.\n");
   PetscPrintf(PETSC_COMM_WORLD,"** If your system supports AVX, consider adding options,\n");
   PetscPrintf(PETSC_COMM_WORLD,"** e.g. -march=native, to LAG_CFLAGS in makefile.arch\n");
 #endif
@@ -50,11 +55,14 @@ PetscErrorCode LagRBFInitialize(int *argc,char ***args,const char file[],const c
   /* Interpolation */
   PetscCall(PetscLogEventRegister("SwarmInterpSetWeights_Scalar",LAGRBF_CLASSID,&LAGRBF_SwarmInterpSetWeights_Scalar));
   PetscCall(PetscLogEventRegister("SwarmInterpSetWeights_AVX256",LAGRBF_CLASSID,&LAGRBF_SwarmInterpSetWeights_AVX256));
+  PetscCall(PetscLogEventRegister("SwarmInterpSetWeights_AVX512",LAGRBF_CLASSID,&LAGRBF_SwarmInterpSetWeights_AVX512));
   PetscCall(PetscLogEventRegister("PointwiseInterpolation_Scalar",LAGRBF_CLASSID,&LAGRBF_PointwiseInterpolation_Scalar));
   PetscCall(PetscLogEventRegister("PointwiseInterpolation_AVX256",LAGRBF_CLASSID,&LAGRBF_PointwiseInterpolation_AVX256));
+  PetscCall(PetscLogEventRegister("PointwiseInterpolation_AVX512",LAGRBF_CLASSID,&LAGRBF_PointwiseInterpolation_AVX512));
   /* Coefficients solve */
   PetscCall(PetscLogEventRegister("PartitionAssembleRBFMatrix_Scalar",LAGRBF_CLASSID,&LAGRBF_PartitionAssembleRBFMatrix_Scalar));
   PetscCall(PetscLogEventRegister("PartitionAssembleRBFMatrix_AVX256",LAGRBF_CLASSID,&LAGRBF_PartitionAssembleRBFMatrix_AVX256));
+  PetscCall(PetscLogEventRegister("PartitionAssembleRBFMatrix_AVX512",LAGRBF_CLASSID,&LAGRBF_PartitionAssembleRBFMatrix_AVX512));
   PetscCall(PetscLogEventRegister("FactorRBFMatrix",LAGRBF_CLASSID,&LAGRBF_FactorRBFMatrix));
   PetscCall(PetscLogEventRegister("MatSetRHS_Fac",LAGRBF_CLASSID,&LAGRBF_MatSetRHS_Fac));
   PetscCall(PetscLogEventRegister("MatSetRHS_KSP",LAGRBF_CLASSID,&LAGRBF_MatSetRHS_KSP));

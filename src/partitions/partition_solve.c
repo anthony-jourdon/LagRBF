@@ -57,7 +57,9 @@ PetscErrorCode PartitionAssembleRBFMatrix_Scalar(Partition p, PetscInt dim, Pets
 PetscErrorCode PartitionAssembleRBFMatrix(Partition p, PetscInt dim, PetscReal epsilon, PetscReal *coords, KernelType ktype)
 {
   PetscFunctionBeginUser;
-#if defined(__AVX__)
+#if defined(__AVX512F__)
+  PetscCall(PartitionAssembleRBFMatrix_AVX512(p,dim,epsilon,coords,ktype));
+#elif defined(__AVX__)
   PetscCall(PartitionAssembleRBFMatrix_AVX256(p,dim,epsilon,coords,ktype));
 #else
   PetscCall(PartitionAssembleRBFMatrix_Scalar(p,dim,epsilon,coords,ktype));
