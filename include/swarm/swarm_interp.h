@@ -17,6 +17,11 @@ PetscErrorCode SwarmInterpLoadFromFile(LagRBFCtx ctx, DM sw, const char *dirname
 
 #if defined (__AVX__)
 PetscErrorCode SwarmInterpSetWeights_AVX256(LagRBFCtx ctx, DM sw);
+PetscErrorCode SwarmInterpSetWeights_AVX256_PointVectorized(LagRBFCtx ctx, DM sw);
+#endif
+#if defined (__AVX512F__)
+PetscErrorCode SwarmInterpSetWeights_AVX512(LagRBFCtx ctx, DM sw);
+PetscErrorCode SwarmInterpSetWeights_AVX512_PointVectorized(LagRBFCtx ctx, DM sw);
 #endif
 
 #endif
