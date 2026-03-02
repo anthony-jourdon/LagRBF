@@ -57,7 +57,10 @@ static PetscErrorCode BackwardTimeSteps(
     PetscCheck(found,PETSC_COMM_WORLD,PETSC_ERR_ARG_WRONG,"Option -restart_step not found.");
     /* Set the new number of steps */
     for (s=0; s<nsteps; s++) {
-      if (steps[s] == restart_step) { break; }
+      if (steps[s] == restart_step) { 
+        PetscCall(LagRBFSetStep(ctx,restart_step-1));
+        break; 
+      }
     }
     /* Assume that if it was not found, we start from the beginning */
     if (s < nsteps) { 
