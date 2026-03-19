@@ -130,9 +130,9 @@ static PetscErrorCode BackwardTimeSteps(
     while (time > time_next) {
       PetscPrintf(PETSC_COMM_WORLD,"    Internal advection step [[ %" PetscInt_FMT " ]] : time = %g\n",it,time);
       /* Compute timestep */
-      PetscCall(AdvectionComputeTimestep_CFL(ctx, swarm_interp));
-      PetscCall(LagRBFGetTimeStep(ctx,&dt));
-      if (dt > 0) { PetscCall(LagRBFSetTimeStep(ctx,-dt)); } // make sure dt is negative for backward advection
+      PetscCall(AdvectionComputeTimestep_CFL(ctx, swarm_interp, &dt));
+      if (dt > 0) { dt = -dt; } // make sure dt is negative for backward advection
+      PetscCall(LagRBFSetTimeStep(ctx,dt)); 
       /* Advect */
       PetscCall(LagRBF_AdvectSwarm(ctx,swarm_interp,swarm_data));
       /* Interpolate */
@@ -233,9 +233,9 @@ static PetscErrorCode ForwardTimeSteps(
     while (time < time_next) {
       PetscPrintf(PETSC_COMM_WORLD,"    Internal advection step [[ %" PetscInt_FMT " ]] : time = %g\n",it,time);
       /* Compute timestep */
-      PetscCall(AdvectionComputeTimestep_CFL(ctx, swarm_interp));
-      PetscCall(LagRBFGetTimeStep(ctx,&dt));
-      if (dt < 0) { PetscCall(LagRBFSetTimeStep(ctx,-dt)); } // make sure dt is positive for forward advection
+      PetscCall(AdvectionComputeTimestep_CFL(ctx, swarm_interp, &dt));
+      if (dt < 0) { dt = -dt; } // make sure dt is positive for forward advection
+      PetscCall(LagRBFSetTimeStep(ctx,dt)); 
       /* Advect */
       PetscCall(LagRBF_AdvectSwarm(ctx,swarm_interp,swarm_data));
       /* Interpolate */
