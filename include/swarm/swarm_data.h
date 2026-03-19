@@ -5,5 +5,6 @@
 
 PetscErrorCode SwarmDataCreate(LagRBFCtx ctx, DM *sw);
 PetscErrorCode SwarmDataAssignMigrateDuplicateGhostPoints(LagRBFCtx ctx, DM swarm);
+PetscErrorCode SwarmDataLoad(LagRBFCtx ctx, DM sw);
 
 #endif

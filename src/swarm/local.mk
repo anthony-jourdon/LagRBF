@@ -3,6 +3,7 @@ liblagrangian-offline-y.c += $(call thisdir, \
   swarm_interp.c \
   swarm_output.c \
   swarm_data.c \
+  swarm_load.c \
 )
 
 ifeq ($(HAVE_AVX512),1)

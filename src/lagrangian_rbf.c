@@ -23,9 +23,12 @@ PetscErrorCode LagRBFCtxCreate(LagRBFCtx *ctx)
   p->n_ifields    = 0;
   p->n_pfields    = 0;
   p->step         = 0;
+  p->noutput      = 0;
+  p->nload        = 0;
   p->time         = 0.0;
   p->rmin         = PETSC_MIN_REAL;
   p->rmax         = PETSC_MAX_REAL;
+  p->cfl_fac      = 0.4;
   p->restart      = PETSC_FALSE;
   p->advection    = PETSC_FALSE;
   p->forward      = PETSC_FALSE;
@@ -33,6 +36,9 @@ PetscErrorCode LagRBFCtxCreate(LagRBFCtx *ctx)
   p->solve_method = A_FACTOR;
   PetscCall(PetscSNPrintf(p->output_dir, PETSC_MAX_PATH_LEN-1, "output"));
   PetscCall(PetscSNPrintf(p->mat_dir, PETSC_MAX_PATH_LEN-1, "%s/MatRBF", p->output_dir));
+  PetscCall(PetscSNPrintf(p->load_dir, PETSC_MAX_PATH_LEN-1, "%s", p->output_dir));
+  p->output_fields = NULL;
+  p->load_fields   = NULL;
 
   *ctx = p;
 
@@ -51,6 +57,16 @@ PetscErrorCode LagRBFCtxDestroy(LagRBFCtx *ctx)
   if (p->adv_ctx)    { PetscCall(LagRBF_AdvectionCtxDestroy(p)); }
   if (p->swd)        { PetscCall(DMDestroy(&p->swd)); }
   if (p->swi)        { PetscCall(DMDestroy(&p->swi)); }
+  if (p->output_fields) {
+    PetscInt f;
+    for (f=0; f<p->noutput; f++) { PetscCall(PetscFree(p->output_fields[f])); }
+    PetscCall(PetscFree(p->output_fields));
+  }
+  if (p->load_fields) {
+    PetscInt f;
+    for (f=0; f<p->nload; f++) { PetscCall(PetscFree(p->load_fields[f])); }
+    PetscCall(PetscFree(p->load_fields));
+  }
   PetscCall(PetscFree(p));
   *ctx = NULL;
 
@@ -95,7 +111,7 @@ PetscErrorCode LagRBFSetFromOptions(LagRBFCtx ctx)
   PetscBool found;
   char option_name[PETSC_MAX_PATH_LEN],velocity_name[PETSC_MAX_PATH_LEN];
   PetscFunctionBeginUser;
-  PetscSNPrintf(option_name, PETSC_MAX_PATH_LEN-1, "-n_interpolation_fields");
+  PetscCall(PetscSNPrintf(option_name, PETSC_MAX_PATH_LEN-1, "-n_interpolation_fields"));
   PetscCall(PetscOptionsGetInt(NULL, NULL, option_name, &ctx->n_ifields, NULL));
   PetscCall(PetscOptionsGetString(NULL,NULL,"-output_path",ctx->output_dir,PETSC_MAX_PATH_LEN-1,NULL));
   PetscCall(PetscSNPrintf(ctx->mat_dir, PETSC_MAX_PATH_LEN-1, "%s/MatRBF", ctx->output_dir));
@@ -105,7 +121,33 @@ PetscErrorCode LagRBFSetFromOptions(LagRBFCtx ctx)
   if (found) { PetscCall(LagRBFSetSolveMethod(ctx,(ASolveMethod)solve_method)); }
   PetscCall(PetscOptionsGetReal(NULL,NULL,"-rmin",&ctx->rmin,NULL));
   PetscCall(PetscOptionsGetReal(NULL,NULL,"-rmax",&ctx->rmax,NULL));
-  
+  PetscCall(PetscOptionsGetReal(NULL,NULL,"-cfl_fac",&ctx->cfl_fac,NULL));
+
+  /* output */
+  PetscCall(PetscOptionsGetInt(NULL,NULL,"-output_nfields",&ctx->noutput,&found));
+  if (ctx->noutput > 0) {
+    PetscInt f,nn;
+    PetscCall(PetscMalloc1(ctx->noutput, &ctx->output_fields));
+    for (f=0; f<ctx->noutput; f++) { PetscCall(PetscMalloc1(PETSC_MAX_PATH_LEN, &ctx->output_fields[f])); }
+    nn = ctx->noutput;
+    PetscCall(PetscOptionsGetStringArray(NULL,NULL,"-output_field_names", ctx->output_fields,&nn,&found));
+    PetscCheck(found,PETSC_COMM_WORLD,PETSC_ERR_ARG_WRONG,"Option -output_field_names not found. User must provide the list of field names to output.");
+    PetscCheck(nn == ctx->noutput,PETSC_COMM_WORLD,PETSC_ERR_ARG_SIZ,"Option -output_field_names must have %" PetscInt_FMT " values, found: %" PetscInt_FMT "",ctx->noutput,nn);
+  }
+
+  /* load fields */
+  PetscCall(PetscOptionsGetInt(NULL,NULL,"-load_nfields",&ctx->nload,&found));
+  if (ctx->nload > 0) {
+    PetscInt f,nn;
+    PetscCall(PetscMalloc1(ctx->nload, &ctx->load_fields));
+    for (f=0; f<ctx->nload; f++) { PetscCall(PetscMalloc1(PETSC_MAX_PATH_LEN, &ctx->load_fields[f])); }
+    nn = ctx->nload;
+    PetscCall(PetscOptionsGetStringArray(NULL,NULL,"-load_field_names", ctx->load_fields,&nn,&found));
+    PetscCheck(found,PETSC_COMM_WORLD,PETSC_ERR_ARG_WRONG,"Option -load_field_names not found. User must provide the list of field names to load.");
+    PetscCheck(nn == ctx->nload,PETSC_COMM_WORLD,PETSC_ERR_ARG_SIZ,"Option -load_field_names must have %" PetscInt_FMT " values, found: %" PetscInt_FMT "",ctx->nload,nn);
+  }
+  PetscCall(PetscOptionsGetString(NULL,NULL,"-load_directory",ctx->load_dir,PETSC_MAX_PATH_LEN-1,NULL));
+
   /* Check if advection is required, if not return */
   PetscCall(PetscOptionsGetBool(NULL,NULL,"-advection",&ctx->advection,NULL));
   if (!ctx->advection) { PetscFunctionReturn(PETSC_SUCCESS); }
@@ -235,6 +277,15 @@ PetscErrorCode LagRBFGetAdvectionCtx(LagRBFCtx ctx, AdvectionCtx *adv_ctx)
   PetscFunctionBeginUser;
   PetscCheck(ctx->adv_ctx, PETSC_COMM_SELF, PETSC_ERR_ARG_NULL, "Advection context is NULL. Call AdvectionCtxCreate() first.");
   if (adv_ctx) { *adv_ctx = ctx->adv_ctx; }
+  PetscFunctionReturn(PETSC_SUCCESS);
+}
+
+PetscErrorCode LagRBFGetAdvectionScheme(LagRBFCtx ctx, AdvectionScheme *scheme)
+{
+  AdvectionCtx adv_ctx = NULL;
+  PetscFunctionBeginUser;
+  PetscCall(LagRBFGetAdvectionCtx(ctx, &adv_ctx));
+  if (scheme) { *scheme = adv_ctx->scheme; }
   PetscFunctionReturn(PETSC_SUCCESS);
 }
 

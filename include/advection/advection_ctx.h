@@ -40,8 +40,9 @@ PetscErrorCode AdvectionSetVelocityName(AdvectionCtx ctx,const char *name);
 PetscErrorCode AdvectionSetVelocityFunction(AdvectionCtx ctx, PetscErrorCode (*velocity_fn)(PetscReal*,PetscReal*,void*), void *user);
 PetscErrorCode AdvectionSetVelocityType(AdvectionCtx ctx, VelocityType vtype);
 /* Getters */
+PetscErrorCode AvectionCtxGetScheme(AdvectionCtx ctx, AdvectionScheme *scheme);
 PetscErrorCode AdvectionGetTimeStep(AdvectionCtx ctx, PetscReal *dt);
 PetscErrorCode AdvectionGetIntegrationOrder(AdvectionCtx ctx, PetscInt *order);
 PetscErrorCode AdvectionGetVelocityName(AdvectionCtx ctx, const char **velocity_name);
-
+PetscErrorCode LagRBFGetAdvectionScheme(LagRBFCtx ctx, AdvectionScheme *scheme);
 #endif

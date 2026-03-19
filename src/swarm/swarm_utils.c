@@ -679,6 +679,7 @@ PetscErrorCode DMSwarmAssignMigrateBasic(LagRBFCtx ctx, DM swarm)
   PartitionOfUnity   pu;
   DM                 dap;
   PetscFunctionBeginUser;
+  PetscPrintf(PETSC_COMM_WORLD,"[[ %s ]]\n",PETSC_FUNCTION_NAME);
   PetscCall(LagRBFGetPartitionOfUnity(ctx,&pu));
   PetscCall(PUGetDMDA(pu,&dap)); // parallel non-overlapping DMDA
   /* Assign ranks for migration based on the rank-local bounding box of the non-overlapping DMDA */

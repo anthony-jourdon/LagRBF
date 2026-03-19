@@ -36,14 +36,20 @@ struct _p_LagRBFCtx {
   PetscInt         n_ifields; // Number of fields to interpolate
   PetscInt         n_pfields; // Number of fields that are not resulting from interpolation
   PetscInt         step; // Current step in the model
+  PetscInt         noutput; // number of fields to output
+  PetscInt         nload; // Number of fields to load from files (if loading)
   PetscReal        time; // Current time in the model
   PetscReal        rmin,rmax; // Minimum and maximum radius for spherical domains
+  PetscReal        cfl_fac; // CFL factor for time step control in advection
   PetscBool        restart; // Flag to indicate if the interpolation points coordinates should be loaded from a file
   PetscBool        advection; // Flag to indicate if advection is activated
   PetscBool        forward; // Flag to indicate if advection is forward
   PetscBool        backward; // Flag to indicate if advection is backward
   char             output_dir[PETSC_MAX_PATH_LEN]; // Directory to write output files
+  char             load_dir[PETSC_MAX_PATH_LEN]; // Directory to read input files when loading
   char             mat_dir[PETSC_MAX_PATH_LEN]; // Directory to read/write factored matrices
+  char             **output_fields; // Array of strings with the names of the fields to output
+  char             **load_fields; // Array of strings with the names of the fields to load
 };
 
 PetscErrorCode LagRBFCtxCreate(LagRBFCtx *ctx);

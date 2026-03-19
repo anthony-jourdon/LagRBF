@@ -1,4 +1,9 @@
 #include "lagrangian_rbf.h"
+#include "swarm/swarm_data.h"
+#include "swarm/swarm_utils.h"
+#include "readers/stagYY/binary_loader.h"
+#include "readers/stagYY/stag_utils.h"
+#include "cell_info.h"
 
 PetscErrorCode StagGetTimeStepsFromOptions(PetscInt *nsteps, PetscInt **steps, PetscReal **time_steps)
 {
@@ -86,5 +91,44 @@ PetscErrorCode StagRestoreFilelist(PetscInt nfiles, char ***filenames)
   }
   PetscCall(PetscFree(fnames));
   *filenames = NULL;
+  PetscFunctionReturn(PETSC_SUCCESS);
+}
+
+PetscErrorCode StagLoadDataToSwarmFromFiles(LagRBFCtx ctx, DM sw)
+{
+  PartitionOfUnity pu;
+  CellInfo         *ci;
+  PetscMPIInt      rank;
+  PetscInt         nfiles,step;
+  PetscBool        is_scalar,found;
+  char             **filenames;
+  PetscFunctionBeginUser;
+
+  PetscCallMPI(MPI_Comm_rank(PETSC_COMM_WORLD,&rank));
+  PetscCall(LagRBFGetPartitionOfUnity(ctx,&pu));
+  PetscCall(LagRBFGetCellInfo(ctx,&ci));
+  PetscCall(LagRBFGetStep(ctx,&step));
+
+  is_scalar = PETSC_TRUE;
+  PetscCall(StagGetFilelistFromOptions(step,&nfiles,&filenames));
+  PetscCall(PetscStrcmp(filenames[0],"vp",&found));
+  if (found) { is_scalar = PETSC_FALSE;}
+  /* Read data only on rank 0 */
+  if (rank == 0) {
+    PetscCall(StagBinSwarmSetFromFiles(sw,(const char**)filenames,nfiles,is_scalar));
+  }
+  /* Ensure that rank 0 has finished reading data */
+  PetscCall(PetscBarrier((PetscObject)NULL));
+  /* Free filenames */
+  PetscCall(StagRestoreFilelist(nfiles,&filenames));
+  /* Send data to other ranks */
+  PetscCall(DMSwarmAssignMigrateBasic(ctx,sw));
+  /* Duplicate ghost points */
+  PetscCall(SwarmDataAssignMigrateDuplicateGhostPoints(ctx,sw));
+  /* Set cell IDs */
+  PetscCall(DMSwarmPICSetCellId(sw));
+  /* Set up CellInfo data structure */
+  PetscCall(CellInfoSetUp(pu,ci,sw));
+
   PetscFunctionReturn(PETSC_SUCCESS);
 }

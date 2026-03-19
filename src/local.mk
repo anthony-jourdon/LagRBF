@@ -6,6 +6,7 @@ liblagrangian-offline-y.c += $(call thisdir, \
 	geodynamics_fields.c \
 	cell_info.c \
 	interface.c \
+	time_loop.c \
 )
 
 lagrangian-offline-drivers-y.c += $(call thisdir, \

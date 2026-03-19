@@ -363,7 +363,7 @@ PetscErrorCode AdvectionEvaluateVelocity(LagRBFCtx ctx, DM swi, DM swd)
   PetscFunctionReturn(PETSC_SUCCESS);
 }
 
-PetscErrorCode AdvectionComputeTimestep_CFL(LagRBFCtx ctx, DM swarm)
+PetscErrorCode AdvectionComputeTimestep_CFL(LagRBFCtx ctx, DM swarm, PetscReal *_dt)
 {
   PartitionOfUnity pu;
   AdvectionCtx     adv_ctx;
@@ -378,7 +378,7 @@ PetscErrorCode AdvectionComputeTimestep_CFL(LagRBFCtx ctx, DM swarm)
 
   PetscCall(PUGetEpsilon(pu,&epsilon));
   radius = 1.0 / epsilon;
-  constant = 0.4; // CFL constant 0.3 - 0.6
+  constant = ctx->cfl_fac; // CFL constant
 
   PetscCall(DMSwarmGetLocalSize(swarm,&npoints));
   PetscCall(AdvectionGetVelocityName(adv_ctx,&velocity_name));
@@ -401,7 +401,7 @@ PetscErrorCode AdvectionComputeTimestep_CFL(LagRBFCtx ctx, DM swarm)
   /* Perform reduction to get the global min */
   PetscCallMPI(MPI_Allreduce(MPI_IN_PLACE, &dt, 1, MPIU_REAL, MPIU_MIN, PetscObjectComm((PetscObject)swarm)));
   PetscPrintf(PETSC_COMM_WORLD,"CFL timestep: dt = %g\n",dt);
-  PetscCall(LagRBFSetTimeStep(ctx,dt));
+  if (_dt) *_dt = dt;
   PetscFunctionReturn(PETSC_SUCCESS);
 }
 

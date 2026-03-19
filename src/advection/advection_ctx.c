@@ -75,6 +75,14 @@ PetscErrorCode AdvectionCtxSetScheme(AdvectionCtx ctx, AdvectionScheme scheme)
   PetscFunctionReturn(PETSC_SUCCESS);
 }
 
+PetscErrorCode AvectionCtxGetScheme(AdvectionCtx ctx, AdvectionScheme *scheme)
+{
+  PetscFunctionBeginUser;
+  PetscCheck(ctx, PETSC_COMM_SELF, PETSC_ERR_ARG_NULL, "Advection context is NULL");
+  if (scheme) { *scheme = ctx->scheme; }
+  PetscFunctionReturn(PETSC_SUCCESS);
+}
+
 PetscErrorCode AdvectionSetTimeStep(AdvectionCtx ctx, PetscReal dt)
 {
   PetscFunctionBeginUser;

@@ -398,15 +398,27 @@ static PetscErrorCode StagBinSwarmSetVelocityPressureFromFile(DM swarm, const ch
 
 static PetscErrorCode StagBinSwarmSetScalarFieldsFromFile(DM swarm, const char **files_list, PetscInt nfiles, StagFieldBin *sfield)
 {
-  PetscInt f,bs;
+  PetscInt  f,bs,npoints;
   PetscReal *coords = NULL, *fields = NULL;
   PetscFunctionBeginUser;
+
+  sfield->bs = 1; // scalar field
+  PetscCall(DMSwarmGetLocalSize(swarm,&npoints));
+  /* Check if there are any point inside the swarm */
+  if (npoints <= 0) {
+    PetscInt np;
+    PetscInt *n;
+    PetscCall(StagReadBinaryFile(files_list[0],sfield));
+    n  = sfield->n;
+    np = n[0] * n[1] * n[2] * sfield->nblocks;
+    PetscCall(DMSwarmSetLocalSizes(swarm,np,-1));
+  }
 
   /* Fields */
   PetscCall(DMSwarmGetField(swarm,"fields", &bs, NULL, (void**)&fields));
   PetscCheck(bs == nfiles,PETSC_COMM_SELF,PETSC_ERR_ARG_WRONG,"Number of swarm fields (%"PetscInt_FMT") does not match number of provided files (%"PetscInt_FMT")",bs,nfiles);
-  sfield->bs = 1; // scalar field
   for (f=0; f<nfiles; f++) {
+    PetscPrintf(PETSC_COMM_WORLD,"Reading file %s\n",files_list[f]);
     /* Read binary file and store data in sfield */
     PetscCall(StagReadBinaryFile(files_list[f],sfield));
     /* Insert scalar field data into swarm fields */
