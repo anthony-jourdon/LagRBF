@@ -2,6 +2,7 @@
 #include "lagrangian_rbf.h"
 #include "partition_of_unity.h"
 #include "swarm/swarm_utils.h"
+#include "readers/stagYY/stag_utils.h"
 
 /* 
 Create the DM Swarm to hold the points bearing the data to interpolate.
@@ -68,6 +69,7 @@ PetscErrorCode SwarmDataAssignMigrateDuplicateGhostPoints(LagRBFCtx ctx, DM swar
   MPI_Comm         comm;
   PetscMPIInt      nranks,rank;
   PetscFunctionBeginUser;
+  PetscPrintf(PETSC_COMM_WORLD,"[[ %s ]]\n",PETSC_FUNCTION_NAME);
   /* Get MPI info */
   PetscCall(PetscObjectGetComm((PetscObject)swarm,&comm));
   PetscCallMPI(MPI_Comm_size(comm,&nranks));
@@ -123,5 +125,13 @@ PetscErrorCode SwarmDataAssignMigrateDuplicateGhostPoints(LagRBFCtx ctx, DM swar
   PetscCall(PetscFree(all_dm_min));
   PetscCall(PetscFree(all_dm_max));
 
+  PetscFunctionReturn(PETSC_SUCCESS);
+}
+
+PetscErrorCode SwarmDataLoad(LagRBFCtx ctx, DM sw)
+{
+  PetscFunctionBeginUser;
+  /* For now there is only stag data, but the idea is to be able to choose between several type here */
+  PetscCall(StagLoadDataToSwarmFromFiles(ctx,sw));
   PetscFunctionReturn(PETSC_SUCCESS);
 }
