@@ -99,7 +99,7 @@ static PetscErrorCode BackwardTimeSteps(
     if (s > 0) { time_next = time_steps[s-1]; } 
     else       { time_next = time; }
     PetscCall(LagRBFSetTime(ctx,time));
-    PetscCall(StagGetFilelistFromOptions(step,&nfiles,&filenames));
+    PetscCall(StagGetFilelistFromOptions(step,&nfiles,&filenames,NULL));
     PetscPrintf(PETSC_COMM_WORLD,"BACKWARD STEP[[ %" PetscInt_FMT " ]] : time = %g\n",s,time);
     PetscPrintf(PETSC_COMM_WORLD,"  Time to next step: %g\n",time_next - time);
     for (f=0; f<nfiles; f++) {
@@ -197,7 +197,7 @@ static PetscErrorCode ForwardTimeSteps(
     if (s < nsteps-1) { time_next = time_steps[s+1]; } 
     else              { time_next = time; }
     PetscCall(LagRBFSetTime(ctx,time));
-    PetscCall(StagGetFilelistFromOptions(step,&nfiles,&filenames));
+    PetscCall(StagGetFilelistFromOptions(step,&nfiles,&filenames,NULL));
     PetscPrintf(PETSC_COMM_WORLD,"FORWARD STEP[[ %" PetscInt_FMT " ]] : time = %g\n",s,time);
     PetscPrintf(PETSC_COMM_WORLD,"  Time to next step: %g\n",time_next - time);
     for (f=0; f<nfiles; f++) {

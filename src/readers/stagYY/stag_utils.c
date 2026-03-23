@@ -50,12 +50,12 @@ PetscErrorCode StagRestoreTimeSteps(PetscInt **steps, PetscReal **time_steps)
   PetscFunctionReturn(PETSC_SUCCESS);
 }
 
-PetscErrorCode StagGetFilelistFromOptions(PetscInt step, PetscInt *nfiles, char ***filenames)
+PetscErrorCode StagGetFilelistFromOptions(PetscInt step, PetscInt *nfiles, char ***filenames, PetscBool *is_scalar)
 {
   PetscInt    nt,nn,f;
   char        **fnames = NULL, **fieldnames = NULL;
   char        prefix[PETSC_MAX_PATH_LEN],directory[PETSC_MAX_PATH_LEN],model[PETSC_MAX_PATH_LEN];
-  PetscBool   found;
+  PetscBool   found,found_vp;
   PetscFunctionBeginUser;
 
   PetscCall(PetscSNPrintf(prefix,PETSC_MAX_PATH_LEN-1,"stag_"));
@@ -69,7 +69,8 @@ PetscErrorCode StagGetFilelistFromOptions(PetscInt step, PetscInt *nfiles, char 
   PetscCall(PetscOptionsGetStringArray(NULL,prefix,"-field_names", fieldnames, &nn, &found));
   PetscCheck(found,PETSC_COMM_WORLD,PETSC_ERR_ARG_WRONG,"Option -%sfield_names not found. User must provide the list of field names to read.",prefix);
   PetscCheck(nn == nt,PETSC_COMM_WORLD,PETSC_ERR_ARG_SIZ,"Option -%sfield_names must have %" PetscInt_FMT " values, found: %" PetscInt_FMT "",prefix,nt,nn);
-  
+  PetscCall(PetscStrcmp(fieldnames[0],"vp",&found_vp));
+
   PetscCall(PetscMalloc1(nt,&fnames));
   for (f=0; f<nt; f++) {
     PetscCall(PetscMalloc1(PETSC_MAX_PATH_LEN,&fnames[f]));
@@ -77,6 +78,10 @@ PetscErrorCode StagGetFilelistFromOptions(PetscInt step, PetscInt *nfiles, char 
   }
   if (nfiles)    *nfiles = nt;
   if (filenames) *filenames = fnames;
+  if (is_scalar) {
+    if (found_vp) { *is_scalar = PETSC_FALSE; } 
+    else          { *is_scalar = PETSC_TRUE; }
+  }
   PetscCall(PetscFree(fieldnames));
   PetscFunctionReturn(PETSC_SUCCESS);
 }
@@ -100,7 +105,7 @@ PetscErrorCode StagLoadDataToSwarmFromFiles(LagRBFCtx ctx, DM sw)
   CellInfo         *ci;
   PetscMPIInt      rank;
   PetscInt         nfiles,step;
-  PetscBool        is_scalar,found;
+  PetscBool        is_scalar;
   char             **filenames;
   PetscFunctionBeginUser;
 
@@ -109,10 +114,7 @@ PetscErrorCode StagLoadDataToSwarmFromFiles(LagRBFCtx ctx, DM sw)
   PetscCall(LagRBFGetCellInfo(ctx,&ci));
   PetscCall(LagRBFGetStep(ctx,&step));
 
-  is_scalar = PETSC_TRUE;
-  PetscCall(StagGetFilelistFromOptions(step,&nfiles,&filenames));
-  PetscCall(PetscStrcmp(filenames[0],"vp",&found));
-  if (found) { is_scalar = PETSC_FALSE;}
+  PetscCall(StagGetFilelistFromOptions(step,&nfiles,&filenames,&is_scalar));
   /* Read data only on rank 0 */
   if (rank == 0) {
     PetscCall(StagBinSwarmSetFromFiles(sw,(const char**)filenames,nfiles,is_scalar));

@@ -118,7 +118,7 @@ static PetscErrorCode SetContinentMarkers(
   PetscCall(SwarmInterpSetCoordinatesFromOptions(pu,swarm_interp,INSERT_VALUES));
   PetscCall(SwarmInterpSetWeights(ctx,swarm_interp));
 
-  PetscCall(StagGetFilelistFromOptions(step,&nfiles,&filenames));
+  PetscCall(StagGetFilelistFromOptions(step,&nfiles,&filenames,NULL));
   for (f=0; f<nfiles; f++) {
     PetscPrintf(PETSC_COMM_WORLD,"  File[%'" PetscInt_FMT "]: %s\n",f,filenames[f]);
   }
@@ -287,7 +287,11 @@ static PetscErrorCode LoadInit(
 
   ctx->forward = PETSC_TRUE;
   restart_idx  = 0;
+  PetscCall(LagRBFSetTimeStep(ctx,1e-6)); // Set a small time step to start with, it will be adjusted in the time loop if necessary
   /* Move forward in time */
+  PetscCall(ForwardTimeLoop(ctx,swarm_data,swarm_interp,nsteps,steps,time_steps,restart_idx));
+
+#if 0
   for (s=0; s<nsteps; s++) {
     PetscInt  f,nfiles,it,step;
     PetscReal time,time_next;
@@ -300,7 +304,7 @@ static PetscErrorCode LoadInit(
     else                { time_next = time; }
     PetscCall(LagRBFSetStep(ctx,step));
     PetscCall(LagRBFSetTime(ctx,time));
-    PetscCall(StagGetFilelistFromOptions(step,&nfiles,&filenames));
+    PetscCall(StagGetFilelistFromOptions(step,&nfiles,&filenames,NULL));
     PetscPrintf(PETSC_COMM_WORLD,"FORWARD STEP[[ %" PetscInt_FMT " ]] : time = %g\n",step,time);
     PetscPrintf(PETSC_COMM_WORLD,"  Time to next step: %g\n",time_next - time);
     for (f=0; f<nfiles; f++) {
@@ -371,6 +375,7 @@ static PetscErrorCode LoadInit(
     /* Free filenames */
     PetscCall(StagRestoreFilelist(nfiles,&filenames));
   }
+#endif
   PetscFunctionReturn(PETSC_SUCCESS);
 }
 
@@ -532,7 +537,7 @@ static PetscErrorCode RunForward(
     else                { time_next = time; }
     PetscCall(LagRBFSetStep(ctx,step));
     PetscCall(LagRBFSetTime(ctx,time));
-    PetscCall(StagGetFilelistFromOptions(step,&nfiles,&filenames));
+    PetscCall(StagGetFilelistFromOptions(step,&nfiles,&filenames,NULL));
     PetscPrintf(PETSC_COMM_WORLD,"FORWARD STEP[[ %" PetscInt_FMT " ]] : time = %g\n",step,time);
     PetscPrintf(PETSC_COMM_WORLD,"  Time to next step: %g\n",time_next - time);
 #if 1
@@ -626,19 +631,25 @@ static PetscErrorCode Run()
   Partition        *partitions;
   CellInfo         *ci;
   DM               swarm_data,swarm_interp;
+  PetscMPIInt      rank;
   PetscInt         nsteps,npoints_i;
   PetscInt         *steps;
   PetscReal        *time_steps;
   PetscBool        exists;
   PetscFunctionBeginUser;
 
+  PetscCallMPI(MPI_Comm_rank(PETSC_COMM_WORLD,&rank));
   /* Create context */
   PetscCall(LagRBFCtxCreate(&ctx));
   PetscCall(LagRBFSetFromOptions(ctx));
 
   /* Create the output directory */
   PetscCall(PetscTestDirectory(ctx->output_dir,'w',&exists));
-  if (!exists) { PetscCall(CreateDirectory(ctx->output_dir)); }
+  if (!exists) { 
+    if (rank == 0) { 
+      PetscCall(PetscMkdir(ctx->output_dir)); 
+    }
+  }
 
   /* Create data structures */
   ctx->mtype = GEODYNAMICS; // Set the model type
@@ -660,8 +671,8 @@ static PetscErrorCode Run()
 
   /* We run forward */
   //PetscCall(RunForward(ctx,swarm_data,swarm_interp,nsteps,steps,time_steps));
-  //PetscCall(LoadInit(ctx,swarm_data,swarm_interp,nsteps,steps,time_steps));
-  PetscCall(ForwardScalarFields(ctx,swarm_data,swarm_interp,nsteps,steps,time_steps));
+  PetscCall(LoadInit(ctx,swarm_data,swarm_interp,nsteps,steps,time_steps));
+  //PetscCall(ForwardScalarFields(ctx,swarm_data,swarm_interp,nsteps,steps,time_steps));
 
   /* Clean up */
   PetscCall(StagRestoreTimeSteps(&steps,&time_steps));
