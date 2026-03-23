@@ -6,6 +6,24 @@
 PetscErrorCode CreateDirectory(const char dirname[])
 {
   PetscMPIInt rank;
+  PetscFunctionBeginUser;
+  PetscCallMPI(MPI_Comm_rank(PETSC_COMM_WORLD,&rank));
+  /* Create the output directory */
+  if (rank == 0) {
+    PetscBool exists;
+    PetscCall(PetscTestDirectory(dirname,'w',&exists));
+    if (!exists) {
+      PetscCall(PetscMkdir(dirname));
+      PetscCall(PetscPrintf(PETSC_COMM_WORLD,"Created output directory %s\n",dirname));
+    }
+  }
+  PetscCallMPI(MPI_Barrier(PETSC_COMM_WORLD));
+  PetscFunctionReturn(PETSC_SUCCESS);
+}
+#if 0
+PetscErrorCode CreateDirectory(const char dirname[])
+{
+  PetscMPIInt rank;
   int num = 0, error_number = 0;
 
   PetscFunctionBeginUser;
@@ -35,7 +53,7 @@ PetscErrorCode CreateDirectory(const char dirname[])
   PetscCall(PetscBarrier((PetscObject)NULL));
   PetscFunctionReturn(PETSC_SUCCESS);
 }
-
+#endif
 PetscErrorCode TestDirectory(const char dirname[], char mode, PetscBool *_exists)
 {
   PetscMPIInt rank;

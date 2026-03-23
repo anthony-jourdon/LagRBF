@@ -644,13 +644,8 @@ static PetscErrorCode Run()
   PetscCall(LagRBFSetFromOptions(ctx));
 
   /* Create the output directory */
-  PetscCall(PetscTestDirectory(ctx->output_dir,'w',&exists));
-  if (!exists) { 
-    if (rank == 0) { 
-      PetscCall(PetscMkdir(ctx->output_dir)); 
-    }
-  }
-
+  PetscCall(CreateDirectory(ctx->output_dir));
+  
   /* Create data structures */
   ctx->mtype = GEODYNAMICS; // Set the model type
   PetscCall(LagRBF_PartitionOfUnityCreate(ctx));
