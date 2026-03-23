@@ -162,8 +162,8 @@ PetscErrorCode SwarmLoadFromFiles(LagRBFCtx ctx, DM sw, const char *dirname, con
       }
     }
   }
-  /* Ensure that all ranks have reached this point before proceeding */
-  PetscCall(PetscBarrier((PetscObject)NULL));
+  /* Ensure rank 0 finished loading before proceeding */
+  PetscCall(PetscBarrier((PetscObject)sw));
   /* Send to other ranks */
   PetscCall(DMSwarmAssignMigrateBasic(ctx, sw));
   /* Set back the migrate type to DMCELLNSCATTER */
