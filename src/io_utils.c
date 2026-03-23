@@ -72,7 +72,7 @@ PetscErrorCode TestFile(const char filename[], char mode, PetscBool *_exists)
 
   if (i_exists == 1) { *_exists = PETSC_TRUE; }
   else               { *_exists = PETSC_FALSE; }
-  PetscFunctionReturn(0);
+  PetscFunctionReturn(PETSC_SUCCESS);
 }
 
 /* PVD helpers */
@@ -83,7 +83,7 @@ PetscErrorCode ParaviewPVDOpen(const char pvdfilename[])
   PetscFunctionBeginUser;
   /* only master generates this file */
   PetscCallMPI(MPI_Comm_rank(PETSC_COMM_WORLD,&rank));
-  if(rank != 0) { PetscFunctionReturn(0); }
+  if(rank != 0) { PetscFunctionReturn(PETSC_SUCCESS); }
 
   fp = fopen(pvdfilename,"w");
   PetscCheck(fp,PETSC_COMM_SELF,PETSC_ERR_FILE_OPEN,"Failed to open PVD file %s",pvdfilename);
@@ -164,28 +164,33 @@ PetscErrorCode ParaviewPVDOpenAppend(
   const char directory_name[]
 )
 {
-  PetscBool file_found;
+  PetscMPIInt rank;
+  PetscBool   file_found;
   PetscFunctionBeginUser;
+  PetscCallMPI(MPI_Comm_rank(PETSC_COMM_WORLD,&rank));
+  if (rank != 0) { PetscFunctionReturn(PETSC_SUCCESS); }
   if (!not_first) {
     if (step == 0) {
       PetscCall(ParaviewPVDOpen(pvdfilename));
       PetscCall(ParaviewPVDAppend(pvdfilename,time,datafile,directory_name));
     } else {
-      TestFile(pvdfilename,'r',&file_found);
+      //PetscCall(TestFile(pvdfilename,'r',&file_found));
+      PetscCall(PetscTestFile(pvdfilename,'r',&file_found));
       if (file_found) {
-        ParaviewPVDAppend(pvdfilename,time,datafile,directory_name);
+        PetscCall(ParaviewPVDAppend(pvdfilename,time,datafile,directory_name));
       } else {
-        ParaviewPVDOpen(pvdfilename);
-        ParaviewPVDAppend(pvdfilename,time,datafile,directory_name);
+        PetscCall(ParaviewPVDOpen(pvdfilename));
+        PetscCall(ParaviewPVDAppend(pvdfilename,time,datafile,directory_name));
       }
     }
   } else {
-    TestFile(pvdfilename,'r',&file_found);
+    //PetscCall(TestFile(pvdfilename,'r',&file_found));
+    PetscCall(PetscTestFile(pvdfilename,'r',&file_found));
     if (!file_found) {
-      ParaviewPVDOpen(pvdfilename);
-      ParaviewPVDAppend(pvdfilename,time,datafile,directory_name);
+      PetscCall(ParaviewPVDOpen(pvdfilename));
+      PetscCall(ParaviewPVDAppend(pvdfilename,time,datafile,directory_name));
     } else {
-      ParaviewPVDAppend(pvdfilename,time,datafile,directory_name);
+      PetscCall(ParaviewPVDAppend(pvdfilename,time,datafile,directory_name));
     }
   }
   PetscFunctionReturn(PETSC_SUCCESS);

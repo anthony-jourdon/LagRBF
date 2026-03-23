@@ -141,17 +141,22 @@ PetscErrorCode SwarmOutputFieldPetscVec_FromName(DM sw, const char *field_name, 
 
 PetscErrorCode SwarmOutput(LagRBFCtx ctx, DM sw, PetscInt nfields, const char *fields[], PetscBool permute)
 {
+  PetscMPIInt      rank;
   PetscInt         f;
   PetscBool        exists;
   static PetscBool beenhere=PETSC_FALSE;
   char             root[PETSC_MAX_PATH_LEN],outputdir[PETSC_MAX_PATH_LEN],pvdfname[PETSC_MAX_PATH_LEN],vtkfname[PETSC_MAX_PATH_LEN];
   char             stepprefix[PETSC_MAX_PATH_LEN],stepdir[PETSC_MAX_PATH_LEN];
   PetscFunctionBeginUser;
+  PetscPrintf(PETSC_COMM_WORLD,"[[ %s ]]\n",PETSC_FUNCTION_NAME);
+  
+  PetscCallMPI(MPI_Comm_rank(PETSC_COMM_WORLD,&rank));
   
   PetscCall(PetscSNPrintf(root,PETSC_MAX_PATH_LEN-1,"%s",ctx->output_dir));
   PetscCall(PetscSNPrintf(stepdir,PETSC_MAX_PATH_LEN-1,"step%" PetscInt_FMT "",ctx->step));
   PetscCall(PetscSNPrintf(outputdir,PETSC_MAX_PATH_LEN-1,"%s/%s",root,stepdir));
   /* Check if directory exists */
+
   PetscCall(TestDirectory(outputdir,'w',&exists));
   /* If not create it */
   if (!exists) { PetscCall(CreateDirectory(outputdir)); }
@@ -173,6 +178,7 @@ PetscErrorCode SwarmOutput(LagRBFCtx ctx, DM sw, PetscInt nfields, const char *f
     if (swarm->swarm_type == DMSWARM_PIC) {
       DMSwarmCellDM celldm;
       const char    **coordFields;
+      PetscPrintf(PETSC_COMM_WORLD,"  writing coordinates for PIC swarm\n");
       PetscCall(DMSwarmGetCellDMActive(sw,&celldm));
       PetscCall(DMSwarmCellDMGetCoordinateFields(celldm, NULL, &coordFields));
       PetscCall(SwarmOutputFieldPetscVec_FromName(sw,coordFields[0],outputdir,stepprefix,PETSC_FALSE));
