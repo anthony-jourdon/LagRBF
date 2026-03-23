@@ -8,15 +8,19 @@ typedef enum {
   KERNEL_LINEAR=0,
   KERNEL_WENDLAND_C0,
   KERNEL_WENDLAND_C2,
-  KERNEL_WENDLAND_C4,
-  KERNEL_WENDLAND_C6
+  KERNEL_BUMP,
+  KERNEL_MQ,
+  KERNEL_IMQ,
+  KERNEL_GAUSSIAN
 } KernelType;
 
 PetscReal KernelLinear(PetscReal r, PetscReal epsilon);
 PetscReal KernelWendlandC0(PetscReal r, PetscReal epsilon);
 PetscReal KernelWendlandC2(PetscReal r, PetscReal epsilon);
-PetscReal KernelWendlandC4(PetscReal r, PetscReal epsilon);
-PetscReal KernelWendlandC6(PetscReal r, PetscReal epsilon);
+PetscReal KernelBump(PetscReal r, PetscReal epsilon);
+PetscReal KernelMultiquadric(PetscReal r, PetscReal epsilon);
+PetscReal KernelInverseMultiquadric(PetscReal r, PetscReal epsilon);
+PetscReal KernelGaussian(PetscReal r, PetscReal epsilon);
 
 PetscErrorCode KernelGetFunction(KernelType ktype, PetscReal (**kernel_fn)(PetscReal,PetscReal));
 

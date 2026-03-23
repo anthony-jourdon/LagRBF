@@ -9,7 +9,9 @@
 
 PetscLogEvent LAGRBF_PointwiseInterpolation_AVX256;
 extern inline __m256d KernelLinear_AVX256(__m256d r, __m256d epsilon);
+extern inline __m256d KernelWendlandC0_AVX256(__m256d r, __m256d epsilon);
 extern inline __m256d KernelWendlandC2_AVX256(__m256d r, __m256d epsilon);
+extern inline __m256d KernelBump_AVX256(__m256d r, __m256d epsilon);
 
 static inline __m256d ComputeDistance_AVX256_2D(
   PetscReal *coords_i, 

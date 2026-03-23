@@ -3,6 +3,7 @@
 
 #if defined(__AVX__)
 #include <immintrin.h>
+#include "kernels/exp_avx.h"
 
 inline __m256d KernelLinear_AVX256(__m256d r, __m256d epsilon)
 {
@@ -10,6 +11,19 @@ inline __m256d KernelLinear_AVX256(__m256d r, __m256d epsilon)
   __m256d one = _mm256_set1_pd(1.0);
   u = _mm256_sub_pd(one, _mm256_mul_pd(epsilon, r)); // u = 1 - epsilon * r
   return u;
+}
+
+inline __m256d KernelWendlandC0_AVX256(__m256d r, __m256d epsilon)
+{
+  __m256d u,u2;
+  __m256d mask;
+  __m256d one = _mm256_set1_pd(1.0);
+
+  u    = _mm256_sub_pd(one, _mm256_mul_pd(epsilon, r)); // u = 1 - epsilon * r
+  mask = _mm256_cmp_pd(u, _mm256_setzero_pd(), _CMP_GE_OQ); // mask for u >= 0
+  u    = _mm256_blendv_pd(_mm256_setzero_pd(), u, mask); // apply mask to zero out values where u < 0
+  u2   = _mm256_mul_pd(u, u); // u^2
+  return u2;
 }
 
 inline __m256d KernelWendlandC2_AVX256(__m256d r, __m256d epsilon)
@@ -27,6 +41,19 @@ inline __m256d KernelWendlandC2_AVX256(__m256d r, __m256d epsilon)
   inner  = _mm256_sub_pd(five, four_u);                       // 5 - 4 * u
   rbf    = _mm256_mul_pd(u4, inner);                          // rbf = u^4 * (5 - 4 * u)
   rbf    = _mm256_blendv_pd(_mm256_setzero_pd(), rbf, mask);  // apply mask to zero out values where u < 0
+  return rbf;
+}
+
+inline __m256d KernelBump_AVX256(__m256d r, __m256d epsilon)
+{
+  __m256d u,neg_inv_u2,rbf,mask;
+  __m256d one = _mm256_set1_pd(1.0);
+  
+  u    = _mm256_sub_pd(one, _mm256_mul_pd(epsilon, r)); // u = 1 - epsilon * r
+  mask = _mm256_cmp_pd(u, _mm256_setzero_pd(), _CMP_GE_OQ); // mask for u >= 0
+  neg_inv_u2 = _mm256_div_pd(_mm256_set1_pd(-1.0), _mm256_mul_pd(u, u)); // -1 / (u * u)
+  rbf = Exp_AVX256(neg_inv_u2); // exp(-1 / (u * u))
+  rbf = _mm256_blendv_pd(_mm256_setzero_pd(), rbf, mask); // apply mask to zero out values where u < 0
   return rbf;
 }
 #endif
