@@ -9,8 +9,5 @@ liblagrangian-offline-y.c += $(call thisdir, \
 	time_loop.c \
 )
 
-lagrangian-offline-drivers-y.c += $(call thisdir, \
-)
-
 # include subdirectories
-include $(call incsubdirs, tests partitions advection readers swarm kernels petsc_private interpolation)
+include $(call incsubdirs, tests partitions advection readers swarm kernels petsc_private interpolation drivers)
