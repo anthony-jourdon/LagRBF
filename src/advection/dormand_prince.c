@@ -218,6 +218,7 @@ PetscErrorCode AdvectionExplicit_DOPRI(LagRBFCtx ctx, DM swi, DM swd)
       for (d=0; d<dim; d++) {
         coords[dim*np + d] = x0[dim*np + d] + dt * velocity[dim*np + d];
       }
+      PetscCall(AdvectionProjectOntoSphereBoundary_Pointwise(&coords[dim*np],dim,ctx->rmin,ctx->rmax));
     }
     /* Restore fields */
     PetscCall(DMSwarmRestoreField(swi, coorFieldName[0], NULL, NULL, (void **)&coords));
@@ -248,6 +249,7 @@ PetscErrorCode AdvectionExplicit_DOPRI(LagRBFCtx ctx, DM swi, DM swd)
   PetscCall(DMSwarmGetField(swi, "coor_init",      NULL, NULL, (void **)&x0));
   PetscCall(DMSwarmGetField(swi, "v_adv_6",        NULL, NULL, (void **)&v_high));
   PetscCall(AdvectionExplicit(coords,x0,v_high,dt,npoints,dim));
+  PetscCall(AdvectionProjectOntoSphereBoundary(coords,dim,ctx->rmin,ctx->rmax,npoints));
   PetscCall(DMSwarmRestoreField(swi, coorFieldName[0], NULL, NULL, (void **)&coords));
   PetscCall(DMSwarmRestoreField(swi, "coor_init",      NULL, NULL, (void **)&x0));
   PetscCall(DMSwarmRestoreField(swi, "v_adv_6",        NULL, NULL, (void **)&v_high));
