@@ -3,23 +3,55 @@ import numpy as np
 import lagrbfpy as lf
 import pyvista as pvs
 
-def map_tect_system(geol_swarm:pvs.PolyData, swarm:pvs.PolyData, order:np.ndarray, pidx:np.ndarray):
-  systems = {}
+# First 30 step:
+# divergence threshold: 1e5
+# e2 threshold: 1e4
+# After 30 steps:
+# divergence threshold: 1e4
+# e2 threshold: 1e3
 
+def copy_swarm(swarm:pvs.PolyData) -> pvs.PolyData:
+  new_swarm = pvs.PolyData(swarm.points)
+  for f in swarm.point_data:
+    new_swarm.point_data[f] = np.copy(swarm.point_data[f])
+  return new_swarm
+
+def map_tect_system(geol_swarm:pvs.PolyData, swarm:pvs.PolyData, order:np.ndarray, pidx:np.ndarray, time:float):
+  systems = {}
+  if time < 1.05e-04: thresh = 1e5
+  else: thresh = 1e4
   print(geol_swarm.number_of_points, swarm.number_of_points, pidx.shape[0], order.shape[0])
 
   divergence = swarm.point_data['divergence'][order]
   systems["extension"] = np.zeros(geol_swarm.number_of_points, dtype=bool)
-  systems["extension"][pidx-1] = divergence > 1e5
+  systems["extension"][pidx-1] = divergence > thresh
   systems["compression"] = np.zeros(geol_swarm.number_of_points, dtype=bool)
-  systems["compression"][pidx-1] = divergence < -1e5
+  systems["compression"][pidx-1] = divergence < -thresh
   cnt = 0
   for s in systems:
     geol_swarm.point_data['system'][systems[s]] = cnt + 1
+    geol_swarm.point_data['system_age'][systems[s]] = time
     cnt += 1
   return
 
-def map_step(geol_swarm:pvs.PolyData, step_fname:str) -> None:
+def map_deformation(geol_swarm:pvs.PolyData, swarm:pvs.PolyData, order:np.ndarray, pidx:np.ndarray, time:float):
+  if time < 1.05e-04: thresh = 1e4
+  else: thresh = 1e3
+  e2 = np.zeros(geol_swarm.number_of_points, dtype=np.float64)
+  e2[pidx-1] = swarm.point_data['e2'][order]
+  active = np.zeros(geol_swarm.number_of_points, dtype=bool)
+  active[pidx-1] = e2[pidx-1] > thresh
+  # reset active deformation to 0 for points that are not active
+  geol_swarm.point_data['deformation_active'] = np.zeros(geol_swarm.number_of_points, dtype=np.float64)
+  geol_swarm.point_data['deformation_active'][active] = e2[active]
+  geol_swarm.point_data["deformation_age"][active] = time
+  return
+
+def set_age(geol_swarm:pvs.PolyData, prev_geol_swarm:pvs.PolyData, time:float, field:str):
+  geol_swarm.point_data[field+"_age"][geol_swarm.point_data[field] != prev_geol_swarm.point_data[field]] = time
+  return
+
+def map_step(geol_swarm:pvs.PolyData, prev_geol_swarm:pvs.PolyData, step_fname:str, time:float) -> None:
   swarm:pvs.PolyData = pvs.read(step_fname)
   order = np.argsort(swarm.point_data['pidx'])
   pidx  = swarm.point_data['pidx'][order]
@@ -28,7 +60,9 @@ def map_step(geol_swarm:pvs.PolyData, step_fname:str) -> None:
   # pidx is 1-based, so we need to adjust for 0-based indexing in Python
   geol_swarm.points[pidx-1, :] = swarm.points[order, :]
 
-  map_tect_system(geol_swarm, swarm, order, pidx)
+  map_tect_system(geol_swarm, swarm, order, pidx, time)
+  map_deformation(geol_swarm, swarm, order, pidx, time)
+  #set_age(geol_swarm:pvs.PolyData, prev_geol_swarm:pvs.PolyData, time:float, field:str)
   return
 
 def initialize_geolmap(init_fname:str) -> pvs.PolyData:
@@ -42,7 +76,10 @@ def initialize_geolmap(init_fname:str) -> pvs.PolyData:
   # Initialize the type of rock (protolithe) to 0 (mantle) for all points
   geolswarm.point_data["protolithe"] = np.zeros(geolswarm.number_of_points, dtype=np.int32)
   geolswarm.point_data["system"] = np.zeros(geolswarm.number_of_points, dtype=np.int32)
-
+  geolswarm.point_data["system_age"] = np.full(geolswarm.number_of_points, np.nan, dtype=np.float64)
+  geolswarm.point_data["deformation_active"] = np.zeros(geolswarm.number_of_points, dtype=np.float64)
+  geolswarm.point_data["deformation_age"] = np.full(geolswarm.number_of_points, np.nan, dtype=np.float64)
+  
   regions = {}
   cnt = 0
   for f in init_swarm.point_data:
@@ -50,6 +87,7 @@ def initialize_geolmap(init_fname:str) -> pvs.PolyData:
     regions[f] = init_swarm.point_data[f] > 0.1
     geolswarm.point_data["protolithe"][regions[f]] = cnt + 1
     cnt += 1
+  
   return geolswarm
 
 def create_map():
@@ -87,6 +125,7 @@ def create_map():
     "Run-llsvp3",
     "LLSVP-Run3",
     "LLSVP-Run4",
+    "LLSVP-Run5",
   ]
   timeseries_out        = {}
   timeseries_out_global = {}
@@ -130,6 +169,9 @@ def create_map():
       step = int(geol_timeseries["step"][-1])
       print(f"Last mapped step: {step}. Continuing mapping from this step.")
     
+    # copy swarm for age tracking
+    previous_geol_swarm = copy_swarm(geol_swarm)
+
     for i in range(0, len(timeseries['step'])):
       step = timeseries['step'][i]
       time_local = timeseries['time'][i]
@@ -139,7 +181,10 @@ def create_map():
 
       print(f"Processing step {step} at time local {float(time_local):1.4e}, time global {time_global:1.4e}")
       step_fname = os.path.join(iou.basedir, iou.mdir, "geodyn", timeseries['fname'][i])
-      map_step(geol_swarm, step_fname)
+
+      map_step(geol_swarm, previous_geol_swarm, step_fname, time_global)
+      previous_geol_swarm = copy_swarm(geol_swarm)
+
       geol_swarm.save(os.path.join(iou.outdir, f"step{str(step).zfill(6)}-geolmap.vtp"))
       timeseries_out["time"] = [str(time_local)]
       timeseries_out["step"] = [str(step).zfill(6)]
