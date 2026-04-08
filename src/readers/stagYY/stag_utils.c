@@ -50,12 +50,13 @@ PetscErrorCode StagRestoreTimeSteps(PetscInt **steps, PetscReal **time_steps)
   PetscFunctionReturn(PETSC_SUCCESS);
 }
 
-PetscErrorCode StagGetFilelistFromOptions(PetscInt step, PetscInt *nfiles, char ***filenames, PetscBool *is_scalar)
+PetscErrorCode StagGetFilelistFromOptions(PetscInt step, PetscInt *nfiles, char ***filenames, PetscBool **is_scalar)
 {
   PetscInt    nt,nn,f;
   char        **fnames = NULL, **fieldnames = NULL;
   char        prefix[PETSC_MAX_PATH_LEN],directory[PETSC_MAX_PATH_LEN],model[PETSC_MAX_PATH_LEN];
   PetscBool   found,found_vp;
+  PetscBool   *scalar;
   PetscFunctionBeginUser;
 
   PetscCall(PetscSNPrintf(prefix,PETSC_MAX_PATH_LEN-1,"stag_"));
@@ -65,37 +66,50 @@ PetscErrorCode StagGetFilelistFromOptions(PetscInt step, PetscInt *nfiles, char 
   PetscCall(PetscOptionsGetInt(NULL,prefix,"-nfiles",&nt,&found));
   PetscCheck(found,PETSC_COMM_WORLD,PETSC_ERR_ARG_WRONG,"Option -%snfiles not found. User must provide the number of files to read.",prefix);
   PetscCall(PetscMalloc1(nt,&fieldnames));
+  /* Array to know which fields are scalar and which are vector */
+  PetscCall(PetscMalloc1(nt,&scalar));
   nn = nt;
   PetscCall(PetscOptionsGetStringArray(NULL,prefix,"-field_names", fieldnames, &nn, &found));
   PetscCheck(found,PETSC_COMM_WORLD,PETSC_ERR_ARG_WRONG,"Option -%sfield_names not found. User must provide the list of field names to read.",prefix);
   PetscCheck(nn == nt,PETSC_COMM_WORLD,PETSC_ERR_ARG_SIZ,"Option -%sfield_names must have %" PetscInt_FMT " values, found: %" PetscInt_FMT "",prefix,nt,nn);
-  PetscCall(PetscStrcmp(fieldnames[0],"vp",&found_vp));
-
+  for (f=0; f<nt; f++) {
+    PetscCall(PetscStrcmp(fieldnames[f],"vp",&found_vp));
+    if (found_vp) {
+      scalar[f] = PETSC_FALSE;
+    } else {
+      scalar[f] = PETSC_TRUE;
+    }
+  }
   PetscCall(PetscMalloc1(nt,&fnames));
+
   for (f=0; f<nt; f++) {
     PetscCall(PetscMalloc1(PETSC_MAX_PATH_LEN,&fnames[f]));
     PetscCall(PetscSNPrintf(fnames[f],PETSC_MAX_PATH_LEN-1,"%s/%s_%s%05" PetscInt_FMT,directory,model,fieldnames[f],step));
   }
   if (nfiles)    *nfiles = nt;
   if (filenames) *filenames = fnames;
-  if (is_scalar) {
-    if (found_vp) { *is_scalar = PETSC_FALSE; } 
-    else          { *is_scalar = PETSC_TRUE; }
-  }
+  if (is_scalar) *is_scalar = scalar; 
   PetscCall(PetscFree(fieldnames));
   PetscFunctionReturn(PETSC_SUCCESS);
 }
 
-PetscErrorCode StagRestoreFilelist(PetscInt nfiles, char ***filenames)
+PetscErrorCode StagRestoreFilelist(PetscInt nfiles, char ***filenames, PetscBool **is_scalar)
 {
   PetscInt f;
   char     **fnames = *filenames;
+  PetscBool *scalar = *is_scalar;
   PetscFunctionBeginUser;
-  for (f=0; f<nfiles; f++) {
+  if (fnames) {
+    for (f=0; f<nfiles; f++) {
     PetscCall(PetscFree(fnames[f]));
+    }
+    PetscCall(PetscFree(fnames));
+    *filenames = NULL;
   }
-  PetscCall(PetscFree(fnames));
-  *filenames = NULL;
+  if (scalar) {
+    PetscCall(PetscFree(scalar));
+    *is_scalar = NULL;
+  }
   PetscFunctionReturn(PETSC_SUCCESS);
 }
 
@@ -105,7 +119,7 @@ PetscErrorCode StagLoadDataToSwarmFromFiles(LagRBFCtx ctx, DM sw)
   CellInfo         *ci;
   PetscMPIInt      rank;
   PetscInt         nfiles,step;
-  PetscBool        is_scalar;
+  PetscBool        *is_scalar;
   char             **filenames;
   PetscFunctionBeginUser;
 
@@ -117,12 +131,12 @@ PetscErrorCode StagLoadDataToSwarmFromFiles(LagRBFCtx ctx, DM sw)
   PetscCall(StagGetFilelistFromOptions(step,&nfiles,&filenames,&is_scalar));
   /* Read data only on rank 0 */
   if (rank == 0) {
-    PetscCall(StagBinSwarmSetFromFiles(sw,(const char**)filenames,nfiles,is_scalar));
+    PetscCall(StagBinSwarmSetFromFiles(sw,filenames,nfiles,is_scalar));
   }
   /* Ensure that rank 0 has finished reading data */
   PetscCall(PetscBarrier((PetscObject)NULL));
   /* Free filenames */
-  PetscCall(StagRestoreFilelist(nfiles,&filenames));
+  PetscCall(StagRestoreFilelist(nfiles,&filenames,&is_scalar));
   /* Send data to other ranks */
   PetscCall(DMSwarmAssignMigrateBasic(ctx,sw));
   /* Duplicate ghost points */

@@ -105,6 +105,7 @@ static PetscErrorCode SetContinentMarkers(
   PetscInt         f,nfiles;
   PetscMPIInt      rank;
   char             **filenames;
+  PetscBool        *is_scalar;
   PetscFunctionBeginUser;
 
   PetscCallMPI(MPI_Comm_rank(PETSC_COMM_WORLD,&rank));
@@ -118,14 +119,15 @@ static PetscErrorCode SetContinentMarkers(
   PetscCall(SwarmInterpSetCoordinatesFromOptions(pu,swarm_interp,INSERT_VALUES));
   PetscCall(SwarmInterpSetWeights(ctx,swarm_interp));
 
-  PetscCall(StagGetFilelistFromOptions(step,&nfiles,&filenames,NULL));
+  PetscCall(StagGetFilelistFromOptions(step,&nfiles,&filenames,&is_scalar));
   for (f=0; f<nfiles; f++) {
     PetscPrintf(PETSC_COMM_WORLD,"  File[%'" PetscInt_FMT "]: %s\n",f,filenames[f]);
   }
   /* Read data only on rank 0 */
   if (rank == 0) {
-    PetscCall(StagBinSwarmSetFromFiles(swarm_data,(const char**)filenames,nfiles,PETSC_TRUE));
+    PetscCall(StagBinSwarmSetFromFiles(swarm_data,filenames,nfiles,is_scalar));
   }
+  PetscCall(StagRestoreFilelist(nfiles, &filenames, &is_scalar));
   /* Ensure that rank 0 has finished reading data */
   PetscCall(PetscBarrier((PetscObject)NULL));
 
@@ -291,91 +293,6 @@ static PetscErrorCode LoadInit(
   /* Move forward in time */
   PetscCall(ForwardTimeLoop(ctx,swarm_data,swarm_interp,nsteps,steps,time_steps,restart_idx));
 
-#if 0
-  for (s=0; s<nsteps; s++) {
-    PetscInt  f,nfiles,it,step;
-    PetscReal time,time_next;
-    char      **filenames;
-
-    step = steps[restart_idx + s];
-    time = time_steps[restart_idx + s];
-    //PetscPrintf(PETSC_COMM_WORLD,"Current idx: s = %" PetscInt_FMT ", idx = %" PetscInt_FMT ", next = %"PetscInt_FMT", nsteps = %" PetscInt_FMT "\n",s,s+restart_idx,restart_idx + s + 1,nsteps);
-    if (s + 1 < nsteps) { time_next = time_steps[restart_idx + s + 1]; } 
-    else                { time_next = time; }
-    PetscCall(LagRBFSetStep(ctx,step));
-    PetscCall(LagRBFSetTime(ctx,time));
-    PetscCall(StagGetFilelistFromOptions(step,&nfiles,&filenames,NULL));
-    PetscPrintf(PETSC_COMM_WORLD,"FORWARD STEP[[ %" PetscInt_FMT " ]] : time = %g\n",step,time);
-    PetscPrintf(PETSC_COMM_WORLD,"  Time to next step: %g\n",time_next - time);
-    for (f=0; f<nfiles; f++) {
-      PetscPrintf(PETSC_COMM_WORLD,"  File[%'" PetscInt_FMT "]: %s\n",f,filenames[f]);
-    }
-    /* Read data only on rank 0 */
-    if (rank == 0) {
-      PetscCall(StagBinSwarmSetFromFiles(swarm_data,(const char**)filenames,nfiles,PETSC_FALSE));
-    }
-    /* Ensure that rank 0 has finished reading data */
-    PetscCall(PetscBarrier((PetscObject)NULL));
-    /* Send data to other ranks */
-    PetscCall(DMSwarmAssignMigrateBasic(ctx,swarm_data));
-    /* Duplicate ghost points */
-    PetscCall(SwarmDataAssignMigrateDuplicateGhostPoints(ctx,swarm_data));
-    /* Set cell IDs */
-    PetscCall(DMSwarmPICSetCellId(swarm_data));
-    /* Set up CellInfo data structure */
-    PetscCall(CellInfoSetUp(pu,ci,swarm_data));
-    /* Interpolation */
-    PetscCall(LagRBF_PartitionsSetUp(ctx,swarm_data,swarm_interp));
-    PetscCall(RBFInterpolation(ctx,swarm_interp,swarm_data,"fields"));
-    /* Output */
-    PetscCall(SwarmOutput(ctx,swarm_interp,2,output_fields,PETSC_FALSE));
-
-    /* Copy the first dim fields into "velocity" */
-    PetscCall(AdvectionInitializeTimestepVelocity(ctx,swarm_interp));
-    it = 0;
-    while (time < time_next) {
-      PetscReal dt;
-
-      PetscPrintf(PETSC_COMM_WORLD,"    Internal advection step [[ %" PetscInt_FMT " ]] : time = %g\n",it,time);
-      /* Compute timestep */
-      if (adv_scheme == DOPRI) {
-        PetscReal dt_curr, dt_cfl;
-        PetscCall(LagRBFGetTimeStep(ctx,&dt_curr));
-        PetscCall(AdvectionComputeTimestep_CFL(ctx, swarm_interp, &dt_cfl));
-        dt = PetscMin(dt_cfl, dt_curr);
-      } else {
-        PetscCall(AdvectionComputeTimestep_CFL(ctx, swarm_interp, &dt));
-      }
-      //PetscCall(AdvectionComputeTimestep_CFL(ctx, swarm_interp));
-      /* Adjust timestep if necessary to not exceed the next time step */
-      if (time + dt > time_next) {
-        dt = time_next - time;
-        PetscPrintf(PETSC_COMM_WORLD,"Timestep exceeding next step. Adjusting internal time step to %g.\n",dt);
-      }
-      PetscCall(LagRBFSetTimeStep(ctx,dt));
-      /* Advect */
-      PetscCall(LagRBF_AdvectSwarm(ctx,swarm_interp,swarm_data));
-      /* Interpolate */
-      PetscCall(LagRBF_PartitionsSetUp(ctx,swarm_data,swarm_interp));
-      PetscCall(RBFInterpolation(ctx,swarm_interp,swarm_data,"fields"));
-      /* Setup velocity for next step */
-      PetscCall(AdvectionInitializeTimestepVelocity(ctx,swarm_interp));
-      /* Update time */
-      time += dt;
-      PetscCall(LagRBFSetTime(ctx,time));
-      it++;
-    }
-    /* End of the time step */
-    /* Reset partitions => clear coeffs and ksp */
-    PetscCall(LagRBF_PartitionsReset(ctx));
-    /* Reset cell info */
-    PetscCall(CellInfoReset(pu,ci));
-    /* Clear swarm data on all ranks */
-    PetscCall(DMSwarmSetLocalSizes(swarm_data,0,-1));
-    /* Free filenames */
-    PetscCall(StagRestoreFilelist(nfiles,&filenames));
-  }
-#endif
   PetscFunctionReturn(PETSC_SUCCESS);
 }
 
@@ -666,8 +583,11 @@ static PetscErrorCode Run()
 
   /* We run forward */
   //PetscCall(RunForward(ctx,swarm_data,swarm_interp,nsteps,steps,time_steps));
-  PetscCall(LoadInit(ctx,swarm_data,swarm_interp,nsteps,steps,time_steps));
-  //PetscCall(ForwardScalarFields(ctx,swarm_data,swarm_interp,nsteps,steps,time_steps));
+  if (ctx->advection) {
+    PetscCall(LoadInit(ctx,swarm_data,swarm_interp,nsteps,steps,time_steps));
+  } else {
+    PetscCall(ForwardScalarFields(ctx,swarm_data,swarm_interp,nsteps,steps,time_steps));
+  }
 
   /* Clean up */
   PetscCall(StagRestoreTimeSteps(&steps,&time_steps));

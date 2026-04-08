@@ -178,7 +178,7 @@ static inline PetscErrorCode Spherical2Cartesian(PetscReal spherical[3], PetscRe
   PetscFunctionReturn(PETSC_SUCCESS);
 }
 
-static PetscErrorCode ReconstructYinYangVelocityPressure(StagFieldBin *sfield, PetscReal *coor, PetscReal *fields)
+static PetscErrorCode ReconstructYinYangVelocityPressure(StagFieldBin *sfield, PetscReal *coor, PetscInt nfields, PetscReal *fields)
 {
   PetscInt  i,j,k,bs;
   PetscInt  *n;
@@ -216,26 +216,26 @@ static PetscErrorCode ReconstructYinYangVelocityPressure(StagFieldBin *sfield, P
         vtheta = (PetscReal)sfield->data[ bs*yin_idx     ];
         vphi   = (PetscReal)sfield->data[ bs*yin_idx + 1 ];
         vr     = (PetscReal)sfield->data[ bs*yin_idx + 2 ];
-        fields[ bs*yin_idx     ] =   vtheta * PetscSinReal(spherical[1]) * PetscCosReal(spherical[2])
-                                   - vphi   * PetscSinReal(spherical[2])
-                                   + vr     * PetscCosReal(spherical[1]) * PetscCosReal(spherical[2]);
-        fields[ bs*yin_idx + 1 ] =   vtheta * PetscSinReal(spherical[1]) * PetscSinReal(spherical[2])
-                                   + vphi   * PetscCosReal(spherical[2])
-                                   + vr     * PetscCosReal(spherical[1]) * PetscSinReal(spherical[2]);
-        fields[ bs*yin_idx + 2 ] = - vtheta * PetscCosReal(spherical[1])
-                                   + vr     * PetscSinReal(spherical[1]);
+        fields[ nfields*yin_idx     ] = vtheta * PetscSinReal(spherical[1]) * PetscCosReal(spherical[2])
+                                      - vphi   * PetscSinReal(spherical[2])
+                                      + vr     * PetscCosReal(spherical[1]) * PetscCosReal(spherical[2]);
+        fields[ nfields*yin_idx + 1 ] = vtheta * PetscSinReal(spherical[1]) * PetscSinReal(spherical[2])
+                                      + vphi   * PetscCosReal(spherical[2])
+                                      + vr     * PetscCosReal(spherical[1]) * PetscSinReal(spherical[2]);
+        fields[ nfields*yin_idx + 2 ] = - vtheta * PetscCosReal(spherical[1])
+                                      + vr       * PetscSinReal(spherical[1]);
         /* Yang grid */
         vtheta = (PetscReal)sfield->data[ bs*yang_idx     ];
         vphi   = (PetscReal)sfield->data[ bs*yang_idx + 1 ];
         vr     = (PetscReal)sfield->data[ bs*yang_idx + 2 ];
         
-        fields[ bs*yang_idx     ] = - vtheta * PetscSinReal(spherical[1]) * PetscCosReal(spherical[2]) 
+        fields[ nfields*yang_idx     ] = - vtheta * PetscSinReal(spherical[1]) * PetscCosReal(spherical[2]) 
                                     + vphi   * PetscSinReal(spherical[2])
                                     - vr     * PetscCosReal(spherical[1]) * PetscCosReal(spherical[2]);
-        fields[ bs*yang_idx + 2 ] =   vtheta * PetscSinReal(spherical[1]) * PetscSinReal(spherical[2])
+        fields[ nfields*yang_idx + 2 ] =   vtheta * PetscSinReal(spherical[1]) * PetscSinReal(spherical[2])
                                     + vphi   * PetscCosReal(spherical[2])
                                     + vr     * PetscCosReal(spherical[1]) * PetscSinReal(spherical[2]);
-        fields[ bs*yang_idx + 1 ] = - vtheta * PetscCosReal(spherical[1])
+        fields[ nfields*yang_idx + 1 ] = - vtheta * PetscCosReal(spherical[1])
                                     + vr     * PetscSinReal(spherical[1]);
         
         /* pressure */
@@ -251,13 +251,14 @@ static PetscErrorCode ReconstructYinYangVelocityPressure(StagFieldBin *sfield, P
         PetscInt  yin_idx,yang_idx;
         /* Yin */
         yin_idx = i + j*n[0] + k*n[0]*n[1];
-        fields[ bs*yin_idx + 3 ] = (PetscReal)sfield->data[ bs*yin_idx + 3 ] - p_avg;
+        fields[ nfields*yin_idx + 3 ] = (PetscReal)sfield->data[ bs*yin_idx + 3 ] - p_avg;
         /* Yang */
         yang_idx = yin_idx + n[0]*n[1]*n[2];
-        fields[ bs*yang_idx + 3 ] = (PetscReal)sfield->data[ bs*yang_idx + 3 ] - p_avg;
+        fields[ nfields*yang_idx + 3 ] = (PetscReal)sfield->data[ bs*yang_idx + 3 ] - p_avg;
       }
     }
   }
+  sfield->yy_reconstructed = true;
   PetscCall(StagFieldBinFreeArrays(sfield));
   PetscFunctionReturn(PETSC_SUCCESS);
 }
@@ -295,6 +296,7 @@ static PetscErrorCode ReconstructYinYangGrid(StagFieldBin *sfield, PetscReal *co
   PetscCall(PetscFree(sfield->x));
   PetscCall(PetscFree(sfield->y));
   PetscCall(PetscFree(sfield->z));
+  sfield->yy_reconstructed = true;
   PetscFunctionReturn(PETSC_SUCCESS);
 }
 
@@ -365,89 +367,120 @@ static PetscErrorCode StagBinSwarmRemoveYinYangCorners(DM swarm, StagFieldBin *s
   /* Remove points */
   PetscCall(DMSwarmRemoveNPointsFromIndex(swarm, cnt, rm_idx));
   PetscCall(PetscFree(rm_idx));
+  /* mark that the yin-yang grid has been reconstructed and corners removed */
   PetscFunctionReturn(PETSC_SUCCESS);
 }
 
 static PetscErrorCode StagBinSwarmSetVelocityPressureFromFile(DM swarm, const char *filename, StagFieldBin *sfield)
 {
-  PetscInt  npoints;
-  PetscInt  *n;
+  PetscInt  npoints,bs;
   PetscReal *coords = NULL, *fields = NULL;
   PetscFunctionBeginUser;
 
   sfield->bs = 4; // velocity + pressure
   /* Read binary file and store data in sfield */
+  PetscCall(DMSwarmGetLocalSize(swarm,&npoints));
   PetscCall(StagReadBinaryFile(filename,sfield));
-  n       = sfield->n;
-  npoints = n[0] * n[1] * n[2] * sfield->nblocks;
-  /* Resize the swarm, WARNING: the following erases previous points in the swarm */
-  PetscCall(DMSwarmSetLocalSizes(swarm,npoints,-1));
+  if (npoints <= 0) {
+    PetscInt np;
+    PetscInt *n;
+
+    n  = sfield->n;
+    np = n[0] * n[1] * n[2] * sfield->nblocks;
+    PetscCall(DMSwarmSetLocalSizes(swarm,np,-1));
+    /* If swarm is resized, mark that the yin-yang grid has not been reconstructed */
+    sfield->yy_reconstructed = false; 
+  }
   /* Access coordinates and fields */
   PetscCall(DMSwarmGetField(swarm,DMSwarmPICField_coor,NULL,NULL,(void**)&coords));
-  PetscCall(DMSwarmGetField(swarm,"fields",NULL,NULL,(void**)&fields));
+  PetscCall(DMSwarmGetField(swarm,"fields",&bs,NULL,(void**)&fields));
   /* Set OVERLAPPING yin-yang coordinates and velocity-pressure fields */
-  PetscCall(ReconstructYinYangVelocityPressure(sfield,coords,fields));
+  PetscCall(ReconstructYinYangVelocityPressure(sfield,coords,bs,fields));
   /* Restore fields */
   PetscCall(DMSwarmRestoreField(swarm,DMSwarmPICField_coor,NULL,NULL,(void**)&coords));
-  PetscCall(DMSwarmRestoreField(swarm,"fields",NULL,NULL,(void**)&fields));
-  /* Remove points in overlapping region */
-  PetscCall(StagBinSwarmRemoveYinYangCorners(swarm,sfield));
+  PetscCall(DMSwarmRestoreField(swarm,"fields",&bs,NULL,(void**)&fields));
 
   PetscFunctionReturn(PETSC_SUCCESS);
 }
 
-static PetscErrorCode StagBinSwarmSetScalarFieldsFromFile(DM swarm, const char **files_list, PetscInt nfiles, StagFieldBin *sfield)
+static PetscErrorCode StagBinSwarmSetScalarFieldsFromFile(DM swarm, const char *fname, PetscInt block, StagFieldBin *sfield)
 {
-  PetscInt  f,bs,npoints;
+  PetscInt  bs,npoints;
   PetscReal *coords = NULL, *fields = NULL;
   PetscFunctionBeginUser;
 
   sfield->bs = 1; // scalar field
+  PetscCall(StagReadBinaryFile(fname,sfield));
   PetscCall(DMSwarmGetLocalSize(swarm,&npoints));
-  /* Check if there are any point inside the swarm */
+  /* If there are no points => resize the swarm */
   if (npoints <= 0) {
     PetscInt np;
     PetscInt *n;
-    PetscCall(StagReadBinaryFile(files_list[0],sfield));
+
     n  = sfield->n;
     np = n[0] * n[1] * n[2] * sfield->nblocks;
     PetscCall(DMSwarmSetLocalSizes(swarm,np,-1));
+    /* If swarm is resized, mark that the yin-yang grid has not been reconstructed */
+    sfield->yy_reconstructed = false; 
   }
-
   /* Fields */
   PetscCall(DMSwarmGetField(swarm,"fields", &bs, NULL, (void**)&fields));
-  PetscCheck(bs == nfiles,PETSC_COMM_SELF,PETSC_ERR_ARG_WRONG,"Number of swarm fields (%"PetscInt_FMT") does not match number of provided files (%"PetscInt_FMT")",bs,nfiles);
-  for (f=0; f<nfiles; f++) {
-    PetscPrintf(PETSC_COMM_WORLD,"Reading file %s\n",files_list[f]);
-    /* Read binary file and store data in sfield */
-    PetscCall(StagReadBinaryFile(files_list[f],sfield));
-    /* Insert scalar field data into swarm fields */
-    PetscCall(StagInsertScalarFieldData(sfield, f, bs, fields));
-  }
+  PetscCheck(bs > block,PETSC_COMM_SELF,PETSC_ERR_ARG_WRONG,"Block index for scalar field (%"PetscInt_FMT") exceeds number of swarm fields (%"PetscInt_FMT")",block,bs);
+  PetscCall(StagInsertScalarFieldData(sfield, block, bs, fields));
   PetscCall(DMSwarmRestoreField(swarm,"fields", &bs, NULL, (void**)&fields));
-  /* Coordinates */
-  PetscCall(DMSwarmGetField(swarm,DMSwarmPICField_coor,NULL,NULL,(void**)&coords));
-  /* Reconstruct yin-yang grid coordinates */
-  PetscCall(ReconstructYinYangGrid(sfield,coords));
-  PetscCall(DMSwarmRestoreField(swarm,DMSwarmPICField_coor,NULL,NULL,(void**)&coords));
-  /* Remove points in overlapping region */
-  PetscCall(StagBinSwarmRemoveYinYangCorners(swarm,sfield));
 
+  /* Coordinates */
+  if (!sfield->yy_reconstructed) {
+    PetscCall(DMSwarmGetField(swarm,DMSwarmPICField_coor,NULL,NULL,(void**)&coords));
+    /* Reconstruct yin-yang grid coordinates */
+    PetscCall(ReconstructYinYangGrid(sfield,coords));
+    PetscCall(DMSwarmRestoreField(swarm,DMSwarmPICField_coor,NULL,NULL,(void**)&coords));
+  }
   PetscFunctionReturn(PETSC_SUCCESS);
 }
 
-PetscErrorCode StagBinSwarmSetFromFiles(DM swarm, const char **files_list, PetscInt nfiles, PetscBool scalars)
+PetscErrorCode StagBinSwarmSetFromFiles(DM swarm, char **files_list, PetscInt nfiles, PetscBool *scalars)
 {
   StagFieldBin sfield;
+  PetscInt     f,block;
   PetscFunctionBeginUser;
+
+  if (nfiles < 1) { SETERRQ(PETSC_COMM_SELF,PETSC_ERR_ARG_WRONG,"At least one file must be provided."); }
 
   /* Initialize StagFieldBin */
   PetscCall(PetscMemzero(&sfield,sizeof(StagFieldBin)));
-  if (scalars) {
-    PetscCall(StagBinSwarmSetScalarFieldsFromFile(swarm,files_list,nfiles,&sfield));
-  } else {
-    PetscCall(StagBinSwarmSetVelocityPressureFromFile(swarm,files_list[0],&sfield));
+  /* 
+  If there is the velocity/pressure file (scalar[f] is false) we need to ensure it will be the first
+  entries in the swarm for the advection stuff. 
+  */
+  for (f=0; f<nfiles; f++) {
+    if (!scalars[f]) {
+      if (f != 0) {
+        /* Swap files_list[0] and files_list[f] */
+        char *temp    = files_list[0];
+        files_list[0] = files_list[f];
+        files_list[f] = temp;
+        /* Swap scalars[0] and scalars[f] */
+        PetscBool temp_bool = scalars[0];
+        scalars[0] = scalars[f];
+        scalars[f] = temp_bool;
+      }
+      break;
+    }
   }
+  block = 0;
+  for (f=0; f<nfiles; f++) {
+    PetscPrintf(PETSC_COMM_WORLD,"Loading data from file %s in block %" PetscInt_FMT "\n",files_list[f],block);
+    if (scalars[f]) {
+      StagBinSwarmSetScalarFieldsFromFile(swarm,files_list[f],block,&sfield);
+      block++;
+    } else {
+      StagBinSwarmSetVelocityPressureFromFile(swarm,files_list[f],&sfield);
+      block += 4; // velocity + pressure
+    }
+  }
+  /* Remove points in overlapping region */
+  PetscCall(StagBinSwarmRemoveYinYangCorners(swarm,&sfield));
   /* Ensure everything has been freed */
   PetscCall(StagFieldBinFreeArrays(&sfield));
   PetscFunctionReturn(PETSC_SUCCESS);

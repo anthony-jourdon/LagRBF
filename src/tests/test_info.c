@@ -451,9 +451,10 @@ PetscErrorCode TestMemoryUsage()
   PetscInt  np,cnt,npoints_i,npoints_d,npart;
   PetscInt  *rm_idx;
   PetscBool exists;
+  PetscBool scalars[] = {PETSC_FALSE};
   PetscMPIInt rank;
   //const char *output_fields[] = { DMSwarmPICField_coor, "fields" };
-  const char *fname[] = { "/mnt/c/Users/jourdon/Documents/Scripts/PostProc/StagYY/PJB6_YS1_Rh32_vp00039" };
+  char *fname[] = { "/mnt/c/Users/jourdon/Documents/Scripts/PostProc/StagYY/PJB6_YS1_Rh32_vp00039" };
   const char *output_fields[] = {"DMSwarm_pid","fields"};
   PetscFunctionBeginUser;
 
@@ -474,7 +475,7 @@ PetscErrorCode TestMemoryUsage()
   PetscCall(MPI_Comm_rank(PETSC_COMM_WORLD,&rank));
   /* Read data only on rank 0 */
   if (rank == 0) {
-    PetscCall(StagBinSwarmSetFromFiles(swarm_data, fname, 1, PETSC_FALSE));
+    PetscCall(StagBinSwarmSetFromFiles(swarm_data, fname, 1, scalars));
   }
   /* Send data to other ranks */
   PetscCall(DMSwarmAssignMigrateBasic(ctx,swarm_data));

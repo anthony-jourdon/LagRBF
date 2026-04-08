@@ -31,15 +31,15 @@ static PetscErrorCode BackwardTimeSteps(
   CellInfo         *ci;
   PetscInt         s;
   PetscReal        dt;
-  PetscBool        is_scalar,load,exists,found;
+  PetscBool        load,exists,found;
+  PetscBool        *is_scalar;
   PetscMPIInt      rank;
   const char       *output_fields[] = {"fields"};
   PetscFunctionBeginUser;
   PetscCallMPI(MPI_Comm_rank(PETSC_COMM_WORLD,&rank));
   PetscCall(LagRBFGetPartitionOfUnity(ctx,&pu));
   PetscCall(LagRBFGetCellInfo(ctx,&ci));
-  is_scalar = PETSC_FALSE; // for now we only use velocity-pressure fields
-
+  
   ctx->backward = PETSC_TRUE;
   ctx->forward  = PETSC_FALSE;
 
@@ -99,7 +99,7 @@ static PetscErrorCode BackwardTimeSteps(
     if (s > 0) { time_next = time_steps[s-1]; } 
     else       { time_next = time; }
     PetscCall(LagRBFSetTime(ctx,time));
-    PetscCall(StagGetFilelistFromOptions(step,&nfiles,&filenames,NULL));
+    PetscCall(StagGetFilelistFromOptions(step,&nfiles,&filenames,&is_scalar));
     PetscPrintf(PETSC_COMM_WORLD,"BACKWARD STEP[[ %" PetscInt_FMT " ]] : time = %g\n",s,time);
     PetscPrintf(PETSC_COMM_WORLD,"  Time to next step: %g\n",time_next - time);
     for (f=0; f<nfiles; f++) {
@@ -107,7 +107,7 @@ static PetscErrorCode BackwardTimeSteps(
     }
     /* Read data only on rank 0 */
     if (rank == 0) {
-      PetscCall(StagBinSwarmSetFromFiles(swarm_data,(const char**)filenames,nfiles,is_scalar));
+      PetscCall(StagBinSwarmSetFromFiles(swarm_data,filenames,nfiles,is_scalar));
     }
     /* Ensure that rank 0 has finished reading data */
     PetscCall(PetscBarrier((PetscObject)NULL));
@@ -159,7 +159,7 @@ static PetscErrorCode BackwardTimeSteps(
     /* Clear swarm data on all ranks */
     PetscCall(DMSwarmSetLocalSizes(swarm_data,0,-1));
     /* Free filenames */
-    PetscCall(StagRestoreFilelist(nfiles,&filenames));
+    PetscCall(StagRestoreFilelist(nfiles,&filenames,&is_scalar));
   }
   PetscFunctionReturn(PETSC_SUCCESS);
 }
@@ -177,7 +177,7 @@ static PetscErrorCode ForwardTimeSteps(
   CellInfo         *ci;
   PetscInt         s;
   PetscReal        dt;
-  PetscBool        is_scalar;
+  PetscBool        *is_scalar;
   PetscMPIInt      rank;
   const char       *output_fields[] = {"DMSwarm_pid","fields"};
   PetscFunctionBeginUser;
@@ -185,7 +185,6 @@ static PetscErrorCode ForwardTimeSteps(
   PetscCallMPI(MPI_Comm_rank(PETSC_COMM_WORLD,&rank));
   PetscCall(LagRBFGetPartitionOfUnity(ctx,&pu));
   PetscCall(LagRBFGetCellInfo(ctx,&ci));
-  is_scalar = PETSC_FALSE; // for now we only use velocity-pressure fields
   for (s=0; s<nsteps; s++) {
     PetscInt  f,nfiles,it;
     PetscInt  step = steps[s];
@@ -197,7 +196,7 @@ static PetscErrorCode ForwardTimeSteps(
     if (s < nsteps-1) { time_next = time_steps[s+1]; } 
     else              { time_next = time; }
     PetscCall(LagRBFSetTime(ctx,time));
-    PetscCall(StagGetFilelistFromOptions(step,&nfiles,&filenames,NULL));
+    PetscCall(StagGetFilelistFromOptions(step,&nfiles,&filenames,&is_scalar));
     PetscPrintf(PETSC_COMM_WORLD,"FORWARD STEP[[ %" PetscInt_FMT " ]] : time = %g\n",s,time);
     PetscPrintf(PETSC_COMM_WORLD,"  Time to next step: %g\n",time_next - time);
     for (f=0; f<nfiles; f++) {
@@ -206,7 +205,7 @@ static PetscErrorCode ForwardTimeSteps(
 
     /* Read data only on rank 0 */
     if (rank == 0) {
-      PetscCall(StagBinSwarmSetFromFiles(swarm_data,(const char**)filenames,nfiles,is_scalar));
+      PetscCall(StagBinSwarmSetFromFiles(swarm_data,filenames,nfiles,is_scalar));
     }
     /* Ensure that rank 0 has finished reading data */
     PetscCall(PetscBarrier((PetscObject)NULL));
@@ -267,7 +266,7 @@ static PetscErrorCode ForwardTimeSteps(
     /* Clear swarm on all ranks */
     PetscCall(DMSwarmSetLocalSizes(swarm_data,0,-1));
     /* Free filenames */
-    PetscCall(StagRestoreFilelist(nfiles,&filenames));
+    PetscCall(StagRestoreFilelist(nfiles,&filenames,&is_scalar));
   }
   PetscFunctionReturn(PETSC_SUCCESS);
 }

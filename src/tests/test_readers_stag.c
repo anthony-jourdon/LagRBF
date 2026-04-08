@@ -706,6 +706,7 @@ static PetscErrorCode TestStagBinMain()
   PetscInt  *rm_idx;
   PetscReal time,time_final,time_last_output,output_dt,dt;
   PetscBool exists;
+  PetscBool scalars[] = {PETSC_FALSE};
   PetscMPIInt rank;
   //const char *output_fields[] = { DMSwarmPICField_coor, "fields" };
   const char *fname[] = { "/home/jourdon/data/LagRBF_input/PJB6_YS1_Rh32_vp00039" };
@@ -736,7 +737,7 @@ static PetscErrorCode TestStagBinMain()
   PetscCall(MPI_Comm_rank(PETSC_COMM_WORLD,&rank));
   /* Read data only on rank 0 */
   if (rank == 0) {
-    PetscCall(StagBinSwarmSetFromFiles(swarm_data, fname, 1, PETSC_FALSE));
+    PetscCall(StagBinSwarmSetFromFiles(swarm_data, fname, 1, scalars));
   }
   /* Send data to other ranks */
   PetscCall(DMSwarmAssignMigrateBasic(ctx,swarm_data));
