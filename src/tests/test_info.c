@@ -441,6 +441,63 @@ static PetscErrorCode Test_4()
   PetscFunctionReturn(PETSC_SUCCESS);
 }
 #endif
+
+static PetscErrorCode Test_BuildFilenameTemplateUsage(void)
+{
+  char filename[PETSC_MAX_PATH_LEN];
+  PetscInt nt;
+  char **fnames;
+  char *coor_filename;
+  
+  PetscFunctionBeginUser;
+
+  PetscCall(BuildFilenameFromTemplate(
+    "{directory}{prefix}{step:07}{separator}{field}",
+    "output",
+    "model",
+    "temperature",
+    "_",
+    42,
+    filename
+  ));
+  PetscCall(PetscPrintf(PETSC_COMM_WORLD,"Template 1 -> %s\n",filename));
+
+  PetscCall(BuildFilenameFromTemplate(
+    "{directory}{prefix}{separator}{field}{step:05}",
+    "output",
+    "model",
+    "temperature",
+    "_",
+    42,
+    filename
+  ));
+  PetscCall(PetscPrintf(PETSC_COMM_WORLD,"Template 2 -> %s\n",filename));
+
+  PetscCall(BuildFilenameFromTemplate(
+    "{directory}{field}{separator}{step:01}{separator}{prefix}",
+    "output/",
+    "model",
+    "temperature",
+    "_",
+    42,
+    filename
+  ));
+  PetscCall(PetscPrintf(PETSC_COMM_WORLD,"Template 3 -> %s\n",filename));
+
+  PetscCall(GetFilelistFromOptions(39, &nt, &fnames, &coor_filename));
+  for (PetscInt i=0; i<nt; i++) {
+    PetscCall(PetscPrintf(PETSC_COMM_WORLD,"Filename from options[%d]: %s\n",i,fnames[i]));
+  }
+  if (coor_filename) {
+    PetscCall(PetscPrintf(PETSC_COMM_WORLD,"Coordinate filename from options: %s\n",coor_filename));
+  } else {
+    PetscCall(PetscPrintf(PETSC_COMM_WORLD,"No coordinate filename provided in options.\n"));
+  }
+  PetscCall(RestoreFilelist(nt, &fnames, &coor_filename));
+
+  PetscFunctionReturn(PETSC_SUCCESS);
+}
+
 PetscErrorCode TestMemoryUsage()
 {
   PartitionOfUnity pu;
@@ -566,46 +623,46 @@ PetscErrorCode Test_CellInfo()
 static PetscErrorCode Test_Load()
 {
   LagRBFCtx        ctx;
-  DM               swarm_interp;
+  PartitionOfUnity pu;
+  Partition        *partitions;
+  CellInfo         *ci;
+  DM               swarm_data,swarm_interp;
   PetscMPIInt      rank;
-  PetscBool        exists,found;
-  char             restart_dir[PETSC_MAX_PATH_LEN];
-  const char       *output_fields[] = {"DMSwarm_pid"};
+  PetscInt         nsteps,restart_idx;
+  PetscInt         *steps;
+  PetscReal        dt;
+  PetscReal        *time_steps;
+  PetscBool        found;
   PetscFunctionBeginUser;
 
   PetscCallMPI(MPI_Comm_rank(PETSC_COMM_WORLD,&rank));
-  PetscCall(PetscOptionsGetString(NULL,NULL,"-restart_directory",restart_dir,PETSC_MAX_PATH_LEN-1,&found));
-  PetscCall(PetscTestDirectory(restart_dir,'r',&exists));
-  PetscCheck(exists,PETSC_COMM_WORLD,PETSC_ERR_ARG_WRONG,"Restart directory %s not found.",restart_dir);
-
+  /* Create context */
   PetscCall(LagRBFCtxCreate(&ctx));
   PetscCall(LagRBFSetFromOptions(ctx));
 
   /* Create the output directory */
-  PetscCall(PetscTestDirectory(ctx->output_dir,'w',&exists));
-  if (!exists) { CreateDirectory(ctx->output_dir); }
-
+  PetscCall(CreateDirectory(ctx->output_dir));
+  
+  /* Create data structures */
   PetscCall(LagRBF_PartitionOfUnityCreate(ctx));
   PetscCall(LagRBF_PartitionCreate(ctx));
   PetscCall(LagRBF_CellInfoCreate(ctx));
 
+  PetscCall(LagRBFGetPartitionOfUnity(ctx,&pu));
+  PetscCall(LagRBFGetPartitions(ctx,&partitions));
+  PetscCall(LagRBFGetCellInfo(ctx,&ci));
+
+  /* Create the swarm to hold data */
+  PetscCall(SwarmDataCreate(ctx,&swarm_data));
   /* Create the swarm to interpolate on */
   PetscCall(SwarmInterpCreate(ctx,&swarm_interp));
+  
+  PetscCall(GetTimeStepsFromOptions(&nsteps,&steps,&time_steps));
+  PetscPrintf(PETSC_COMM_WORLD,"Number of time steps: %" PetscInt_FMT "\n",nsteps);
 
-  PetscCall(PetscOptionsGetInt(NULL,NULL,"-restart_step",&ctx->step,&found));
-  PetscCheck(found,PETSC_COMM_WORLD,PETSC_ERR_ARG_WRONG,"Option -restart_step not found.");
 
-  /* Load */
-  //if (rank == 0) {
-    PetscCall(SwarmInterpLoadFromFile(ctx, swarm_interp, restart_dir, PETSC_TRUE));
-  //}
-  //PetscCall(DMSwarmMigrate(swarm_interp,PETSC_TRUE));
-  PetscCall(SwarmInterpSetWeights(ctx,swarm_interp));
-  /* Write */
-  PetscCall(SwarmOutput(ctx,swarm_interp,1,output_fields,PETSC_FALSE));
 
-  PetscCall(DMDestroy(&swarm_interp));
-  PetscCall(LagRBFCtxDestroy(&ctx));
+
   PetscFunctionReturn(PETSC_SUCCESS);
 }
 
@@ -614,6 +671,8 @@ int main(int argc, char *argv[])
   PetscFunctionBeginUser;
   PetscCall(PetscInitialize(&argc,&argv,NULL,NULL));
 
+  PetscCall(Test_BuildFilenameTemplateUsage());
+
   //PetscCall(Test());
   //PetscCall(Test_Parallel());
   //PetscCall(Test_Parallel_2());
@@ -621,7 +680,7 @@ int main(int argc, char *argv[])
   //PetscCall(Test_4());
   //PetscCall(TestMemoryUsage());
   //PetscCall(Test_CellInfo());
-  PetscCall(Test_Load());
+  //PetscCall(Test_Load());
   PetscCall(PetscFinalize());
   
   return 0;

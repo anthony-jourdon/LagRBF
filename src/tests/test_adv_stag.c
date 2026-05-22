@@ -297,7 +297,7 @@ static PetscErrorCode Run_Backward_Forward()
   if (!exists) { CreateDirectory(ctx->output_dir); }
 
   /* Create data structures */
-  ctx->mtype = GEODYNAMICS; // Set the model type
+  ctx->mtype = STAGYY; // Set the model type
   PetscCall(LagRBF_PartitionOfUnityCreate(ctx));
   PetscCall(LagRBF_PartitionCreate(ctx));
   PetscCall(LagRBF_CellInfoCreate(ctx));
@@ -311,7 +311,7 @@ static PetscErrorCode Run_Backward_Forward()
   /* Create the swarm to interpolate on */
   PetscCall(SwarmInterpCreate(ctx,&swarm_interp));
   
-  PetscCall(StagGetTimeStepsFromOptions(&nsteps,&steps,&time_steps));
+  PetscCall(GetTimeStepsFromOptions(&nsteps,&steps,&time_steps));
   PetscPrintf(PETSC_COMM_WORLD,"Number of time steps: %" PetscInt_FMT "\n",nsteps);
 
   dt = 1.0e-7;
@@ -333,7 +333,7 @@ static PetscErrorCode Run_Backward_Forward()
   PetscCall(ForwardTimeSteps(ctx,swarm_data,swarm_interp,nsteps,steps,time_steps));
 
   /* Clean up */
-  PetscCall(StagRestoreTimeSteps(&steps,&time_steps));
+  PetscCall(RestoreTimeSteps(&steps,&time_steps));
   PetscCall(DMDestroy(&swarm_data));
   PetscCall(DMDestroy(&swarm_interp));
   PetscCall(LagRBFCtxDestroy(&ctx));
@@ -363,7 +363,7 @@ static PetscErrorCode RunBackward()
   if (!exists) { CreateDirectory(ctx->output_dir); }
 
   /* Create data structures */
-  ctx->mtype = GEODYNAMICS; // Set the model type
+  ctx->mtype = STAGYY; // Set the model type
   PetscCall(LagRBF_PartitionOfUnityCreate(ctx));
   PetscCall(LagRBF_PartitionCreate(ctx));
   PetscCall(LagRBF_CellInfoCreate(ctx));
@@ -377,7 +377,7 @@ static PetscErrorCode RunBackward()
   /* Create the swarm to interpolate on */
   PetscCall(SwarmInterpCreate(ctx,&swarm_interp));
   
-  PetscCall(StagGetTimeStepsFromOptions(&nsteps,&steps,&time_steps));
+  PetscCall(GetTimeStepsFromOptions(&nsteps,&steps,&time_steps));
   PetscPrintf(PETSC_COMM_WORLD,"Number of time steps: %" PetscInt_FMT "\n",nsteps);
 
   dt = 1.0e-7;
@@ -388,7 +388,7 @@ static PetscErrorCode RunBackward()
   PetscCall(BackwardTimeSteps(ctx,swarm_data,swarm_interp,nsteps,steps,time_steps));
 
   /* Clean up */
-  PetscCall(StagRestoreTimeSteps(&steps,&time_steps));
+  PetscCall(RestoreTimeSteps(&steps,&time_steps));
   PetscCall(DMDestroy(&swarm_data));
   PetscCall(DMDestroy(&swarm_interp));
   PetscCall(LagRBFCtxDestroy(&ctx));

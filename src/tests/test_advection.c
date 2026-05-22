@@ -347,7 +347,7 @@ static PetscErrorCode Test_advection()
   PetscCall(TestDirectory(ctx->output_dir,'w',&exists));
   if (!exists) { PetscCall(CreateDirectory(ctx->output_dir)); }
   //p->output_dir
-  ctx->mtype = GEODYNAMICS; // Set the model type
+  ctx->mtype = STAGYY; // Set the model type
   PetscCall(LagRBF_PartitionOfUnityCreate(ctx));
   PetscCall(LagRBF_PartitionCreate(ctx));
   PetscCall(LagRBF_CellInfoCreate(ctx));

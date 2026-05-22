@@ -159,7 +159,7 @@ static PetscErrorCode Test()
   PetscCall(LagRBFSetFromOptions(ctx));
   PetscCall(TestDirectory(ctx->output_dir,'w',&exists));
   if (!exists) { PetscCall(CreateDirectory(ctx->output_dir)); }
-  ctx->mtype = GEODYNAMICS; // Set the model type
+  ctx->mtype = STAGYY; // Set the model type
   PetscCall(LagRBF_PartitionOfUnityCreate(ctx));
   PetscCall(LagRBF_PartitionCreate(ctx));
   PetscCall(LagRBFGetPartitionOfUnity(ctx,&pu));
@@ -709,7 +709,7 @@ static PetscErrorCode TestStagBinMain()
   PetscBool scalars[] = {PETSC_FALSE};
   PetscMPIInt rank;
   //const char *output_fields[] = { DMSwarmPICField_coor, "fields" };
-  const char *fname[] = { "/home/jourdon/data/LagRBF_input/PJB6_YS1_Rh32_vp00039" };
+  char *fname[] = { "/home/jourdon/data/LagRBF_input/PJB6_YS1_Rh32_vp00039" };
   const char *output_fields[] = {"DMSwarm_pid","fields","velocity","DMSwarm_rank"};
   PetscFunctionBeginUser;
 
@@ -722,7 +722,7 @@ static PetscErrorCode TestStagBinMain()
   if (!exists) { CreateDirectory(ctx->mat_dir); }
 
   /* Create data structures */
-  ctx->mtype = GEODYNAMICS; // Set the model type
+  ctx->mtype = STAGYY; // Set the model type
   PetscCall(LagRBF_PartitionOfUnityCreate(ctx));
   PetscCall(LagRBF_PartitionCreate(ctx));
   PetscCall(LagRBF_CellInfoCreate(ctx));
