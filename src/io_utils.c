@@ -20,40 +20,7 @@ PetscErrorCode CreateDirectory(const char dirname[])
   PetscCallMPI(MPI_Barrier(PETSC_COMM_WORLD));
   PetscFunctionReturn(PETSC_SUCCESS);
 }
-#if 0
-PetscErrorCode CreateDirectory(const char dirname[])
-{
-  PetscMPIInt rank;
-  int num = 0, error_number = 0;
 
-  PetscFunctionBeginUser;
-  PetscCallMPI(MPI_Comm_rank(PETSC_COMM_WORLD,&rank));
-
-  /* Generate a new directory on proc 0 */
-  if (rank == 0) {
-    num = mkdir(dirname, S_IRWXU | S_IRWXG);
-    error_number = errno;
-  }
-  PetscCallMPI(MPI_Bcast(&num,1,MPI_INT,0,PETSC_COMM_WORLD));
-  PetscCallMPI(MPI_Bcast(&error_number,1,MPI_INT,0,PETSC_COMM_WORLD));
-
-  if (error_number == EEXIST) {
-    PetscPrintf(PETSC_COMM_WORLD,"Writing output to existing directory: %s \n",dirname);
-  } else if (error_number == EACCES) {
-    SETERRQ(PETSC_COMM_WORLD,PETSC_ERR_USER,"Write permission is denied for the parent directory in which the new directory is to be added");
-  } else if (error_number == EMLINK) {
-    SETERRQ(PETSC_COMM_WORLD,PETSC_ERR_USER,"The parent directory has too many links (entries)");
-  } else if (error_number == ENOSPC) {
-    SETERRQ(PETSC_COMM_WORLD,PETSC_ERR_USER,"The file system doesn't have enough room to create the new directory");
-  } else if (error_number == EROFS) {
-    SETERRQ(PETSC_COMM_WORLD,PETSC_ERR_USER,"The parent directory of the directory being created is on a read-only file system and cannot be modified");
-  } else {
-    PetscPrintf(PETSC_COMM_WORLD,"Created output directory: %s\n",dirname);
-  }
-  PetscCall(PetscBarrier((PetscObject)NULL));
-  PetscFunctionReturn(PETSC_SUCCESS);
-}
-#endif
 PetscErrorCode TestDirectory(const char dirname[], char mode, PetscBool *_exists)
 {
   PetscMPIInt rank;
@@ -244,21 +211,267 @@ PetscErrorCode ISLoadFromFile(IS is, const char *name)
 
   PetscFunctionReturn(PETSC_SUCCESS);
 }
-#if 0
-PetscErrorCode GetOutputFieldsFromOptions(PetscInt *nfields, char ***fields)
+
+PetscErrorCode GetTimeStepsFromOptions(PetscInt *nsteps, PetscInt **steps, PetscReal **time_steps)
 {
+  PetscInt  nt,nn;
+  PetscInt  *tsteps_int = NULL;
+  PetscReal *tsteps = NULL;
   PetscBool found;
   char      prefix[PETSC_MAX_PATH_LEN];
   PetscFunctionBeginUser;
-  PetscCall(PetscSNPrintf(prefix,PETSC_MAX_PATH_LEN-1,"output_"));
-  PetscCall(PetscOptionsGetStringArray(NULL,prefix,"-output_fields",NULL,nfields,&found));
+
+  PetscCall(PetscSNPrintf(prefix,PETSC_MAX_PATH_LEN-1,"data_"));
+  PetscCall(PetscOptionsGetInt(NULL,prefix,"-nsteps",&nt,&found));
+  if (!found) {
+    if (nsteps) *nsteps = 0;
+    PetscCalloc1(1,&tsteps);
+    if (time_steps) *time_steps = tsteps;
+    PetscCalloc1(1,&tsteps_int);
+    if (steps) *steps = tsteps_int;
+    PetscFunctionReturn(PETSC_SUCCESS);
+  }
+  PetscCall(PetscMalloc1(nt,&tsteps));
+  PetscCall(PetscMalloc1(nt,&tsteps_int));
+  nn = nt;
+  PetscCall(PetscOptionsGetRealArray(NULL,prefix,"-time_steps",tsteps,&nn,&found));
+  PetscCheck(nn == nt,PETSC_COMM_WORLD,PETSC_ERR_ARG_INCOMP,"Number of time steps does not match the length of the time_steps array");
+  nn = nt;
+  PetscCall(PetscOptionsGetIntArray(NULL,prefix,"-steps",tsteps_int,&nn,&found));
+  PetscCheck(nn == nt,PETSC_COMM_WORLD,PETSC_ERR_ARG_INCOMP,"Number of time steps does not match the length of the steps array");
+  if (nsteps)     *nsteps = nt;
+  if (time_steps) *time_steps = tsteps;
+  if (steps)      *steps = tsteps_int;
+  PetscFunctionReturn(PETSC_SUCCESS);
+}
+
+PetscErrorCode RestoreTimeSteps(PetscInt **steps, PetscReal **time_steps)
+{
+  PetscReal *tsteps = *time_steps;
+  PetscInt  *tsteps_int = *steps;
+  PetscFunctionBeginUser;
+  PetscCall(PetscFree(tsteps));
+  PetscCall(PetscFree(tsteps_int));
+  *time_steps = NULL;
+  *steps = NULL;
+  PetscFunctionReturn(PETSC_SUCCESS);
+}
+
+static PetscErrorCode StrFillFromToken(
+  const char *token, 
+  size_t token_len,
+  const char *eos,
+  char out[], 
+  PetscInt *out_pos, 
+  const char **template_pos
+)
+{
+  PetscInt   i;
+  const char *str = token ? token : "";
+  size_t     slen;
+  PetscFunctionBeginUser;
+
+  /* Copy the content of the token */
+  PetscCall(PetscStrlen(str,&slen));
+  for (i=0; i<slen; i++) {
+    PetscCheck(*out_pos < PETSC_MAX_PATH_LEN-1,PETSC_COMM_SELF,PETSC_ERR_ARG_SIZ,"Expanded filename exceeds PETSC_MAX_PATH_LEN");
+    out[*out_pos] = str[i];
+    (*out_pos)++;
+  }
+  /* Append the end-of-string marker if any */
+  if (eos && eos[0] != '\0') {
+    if (slen > 0 && str[slen-1] != eos[0]) {
+      PetscCheck(*out_pos < PETSC_MAX_PATH_LEN-1,PETSC_COMM_SELF,PETSC_ERR_ARG_SIZ,"Expanded filename exceeds PETSC_MAX_PATH_LEN");
+      out[(*out_pos)++] = eos[0];
+    }
+  }
+  /* Append the null terminator */
+  out[*out_pos] = '\0';
+  /* Update the template position */
+  *template_pos += token_len;
+  PetscFunctionReturn(PETSC_SUCCESS);
+}
+
+PetscErrorCode BuildFilenameFromTemplate(
+  const char template_name[],
+  const char directory[],
+  const char prefix[],
+  const char field[],
+  const char separator[],
+  PetscInt   step,
+  char       out[]
+)
+{
+  /* 
+  Example: "{directory}{prefix}{step:06}{separator}{field}" -> "data/model000042_temp" 
+  Example: "{directory}{prefix}{separator}{field}{step:05}" -> "data/model_temp00042"
+  */
+  PetscInt   out_pos = 0;
+  PetscBool  match;
+  char       stepbuf[64];
+  const char *p;
+
+  PetscFunctionBeginUser;
+  PetscCheck(template_name,PETSC_COMM_SELF,PETSC_ERR_ARG_NULL,"template_name must not be NULL");
+  PetscCheck(out,PETSC_COMM_SELF,PETSC_ERR_ARG_NULL,"out must not be NULL");
+
+  out[0] = '\0';
+  p = template_name;
+
+  while (*p) {
+    if (*p != '{') {
+      PetscCheck(out_pos < PETSC_MAX_PATH_LEN-1,PETSC_COMM_SELF,PETSC_ERR_ARG_SIZ,"Expanded filename exceeds PETSC_MAX_PATH_LEN");
+      out[out_pos++] = *p++;
+      out[out_pos] = '\0';
+      continue;
+    }
+
+    PetscCall(PetscStrncmp(p,"{directory}",11,&match));
+    if (match) {
+      PetscCall(StrFillFromToken(directory, 11, "/", out, &out_pos, &p));
+      continue;
+    }
+    PetscCall(PetscStrncmp(p,"{prefix}",8,&match));
+    if (match) {
+      PetscCall(StrFillFromToken(prefix, 8, NULL, out, &out_pos, &p));
+      continue;
+    }
+    PetscCall(PetscStrncmp(p,"{field}",7,&match));
+    if (match) {
+      PetscCall(StrFillFromToken(field, 7, NULL, out, &out_pos, &p));
+      continue;
+    }
+    PetscCall(PetscStrncmp(p,"{separator}",11,&match));
+    if (match) {
+      PetscCall(StrFillFromToken(separator, 11, NULL, out, &out_pos, &p));
+      continue;
+    }
+    PetscCall(PetscStrncmp(p,"{step}",6,&match));
+    if (match) {
+      PetscCall(PetscSNPrintf(stepbuf,sizeof(stepbuf),"%" PetscInt_FMT,step));
+      PetscCall(StrFillFromToken(stepbuf, 6, NULL, out, &out_pos, &p));
+      continue;
+    }
+    PetscCall(PetscStrncmp(p,"{step:",6,&match));
+    if (match) {
+      const char *q = p + 6;
+      int        width = 0;
+      PetscBool  has_digit = PETSC_FALSE;
+      size_t     slen;
+      PetscInt   i;
+
+      while (*q >= '0' && *q <= '9') {
+        has_digit = PETSC_TRUE;
+        width = 10 * width + (int)(*q - '0');
+        q++;
+      }
+      PetscCheck(has_digit && *q == '}',PETSC_COMM_SELF,PETSC_ERR_ARG_WRONG,"Invalid step token. Expected {step:N} where N is an integer width");
+      PetscCheck(width >= 0 && width <= 50,PETSC_COMM_SELF,PETSC_ERR_ARG_OUTOFRANGE,"Step padding width must be in [0,50]");
+
+      PetscCall(PetscSNPrintf(stepbuf,sizeof(stepbuf),"%0*" PetscInt_FMT,width,step));
+      PetscCall(PetscStrlen(stepbuf,&slen));
+      for (i=0; i<slen; i++) {
+        PetscCheck(out_pos < PETSC_MAX_PATH_LEN-1,PETSC_COMM_SELF,PETSC_ERR_ARG_SIZ,"Expanded filename exceeds PETSC_MAX_PATH_LEN");
+        out[out_pos++] = stepbuf[i];
+      }
+      out[out_pos] = '\0';
+      p = q + 1;
+      continue;
+    }
+
+    PetscCheck(PETSC_FALSE,PETSC_COMM_SELF,PETSC_ERR_ARG_WRONG,"Unknown template token near: %.32s",p);
+  }
+
+  PetscFunctionReturn(PETSC_SUCCESS);
+}
+
+PetscErrorCode GetFilelistFromOptions(PetscInt step, PetscInt *nfiles, char ***filenames, char **coorfname)
+{
+  PetscInt    nt,nn,f;
+  char        *coor_fname = NULL;
+  char        **fnames = NULL, **fieldnames = NULL;
+  char        template[PETSC_MAX_PATH_LEN],template_dir[PETSC_MAX_PATH_LEN];
+  char        prefix[PETSC_MAX_PATH_LEN],name_prefix[PETSC_MAX_PATH_LEN],separator[PETSC_MAX_PATH_LEN];
+  char        directory[PETSC_MAX_PATH_LEN],dir_prefix[PETSC_MAX_PATH_LEN],basename[PETSC_MAX_PATH_LEN],sub_dir[PETSC_MAX_PATH_LEN];
+  char        coor_name[PETSC_MAX_PATH_LEN];
+  PetscBool   found;
+  PetscFunctionBeginUser;
+
+  PetscCall(PetscSNPrintf(prefix,PETSC_MAX_PATH_LEN-1,"data_"));
+
+  /* Default template -> StagYY naming convention: outdir/model_t00039 */
+  PetscCall(PetscSNPrintf(template, PETSC_MAX_PATH_LEN-1, "{directory}{prefix}{separator}{field}{step:05}"));
+  PetscCall(PetscOptionsGetString(NULL,prefix,"-fname_template",template,PETSC_MAX_PATH_LEN-1,&found));
+  if (!found) { PetscCall(PetscPrintf(PETSC_COMM_WORLD,"Using default filename template: %s\n",template)); }
+
+  /* Initialize all strings to empty characters */
+  name_prefix[0] = '\0';
+  separator[0]   = '\0';
+  PetscCall(PetscOptionsGetString(NULL,prefix,"-fname_prefix",name_prefix,PETSC_MAX_PATH_LEN-1,&found));
+  PetscCall(PetscOptionsGetString(NULL,prefix,"-fname_separator",separator,PETSC_MAX_PATH_LEN-1,&found));
+
+  /* Subdirectory template when a step based directory structure is used. Default is empty */
+  template_dir[0] = '\0';
+  PetscCall(PetscOptionsGetString(NULL,prefix,"-dirname_template",template_dir,PETSC_MAX_PATH_LEN-1,&found));
+  if (!found) { PetscCall(PetscPrintf(PETSC_COMM_WORLD,"Using default directory template: %s\n",template_dir)); }
+  dir_prefix[0] = '\0';
+  PetscCall(PetscOptionsGetString(NULL,prefix,"-dirname_prefix",dir_prefix,PETSC_MAX_PATH_LEN-1,&found));
+  PetscCall(BuildFilenameFromTemplate(template_dir, "", dir_prefix, "", "", step, sub_dir));
+  /* Absolute directory path */
+  basename[0] = '\0';
+  PetscCall(PetscOptionsGetString(NULL,prefix,"-dirname_base",basename,PETSC_MAX_PATH_LEN-1,&found));
   if (found) {
-    PetscCall(PetscMalloc1(*nfields,fields));
-    PetscCall(PetscOptionsGetStringArray(NULL,prefix,"-output_fields",*fields,nfields,&found));
+    PetscCall(PetscSNPrintf(directory, PETSC_MAX_PATH_LEN-1, "%s/%s", basename, sub_dir));
   } else {
-    *nfields = 0;
-    *fields  = NULL;
+    PetscCall(PetscSNPrintf(directory, PETSC_MAX_PATH_LEN-1, "%s", sub_dir));
+  }
+
+  /* Fields */
+  PetscCall(PetscOptionsGetInt(NULL,prefix,"-fname_nfiles",&nt,&found));
+  PetscCheck(found,PETSC_COMM_WORLD,PETSC_ERR_ARG_WRONG,"Option -%sfname_nfiles not found. User must provide the number of files to read.",prefix);
+  PetscCall(PetscMalloc1(nt,&fieldnames));
+  nn = nt;
+  PetscCall(PetscOptionsGetStringArray(NULL,prefix,"-fname_fields", fieldnames, &nn, &found));
+  PetscCheck(found,PETSC_COMM_WORLD,PETSC_ERR_ARG_WRONG,"Option -%sfname_fields not found. User must provide the list of field names to read.",prefix);
+  PetscCheck(nn == nt,PETSC_COMM_WORLD,PETSC_ERR_ARG_SIZ,"Option -%sfname_fields must have %" PetscInt_FMT " values, found: %" PetscInt_FMT "",prefix,nt,nn);
+  PetscCall(PetscMalloc1(nt,&fnames));
+
+  /* Assemble filenames using template */
+  for (f=0; f<nt; f++) {
+    PetscCall(PetscMalloc1(PETSC_MAX_PATH_LEN,&fnames[f]));
+    PetscCall(BuildFilenameFromTemplate(template, directory, name_prefix, fieldnames[f], separator, step, fnames[f]));
+  }
+
+  /* Coordinate filename */
+  coor_name[0] = '\0';
+  PetscCall(PetscOptionsGetString(NULL,prefix,"-fname_coordinates",coor_name,PETSC_MAX_PATH_LEN-1,&found));
+  if (found) { 
+    PetscMalloc1(PETSC_MAX_PATH_LEN,&coor_fname);
+    PetscCall(BuildFilenameFromTemplate(template, directory, name_prefix, coor_name, separator, step, coor_fname)); 
+  }
+
+  if (nfiles)    *nfiles = nt;
+  if (filenames) *filenames = fnames;
+  if (coorfname) *coorfname = coor_fname;
+  PetscCall(PetscFree(fieldnames));
+  PetscFunctionReturn(PETSC_SUCCESS);
+}
+
+PetscErrorCode RestoreFilelist(PetscInt nfiles, char ***filenames, char **coorfname)
+{
+  PetscInt f;
+  char     **fnames = *filenames;
+  PetscFunctionBeginUser;
+  if (fnames) {
+    for (f=0; f<nfiles; f++) {
+    PetscCall(PetscFree(fnames[f]));
+    }
+    PetscCall(PetscFree(fnames));
+    *filenames = NULL;
+  }
+  if (coorfname) {
+    PetscCall(PetscFree(*coorfname));
+    *coorfname = NULL;
   }
   PetscFunctionReturn(PETSC_SUCCESS);
 }
-#endif
