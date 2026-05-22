@@ -22,3 +22,9 @@ def PetscVecWrite(fname:str, v:np.ndarray):
     v = np.reshape(v, (v.shape[0] * bs))
   PetscVecWriteToFile(fname, v)
   return
+
+def PetscISWriteToFile(fname:str, iset:np.ndarray):
+  io  = PetscBinaryIO.PetscBinaryIO()
+  iset_view = iset.view(PetscBinaryIO.IS)
+  io.writeBinaryFile(fname, [iset_view,])
+  return
