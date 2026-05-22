@@ -110,7 +110,7 @@ static PetscErrorCode LagRBF_Interpolate_Interface(
   PetscCall(DMDestroy(&swarm_interp));
   PetscCall(LagRBFCtxDestroy(&ctx));
 
-  PetscCall(PetscFinalize());
+  //PetscCall(PetscFinalize());
   PetscFunctionReturn(PETSC_SUCCESS);
 }
 
