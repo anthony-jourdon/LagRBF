@@ -26,6 +26,7 @@ PetscErrorCode PUCreate(PartitionOfUnity *pu)
   p->O          = NULL;
   p->L          = NULL;
   p->epsilon    = 1.0;
+  p->overlap    = 1.0;
   p->psetup_set = PETSC_FALSE;
   p->psetup     = NULL;
   p->pdestroy   = NULL;
@@ -72,6 +73,11 @@ PetscErrorCode PUSetFromOptions(PartitionOfUnity pu)
   PetscCall(PetscSNPrintf(option_name, PETSC_MAX_PATH_LEN-1, "-%sL",prefix));
   PetscCall(PetscOptionsGetRealArray(NULL,NULL,option_name,pu->L,&nn,&found));
   if (found) { PetscCheck(nn == pu->dim,PETSC_COMM_WORLD,PETSC_ERR_ARG_SIZ,"Option %s. Expected %" PetscInt_FMT " entries, found %" PetscInt_FMT "",option_name,pu->dim,nn); }
+
+  /* Overlap */
+  pu->overlap = 1.0;
+  PetscCall(PetscSNPrintf(option_name, PETSC_MAX_PATH_LEN-1, "-%soverlap",prefix));
+  PetscCall(PetscOptionsGetReal(NULL,NULL,option_name,&pu->overlap,&found));
 
   PetscFunctionReturn(PETSC_SUCCESS);
 }
@@ -301,7 +307,7 @@ PetscErrorCode PartitionOfUnityComputeEpsilon(PartitionOfUnity pu)
   for (d=0; d<dim; d++) {
     box_length = PetscMax(box_length,(pu->L[d] - pu->O[d]));
   }
-  overlap = 1.0*box_length;
+  overlap = pu->overlap * box_length;
   radius  = overlap / PetscPowReal(global_npart,1.0/dim);
   pu->epsilon = 1.0 / radius;
   PetscFunctionReturn(PETSC_SUCCESS);

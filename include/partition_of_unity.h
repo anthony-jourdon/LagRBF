@@ -14,6 +14,7 @@ struct _p_PartitionOfUnity {
   PetscInt  *ptos; // Parallel to sequential mapping of elements
   PetscReal *O,*L; // Origin and Length of the partition of unity mesh
   PetscReal epsilon; // Epsilon factor for the RBF kernel
+  PetscReal overlap; // Overlap factor for the partition of unity
   char      name[PETSC_MAX_PATH_LEN]; // Name of the parallel DMDA mesh
   char      sname[PETSC_MAX_PATH_LEN]; // Name of the sequential DMDA mesh
   
