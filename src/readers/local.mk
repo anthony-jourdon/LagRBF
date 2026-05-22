@@ -3,4 +3,4 @@ liblagrangian-offline-y.c += $(call thisdir, \
 )
 
 # include subdirectories
-include $(call incsubdirs, stagYY)
+include $(call incsubdirs, stagYY petsc_loader)

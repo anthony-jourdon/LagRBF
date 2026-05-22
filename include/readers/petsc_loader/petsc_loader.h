@@ -1,0 +1,8 @@
+#ifndef softname_petsc_loader_h
+#define softname_petsc_loader_h
+
+PetscErrorCode SwarmSetFieldFromPetscFile(DM sw, const char *fname, PetscInt *block, MPI_Comm comm);
+PetscErrorCode SwarmSetFromPetscFiles(DM sw, const char **filenames, PetscInt nfiles, const char *coor_fname);
+PetscErrorCode PetscLoadDataToSwarmFromFiles(LagRBFCtx ctx, DM sw);
+
+#endif
