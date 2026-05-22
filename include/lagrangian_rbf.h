@@ -13,10 +13,9 @@ typedef struct _p_AdvectionCtx     *AdvectionCtx;
 typedef struct _p_CellInfo         *CellInfo;
 
 typedef enum {
-  GEODYNAMICS = 0, // Geodynamics model
-  SURFACE, // Surface process model
-  CLIMATE
-} InterpModelType;
+  STAGYY = 0, // StagYY binary format
+  PETSC       // PETSc binary format
+} DataFMT;
 
 typedef enum {
   A_FACTOR=0, // Direct solver with matrix factorization
@@ -26,7 +25,7 @@ typedef enum {
 
 struct _p_LagRBFCtx {
   PartitionOfUnity pu; // Partition of Unity context
-  InterpModelType  mtype; // Model type   
+  DataFMT          mtype; // Data format type   
   AdvectionCtx     adv_ctx;  // Advection context
   Partition        *partitions; // Array of partitions structs
   CellInfo         *cellinfo; // Array of cell info structs
@@ -65,7 +64,9 @@ PetscErrorCode LagRBFSetStep(LagRBFCtx ctx, PetscInt step);
 PetscErrorCode LagRBFSetTimeStep(LagRBFCtx ctx, PetscReal dt);
 PetscErrorCode LagRBFSetTime(LagRBFCtx ctx, PetscReal time);
 PetscErrorCode LagRBFSetSolveMethod(LagRBFCtx ctx, ASolveMethod method);
+PetscErrorCode LagRBFSetDataFormat(LagRBFCtx ctx, DataFMT mtype);
 /* Getters */
+PetscErrorCode LagRBFGetDataFormat(LagRBFCtx ctx, DataFMT *mtype);
 PetscErrorCode LagRBFGetSolveMethod(LagRBFCtx ctx, ASolveMethod *method);
 PetscErrorCode LagRBFGetKernelType(LagRBFCtx ctx, KernelType *type);
 PetscErrorCode LagRBFGetPartitionOfUnity(LagRBFCtx ctx, PartitionOfUnity *pu);

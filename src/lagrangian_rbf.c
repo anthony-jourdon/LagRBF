@@ -14,7 +14,7 @@ PetscErrorCode LagRBFCtxCreate(LagRBFCtx *ctx)
   PetscCall(PetscNew(&p));
   p->pu           = NULL;
   p->adv_ctx      = NULL; 
-  p->mtype        = GEODYNAMICS; // Default model type
+  p->mtype        = STAGYY; // Default model type
   p->partitions   = NULL;
   p->cellinfo     = NULL;
   p->kernel_type  = KERNEL_LINEAR;
@@ -26,7 +26,7 @@ PetscErrorCode LagRBFCtxCreate(LagRBFCtx *ctx)
   p->noutput      = 0;
   p->nload        = 0;
   p->time         = 0.0;
-  p->rmin         = PETSC_MIN_REAL;
+  p->rmin         = 0.0;
   p->rmax         = PETSC_MAX_REAL;
   p->cfl_fac      = 0.4;
   p->restart      = PETSC_FALSE;
@@ -107,7 +107,7 @@ PetscErrorCode LagRBF_CellInfoCreate(LagRBFCtx ctx)
 
 PetscErrorCode LagRBFSetFromOptions(LagRBFCtx ctx)
 {
-  PetscInt  scheme,kernel_type,solve_method;
+  PetscInt  scheme,kernel_type,solve_method,data_type;
   PetscBool found;
   char option_name[PETSC_MAX_PATH_LEN],velocity_name[PETSC_MAX_PATH_LEN];
   PetscFunctionBeginUser;
@@ -122,6 +122,8 @@ PetscErrorCode LagRBFSetFromOptions(LagRBFCtx ctx)
   PetscCall(PetscOptionsGetReal(NULL,NULL,"-rmin",&ctx->rmin,NULL));
   PetscCall(PetscOptionsGetReal(NULL,NULL,"-rmax",&ctx->rmax,NULL));
   PetscCall(PetscOptionsGetReal(NULL,NULL,"-cfl_fac",&ctx->cfl_fac,NULL));
+  PetscCall(PetscOptionsGetInt(NULL,NULL,"-data_format",&data_type,&found));
+  if (found) { PetscCall(LagRBFSetDataFormat(ctx,(DataFMT)data_type)); }
 
   /* output */
   PetscCall(PetscOptionsGetInt(NULL,NULL,"-output_nfields",&ctx->noutput,&found));
@@ -204,6 +206,20 @@ PetscErrorCode LagRBFSetSolveMethod(LagRBFCtx ctx, ASolveMethod method)
 {
   PetscFunctionBeginUser;
   ctx->solve_method = method;
+  PetscFunctionReturn(PETSC_SUCCESS);
+}
+
+PetscErrorCode LagRBFSetDataFormat(LagRBFCtx ctx, DataFMT mtype)
+{
+  PetscFunctionBeginUser;
+  ctx->mtype = mtype;
+  PetscFunctionReturn(PETSC_SUCCESS);
+}
+
+PetscErrorCode LagRBFGetDataFormat(LagRBFCtx ctx, DataFMT *mtype)
+{
+  PetscFunctionBeginUser;
+  if (mtype) { *mtype = ctx->mtype; }
   PetscFunctionReturn(PETSC_SUCCESS);
 }
 
