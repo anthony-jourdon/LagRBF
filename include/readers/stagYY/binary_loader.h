@@ -1,5 +1,5 @@
-#ifndef __softname_binary_loader_h
-#define __softname_binary_loader_h
+#ifndef softname_binary_loader_h
+#define softname_binary_loader_h
 
 typedef struct {
   int    n[3];
