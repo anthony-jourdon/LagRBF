@@ -4,12 +4,7 @@
 #include <petsc.h>
 #include "lagrangian_rbf.h"
 
-PetscErrorCode StagGetTimeStepsFromOptions(PetscInt *nsteps, PetscInt **steps, PetscReal **time_steps);
-PetscErrorCode StagRestoreTimeSteps(PetscInt **steps, PetscReal **time_steps);
-//PetscErrorCode StagGetFilelistFromOptions(PetscInt step, PetscInt *nfiles, char ***filenames, PetscBool *is_scalar);
-//PetscErrorCode StagRestoreFilelist(PetscInt nfiles, char ***filenames);
 PetscErrorCode StagLoadDataToSwarmFromFiles(LagRBFCtx ctx, DM sw);
-
 PetscErrorCode StagGetFilelistFromOptions(PetscInt step, PetscInt *nfiles, char ***filenames, PetscBool **is_scalar);
 PetscErrorCode StagRestoreFilelist(PetscInt nfiles, char ***filenames, PetscBool **is_scalar);
 
