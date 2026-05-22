@@ -1,8 +1,11 @@
 #include <petsc.h>
 #include "lagrangian_rbf.h"
 #include "partition_of_unity.h"
+#include "io_utils.h" 
 #include "swarm/swarm_utils.h"
+#include "swarm/swarm_load.h"
 #include "readers/stagYY/stag_utils.h"
+#include "readers/petsc_loader/petsc_loader.h"
 
 /* 
 Create the DM Swarm to hold the points bearing the data to interpolate.
@@ -130,8 +133,22 @@ PetscErrorCode SwarmDataAssignMigrateDuplicateGhostPoints(LagRBFCtx ctx, DM swar
 
 PetscErrorCode SwarmDataLoad(LagRBFCtx ctx, DM sw)
 {
+  DataFMT     dtype;
   PetscFunctionBeginUser;
-  /* For now there is only stag data, but the idea is to be able to choose between several type here */
-  PetscCall(StagLoadDataToSwarmFromFiles(ctx,sw));
+
+  LagRBFGetDataFormat(ctx,&dtype);
+  switch (dtype) {
+    case STAGYY:
+      PetscCall(StagLoadDataToSwarmFromFiles(ctx,sw));
+      break;
+
+    case PETSC:
+      PetscCall(PetscLoadDataToSwarmFromFiles(ctx, sw));
+      break;
+    
+    default:
+      SETERRQ(PETSC_COMM_WORLD,PETSC_ERR_ARG_UNKNOWN_TYPE,"Data format not recognized. Found: %d",dtype);
+      break;
+  }
   PetscFunctionReturn(PETSC_SUCCESS);
 }
