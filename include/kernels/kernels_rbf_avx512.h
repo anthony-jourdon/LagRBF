@@ -7,8 +7,7 @@
 inline __m512d KernelLinear_AVX512(__m512d r, __m512d epsilon)
 {
   __m512d u;
-  __m512d one = _mm512_set1_pd(1.0);
-  u = _mm512_sub_pd(one, _mm512_mul_pd(epsilon, r)); // u = 1 - epsilon * r
+  u = _mm512_mul_pd(epsilon, r); // u = epsilon * r
   return u;
 }
 
@@ -46,15 +45,16 @@ inline __m512d KernelWendlandC2_AVX512(__m512d r, __m512d epsilon)
 
 inline __m512d KernelBump_AVX512(__m512d r, __m512d epsilon)
 {
-  __m512d u,neg_inv_u2,rbf;
+  __m512d u,neg_inv_u2,denominator,rbf;
   __m512d one = _mm512_set1_pd(1.0);
   __mmask8 mask;
   
-  u    = _mm512_sub_pd(one, _mm512_mul_pd(epsilon, r)); // u = 1 - epsilon * r
-  mask = _mm512_cmp_pd_mask(u, _mm512_setzero_pd(), _CMP_GE_OQ); // mask for u >= 0
-  neg_inv_u2 = _mm512_div_pd(_mm512_set1_pd(-1.0), _mm512_mul_pd(u, u)); // -1 / (u * u) / (1.25 * u * u)
-  rbf = Exp_AVX512(neg_inv_u2); // exp(-1 / (u * u))
-  rbf = _mm512_maskz_mov_pd(mask, rbf); // apply mask to zero out values where u < 0
+  u           = _mm512_sub_pd(one, _mm512_mul_pd(epsilon, r)); // u = 1 - epsilon * r
+  mask        = _mm512_cmp_pd_mask(u, _mm512_setzero_pd(), _CMP_GE_OQ); // mask for u >= 0
+  denominator = _mm512_mul_pd(u, _mm512_sub_pd(_mm512_set1_pd(2.0), u)); // u * (2.0 - u)
+  neg_inv_u2  = _mm512_div_pd(_mm512_set1_pd(-1.0), denominator); // -1 / (u * (2.0 - u))
+  rbf         = Exp_AVX512(neg_inv_u2); // exp(-1 / (u * (2.0 - u)))
+  rbf         = _mm512_maskz_mov_pd(mask, rbf); // apply mask to zero out values where u < 0
   return rbf;
 }
 #endif

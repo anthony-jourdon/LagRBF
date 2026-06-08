@@ -5,7 +5,7 @@ PetscReal KernelLinear(PetscReal r, PetscReal epsilon)
 {
   PetscReal u;
   PetscFunctionBeginUser;
-  u = 1.0 - epsilon * r;
+  u = epsilon * r;
   PetscFunctionReturn(u);
 }
 
@@ -33,14 +33,14 @@ PetscReal KernelBump(PetscReal r, PetscReal epsilon)
   PetscFunctionBeginUser;
   u = 1.0 - epsilon * r;
   if (u < 0.0) PetscFunctionReturn(0.0);
-  return exp(-1.0 / (u * u));
+  return PetscExpReal(-1.0 / (u * (2.0 - u)));
 }
 
 PetscReal KernelMultiquadric(PetscReal r, PetscReal epsilon)
 {
   PetscReal rbf,u;
   PetscFunctionBeginUser;
-  u = 1.0 - epsilon * r;
+  u   = epsilon * r;
   rbf = sqrt(1.0 + u*u);
   PetscFunctionReturn(rbf);
 }
@@ -49,7 +49,7 @@ PetscReal KernelInverseMultiquadric(PetscReal r, PetscReal epsilon)
 {
   PetscReal rbf,u;
   PetscFunctionBeginUser;
-  u = 1.0 - epsilon * r;
+  u   = epsilon * r;
   rbf = 1.0 / sqrt(1.0 + u*u);
   PetscFunctionReturn(rbf);
 }
@@ -58,7 +58,7 @@ PetscReal KernelGaussian(PetscReal r, PetscReal epsilon)
 {
   PetscReal rbf,u;
   PetscFunctionBeginUser;
-  u = 1.0 - epsilon * r;
+  u   = epsilon * r;
   rbf = exp(-u*u);
   PetscFunctionReturn(rbf);
 }
