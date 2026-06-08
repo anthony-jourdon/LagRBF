@@ -55,3 +55,14 @@ dkms.conf
 *.pyc
 *.pyo
 __pycache__/
+
+# Petsc output
+*.pbvec
+*.pbis
+*.info
+
+# vtk output
+*.vtk
+*.vtu
+*.vts
+*.vtp
