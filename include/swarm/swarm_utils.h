@@ -15,6 +15,7 @@ PetscErrorCode CopyArbitraryBlockData_Real(PetscReal dest[], PetscReal source[],
 PetscErrorCode SwarmCreatePIC(PartitionOfUnity pu, DM *sw);
 PetscReal halton_sequence(PetscInt index, PetscInt base);
 PetscErrorCode DMSwarmSetPointsSphericalCoordinates(DM sw, PetscReal min[], PetscReal max[], PetscInt npoints[], InsertMode mode, PetscBool halton);
+PetscErrorCode DMSwarmSetPointsCoordinates_FromOptions(DM sw, InsertMode mode);
 PetscErrorCode DMSwarmRemoveNPointsFromIndex(DM swarm, PetscInt nindices, PetscInt *indices);
 PetscErrorCode DMSwarmPICSetCellId(DM sw);
 PetscErrorCode DMSwarmMigrate_Push_DuplicatePoints(DM swarm, PetscInt point_start, PetscInt point_end);

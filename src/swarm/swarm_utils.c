@@ -135,6 +135,143 @@ PetscReal halton_sequence(PetscInt index, PetscInt base)
   PetscFunctionReturn(r);
 }
 
+PetscErrorCode DMSwarmSetPointsCoordinates_Halton(DM sw, PetscReal min[], PetscReal max[], PetscInt npoints[], InsertMode mode)
+{
+  PetscFunctionBeginUser;
+
+  DMSwarmCellDM     celldm;
+  DM                da = NULL;
+  Vec               pos = NULL;
+  PetscSF           sfcell = NULL;
+  const PetscSFNode *LA_sfcell;
+  PetscInt          i,j,k,p,n_estimate,d,Nfc,dim,n_found,n_new_est,n_curr;
+  PetscInt          _npoints[] = {0, 0, 1}, halton_bases[] = {2, 3, 5};
+  PetscInt          *swarm_cellid;
+  PetscReal         O[] = {PETSC_MAX_REAL, PETSC_MAX_REAL, PETSC_MAX_REAL};
+  PetscReal         L[] = {PETSC_MIN_REAL, PETSC_MIN_REAL, PETSC_MIN_REAL};
+  PetscReal         *_pos,*swarm_coor;
+  const PetscReal   *_coor;
+  const char        **coordFields,*cellid;
+  PetscFunctionBeginUser;
+
+  PetscPrintf(PETSC_COMM_WORLD,"[[ %s ]]\n",PETSC_FUNCTION_NAME);
+  PetscCall(PetscLogEventBegin(LAGRBF_SphericalCoordinates_Halton,0,0,0,0));
+  DMSWARMPICVALID(sw);
+  PetscCall(DMSwarmGetCellDMActive(sw,&celldm));
+  PetscCall(DMSwarmCellDMGetCoordinateFields(celldm, &Nfc, &coordFields));
+  PetscCheck(Nfc == 1, PetscObjectComm((PetscObject)sw), PETSC_ERR_SUP, "We only support a single coordinate field right now, not %" PetscInt_FMT, Nfc);
+
+  PetscCall(DMSwarmCellDMGetDM(celldm,&da));
+  PetscCall(DMGetLocalBoundingBox(da,O,L));
+  PetscCall(DMGetCoordinateDim(da, &dim));
+
+  for (d=0; d<dim; d++) {
+    _npoints[d] = npoints[d];
+  }
+
+  /* determine number of points living in the bounding box */
+  n_estimate = 0;
+  for (k=0; k<_npoints[2]; k++) {
+    for (j=0; j<_npoints[1]; j++) {
+      for (i=0; i<_npoints[0]; i++) {
+        PetscReal xp[] = {0.0, 0.0, 0.0};
+        PetscInt  pidx;
+        PetscBool point_inside = PETSC_TRUE;
+
+        pidx = i + _npoints[0]*j + _npoints[0]*_npoints[1]*k;
+        /* Set point coordinates */
+        for (d=0; d<dim; d++) {
+          xp[d] = min[d] + halton_sequence(pidx, halton_bases[d]) * (max[d] - min[d]);
+        }
+
+        /* Check if the points is in the DMDA */
+        for (d=0; d<dim; d++) {
+          if (xp[d] < O[d]) point_inside = PETSC_FALSE;
+          if (xp[d] > L[d]) point_inside = PETSC_FALSE;
+        }
+        if (point_inside) n_estimate++;
+      }
+    }
+  }
+  /* create candidate list */
+  PetscCall(VecCreate(PETSC_COMM_SELF, &pos));
+  PetscCall(VecSetSizes(pos, dim * n_estimate, PETSC_DECIDE));
+  PetscCall(VecSetBlockSize(pos, dim));
+  PetscCall(VecSetFromOptions(pos));
+  PetscCall(VecGetArray(pos, &_pos));
+
+  n_estimate = 0;
+  for (k=0; k<_npoints[2]; k++) {
+    for (j=0; j<_npoints[1]; j++) {
+      for (i=0; i<_npoints[0]; i++) {
+        PetscReal xp[] = {0.0, 0.0, 0.0};
+        PetscInt  pidx;
+        PetscBool point_inside = PETSC_TRUE;
+
+        pidx   = i + _npoints[0]*j + _npoints[0]*_npoints[1]*k;
+        /* Set point coordinates */
+        for (d=0; d<dim; d++) {
+          xp[d] = min[d] + halton_sequence(pidx, halton_bases[d]) * (max[d] - min[d]);
+        }
+        /* Check if the points is in the DMDA */
+        for (d=0; d<dim; d++) {
+          if (xp[d] < O[d]) point_inside = PETSC_FALSE;
+          if (xp[d] > L[d]) point_inside = PETSC_FALSE;
+        }
+        if (point_inside) {
+          memcpy(&_pos[dim * n_estimate], xp, dim * sizeof(PetscReal));
+          n_estimate++;
+        }
+      }
+    }
+  }
+  PetscCall(VecRestoreArray(pos,&_pos));
+
+  /* locate points */
+  PetscCall(DMLocatePoints(da,pos,DM_POINTLOCATION_NONE,&sfcell));
+  PetscCall(PetscSFGetGraph(sfcell,NULL,NULL,NULL,&LA_sfcell));
+  n_found = 0;
+  for (p=0; p<n_estimate; p++) {
+    if (LA_sfcell[p].index != DMLOCATEPOINT_POINT_NOT_FOUND) n_found++;
+  }
+
+  /* adjust size */
+  if (mode == ADD_VALUES) {
+    PetscCall(DMSwarmGetLocalSize(sw,&n_curr));
+    n_new_est = n_curr + n_found;
+    PetscCall(DMSwarmSetLocalSizes(sw,n_new_est,-1));
+  }
+  if (mode == INSERT_VALUES) {
+    n_curr    = 0;
+    n_new_est = n_found;
+    PetscCall(DMSwarmSetLocalSizes(sw,n_new_est,-1));
+  }
+
+  /* initialize new coords, cell owners, pid */
+  PetscCall(DMSwarmCellDMGetCellID(celldm,&cellid));
+  PetscCall(VecGetArrayRead(pos,&_coor));
+  PetscCall(DMSwarmGetField(sw,coordFields[0],NULL,NULL,(void **)&swarm_coor));
+  PetscCall(DMSwarmGetField(sw,cellid,NULL,NULL,(void **)&swarm_cellid));
+  n_found = 0;
+  for (p = 0; p < n_estimate; p++) {
+    if (LA_sfcell[p].index != DMLOCATEPOINT_POINT_NOT_FOUND) {
+      memcpy(&swarm_coor[dim * (n_curr + n_found)], &_coor[dim * p], dim * sizeof(PetscReal));
+      swarm_cellid[n_curr + n_found] = LA_sfcell[p].index;
+      n_found++;
+    }
+  }
+  PetscCall(DMSwarmRestoreField(sw, cellid, NULL, NULL, (void **)&swarm_cellid));
+  PetscCall(DMSwarmRestoreField(sw, coordFields[0], NULL, NULL, (void **)&swarm_coor));
+  PetscCall(VecRestoreArrayRead(pos, &_coor));
+
+  PetscCall(PetscSFDestroy(&sfcell));
+  PetscCall(VecDestroy(&pos));
+  PetscCall(PetscLogEventEnd(LAGRBF_SphericalCoordinates_Halton,0,0,0,0));
+  PetscFunctionReturn(PETSC_SUCCESS);
+
+  PetscFunctionReturn(PETSC_SUCCESS);
+}
+
 static PetscErrorCode PointSetSphericalToCartesianCoordinate(PetscReal params[], PetscReal coords[])
 {
   PetscFunctionBeginUser;
@@ -567,6 +704,46 @@ PetscErrorCode DMSwarmSetPointsSphericalCoordinates(DM sw, PetscReal min[], Pets
     PetscFunctionReturn(PETSC_SUCCESS);
   }
   PetscCall(DMSwarmSetPointsSphericalCoordinates_Uniform(sw, min, max, npoints, mode));
+  PetscFunctionReturn(PETSC_SUCCESS);
+}
+
+PetscErrorCode DMSwarmSetPointsCoordinates_FromOptions(DM sw, InsertMode mode)
+{
+  PetscReal  min[]     = {0.0, 0.0, 0.0}; 
+  PetscReal  max[]     = {1.0, 1.0, 1.0};
+  PetscInt   dim,nn;
+  PetscInt   npoints[] = {32, 32, 1};
+  PetscBool  halton = PETSC_FALSE;
+  PetscBool  spherical = PETSC_FALSE;
+  PetscBool  found;
+  const char *prefix;
+  PetscFunctionBeginUser;
+
+  PetscCall(DMGetDimension(sw, &dim));
+  PetscCall(DMGetOptionsPrefix(sw,&prefix));
+  PetscCall(PetscOptionsGetBool(NULL,prefix,"-spherical",&spherical,NULL));
+  PetscCall(PetscOptionsGetBool(NULL,prefix,"-halton",&halton,NULL));
+
+  nn = dim;
+  PetscCall(PetscOptionsGetRealArray(NULL,prefix,"-O",min,&nn,&found));
+  if (found) { PetscCheck(nn == dim, PETSC_COMM_SELF, PETSC_ERR_ARG_SIZ, "Expected %" PetscInt_FMT " values for -O, found %" PetscInt_FMT, dim, nn); }
+  nn = dim;
+  PetscCall(PetscOptionsGetRealArray(NULL,prefix,"-L",max,&nn,&found));
+  if (found) { PetscCheck(nn == dim, PETSC_COMM_SELF, PETSC_ERR_ARG_SIZ, "Expected %" PetscInt_FMT " values for -L, found %" PetscInt_FMT, dim, nn); }
+  nn = dim;
+  PetscCall(PetscOptionsGetIntArray(NULL,prefix,"-npoints",npoints,&nn,&found));
+  if (found) { PetscCheck(nn == dim, PETSC_COMM_SELF, PETSC_ERR_ARG_SIZ, "Expected %" PetscInt_FMT " values for -npoints, found %" PetscInt_FMT, dim, nn); }
+
+  if (spherical) {
+    PetscCall(DMSwarmSetPointsSphericalCoordinates(sw, min, max, npoints, mode, halton));
+  } else {
+    if (halton) {
+      PetscCall(DMSwarmSetPointsCoordinates_Halton(sw, min, max, npoints, mode));
+    } else {
+      PetscCall(DMSwarmSetPointsUniformCoordinates(sw, min, max, npoints, mode));
+    }
+  }
+
   PetscFunctionReturn(PETSC_SUCCESS);
 }
 
