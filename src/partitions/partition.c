@@ -177,7 +177,6 @@ PetscErrorCode PartitionCreate(PartitionOfUnity pu, Partition **partition)
 {
   Partition *p;
   PetscInt  n,npart;
-  //PetscReal epsilon;
   PetscFunctionBeginUser;
   PetscPrintf(PETSC_COMM_WORLD,"[[ %s ]]\n",PETSC_FUNCTION_NAME);
 
@@ -188,9 +187,6 @@ PetscErrorCode PartitionCreate(PartitionOfUnity pu, Partition **partition)
   PetscCall(PartitionCreate_PartitionToCellInverseMapping(pu,p));
   /* Set the index of each partition */
   PetscCall(PartitionsSetIndex(pu,p));
-  /* Set the epsilon value for each partition */
-  //PetscCall(PUGetEpsilon(pu,&epsilon));
-  //for (n=0; n<npart; n++) { PetscCall(PartitionSetEpsilon(p[n],epsilon)); }
 
   *partition = p;
   PetscFunctionReturn(PETSC_SUCCESS);
@@ -401,21 +397,21 @@ PetscErrorCode PartitionGetRBFMatrix(Partition p, Mat *A)
   PetscFunctionReturn(PETSC_SUCCESS);
 }
 
-PetscErrorCode PartitionGetEpsilon(Partition p, PetscReal *epsilon)
+PetscErrorCode PartitionGetShapeFactor(Partition p, PetscReal *epsilon)
 {
   PetscFunctionBeginUser;
-  SETERRQ(PETSC_COMM_SELF,PETSC_ERR_SUP,"Espilon is no longer stored in the Partition structure but in PartitionOfUnity.");
+  SETERRQ(PETSC_COMM_SELF,PETSC_ERR_SUP,"Shape Factor is no longer stored in the Partition structure but in PartitionOfUnity.");
   PetscCheck(p,PETSC_COMM_SELF,PETSC_ERR_ARG_NULL,"Partition structure is NULL. Call PartitionCreate() first.");
-  //if (epsilon) { *epsilon = p->epsilon; }
+  //if (epsilon) { *epsilon = p->epsilon_r; }
   PetscFunctionReturn(PETSC_SUCCESS);
 }
 
-PetscErrorCode PartitionSetEpsilon(Partition p, PetscReal epsilon)
+PetscErrorCode PartitionSetShapeFactor(Partition p, PetscReal epsilon)
 {
   PetscFunctionBeginUser;
-  SETERRQ(PETSC_COMM_SELF,PETSC_ERR_SUP,"Espilon is no longer stored in the Partition structure but in PartitionOfUnity.");
+  SETERRQ(PETSC_COMM_SELF,PETSC_ERR_SUP,"Shape Factor is no longer stored in the Partition structure but in PartitionOfUnity.");
   PetscCheck(p,PETSC_COMM_SELF,PETSC_ERR_ARG_NULL,"Partition structure is NULL. Call PartitionCreate() first.");
-  //p->epsilon = epsilon;
+  //p->epsilon_r = epsilon;
   PetscFunctionReturn(PETSC_SUCCESS);
 }
 

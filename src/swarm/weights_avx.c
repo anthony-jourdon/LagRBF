@@ -128,7 +128,7 @@ PetscErrorCode SwarmInterpSetWeights_AVX256(LagRBFCtx ctx, DM sw)
     break;
   }
 
-  epsilon = _mm256_set1_pd(pu->epsilon);
+  epsilon = _mm256_set1_pd(pu->epsilon_w);
   npart_aligned = (npart/4)*4; // number of partitions that can be processed with AVX (4 at a time)
   /* Process each point */
   for (np=0; np<npoints; np++) {
@@ -180,7 +180,7 @@ PetscErrorCode SwarmInterpSetWeights_AVX256(LagRBFCtx ctx, DM sw)
         dist += (pcoords[dim*np + d] - LA_coords[dim*puidx + d]) * (pcoords[dim*np + d] - LA_coords[dim*puidx + d]);
       }
       dist   = PetscSqrtReal(dist);
-      weight = KernelWendlandC2(dist,pu->epsilon);
+      weight = KernelWendlandC2(dist,pu->epsilon_w);
       sum_w[np] += weight;
 
       /* Store the weight only for the nodes connected to this element */
@@ -336,7 +336,7 @@ PetscErrorCode SwarmInterpSetWeights_AVX256_PointVectorized(LagRBFCtx ctx, DM sw
     break;
   }
 
-  epsilon = _mm256_set1_pd(pu->epsilon);
+  epsilon = _mm256_set1_pd(pu->epsilon_w);
   npoints_aligned = (npoints/4)*4; // number of points that can be processed with AVX256 (4 at a time)
   /* Process each partition */
   for (n=0; n<npart; n++) {
@@ -399,7 +399,7 @@ PetscErrorCode SwarmInterpSetWeights_AVX256_PointVectorized(LagRBFCtx ctx, DM sw
         dist += (pcoords[dim*np + d] - LA_coords[dim*puidx + d]) * (pcoords[dim*np + d] - LA_coords[dim*puidx + d]);
       }
       dist   = PetscSqrtReal(dist);
-      weight = KernelWendlandC2(dist, pu->epsilon);
+      weight = KernelWendlandC2(dist, pu->epsilon_w);
       sum_w[np] += weight;
 
       /* Get element info */

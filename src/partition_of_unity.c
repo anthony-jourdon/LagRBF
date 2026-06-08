@@ -25,8 +25,10 @@ PetscErrorCode PUCreate(PartitionOfUnity *pu)
   p->ptos       = NULL;
   p->O          = NULL;
   p->L          = NULL;
-  p->epsilon    = 1.0;
+  p->epsilon_w  = 1.0;
+  p->epsilon_r  = 1.0;
   p->overlap    = 1.0;
+  p->shape_fac  = 1.0;
   p->psetup_set = PETSC_FALSE;
   p->psetup     = NULL;
   p->pdestroy   = NULL;
@@ -39,7 +41,7 @@ PetscErrorCode PUCreate(PartitionOfUnity *pu)
 PetscErrorCode PUSetFromOptions(PartitionOfUnity pu)
 {
   PetscInt  nn,d;
-  char      prefix[PETSC_MAX_PATH_LEN],option_name[PETSC_MAX_PATH_LEN];
+  char      prefix[PETSC_MAX_PATH_LEN];
   PetscBool found;
   PetscFunctionBeginUser;
   PetscCheck(pu,PETSC_COMM_SELF,PETSC_ERR_ARG_NULL,"Partition of Unity structure is NULL. Call PUCreate() first.");
@@ -47,37 +49,36 @@ PetscErrorCode PUSetFromOptions(PartitionOfUnity pu)
   PetscCall(PetscSNPrintf(prefix, PETSC_MAX_PATH_LEN-1, "%s_", pu->name));
 
   /* Spatial dimension */
-  PetscCall(PetscSNPrintf(option_name, PETSC_MAX_PATH_LEN-1, "-%sdim", prefix));
-  PetscCall(PetscOptionsGetInt(NULL,NULL,option_name,&pu->dim,&found));
-  PetscCheck(found,PETSC_COMM_WORLD,PETSC_ERR_ARG_WRONG,"Option %s not provided. Use it to set the spatial dimension of the problem.",option_name);
+  PetscCall(PetscOptionsGetInt(NULL,prefix,"-dim",&pu->dim,&found));
+  PetscCheck(found,PETSC_COMM_WORLD,PETSC_ERR_ARG_WRONG,"Option -%sdim not provided. Use it to set the spatial dimension of the problem.",prefix);
   PetscCheck(pu->dim >= 1 && pu->dim <= 3,PETSC_COMM_WORLD,PETSC_ERR_ARG_OUTOFRANGE,"Spatial dimension must be between 1 and 3. Found: %" PetscInt_FMT,pu->dim);
   
   /* Number of partition in each dimension */
   PetscCall(PetscMalloc1(pu->dim,&pu->n));
   nn = pu->dim; // Number of entries expected
-  PetscCall(PetscSNPrintf(option_name, PETSC_MAX_PATH_LEN-1, "-%sn", prefix));
-  PetscCall(PetscOptionsGetIntArray(NULL,NULL,option_name,pu->n,&nn,&found));
-  PetscCheck(found,PETSC_COMM_WORLD,PETSC_ERR_ARG_WRONG,"Option %s not provided. Use it to set the number of partitions in each spatial dimension.",option_name);
-  PetscCheck(nn == pu->dim,PETSC_COMM_WORLD,PETSC_ERR_ARG_SIZ,"Option %s. Expected %" PetscInt_FMT " entries, found %" PetscInt_FMT "",option_name,pu->dim,nn);
+  PetscCall(PetscOptionsGetIntArray(NULL,prefix,"-n",pu->n,&nn,&found));
+  PetscCheck(found,PETSC_COMM_WORLD,PETSC_ERR_ARG_WRONG,"Option -%sn not provided. Use it to set the number of partitions in each spatial dimension.",prefix);
+  PetscCheck(nn == pu->dim,PETSC_COMM_WORLD,PETSC_ERR_ARG_SIZ,"Option -%sn. Expected %" PetscInt_FMT " entries, found %" PetscInt_FMT "",prefix,pu->dim,nn);
   
   /* Bounding box */
   /* Origin */
   PetscCall(PetscMalloc1(pu->dim,&pu->O));
   for (d=0; d<pu->dim; d++) { pu->O[d] = 0.0; } // Default origin
-  PetscCall(PetscSNPrintf(option_name, PETSC_MAX_PATH_LEN-1, "-%sO",prefix));
-  PetscCall(PetscOptionsGetRealArray(NULL,NULL,option_name,pu->O,&nn,&found));
-  if (found) { PetscCheck(nn == pu->dim,PETSC_COMM_WORLD,PETSC_ERR_ARG_SIZ,"Option %s. Expected %" PetscInt_FMT " entries, found %" PetscInt_FMT "",option_name,pu->dim,nn); }
+  PetscCall(PetscOptionsGetRealArray(NULL,prefix,"-O",pu->O,&nn,&found));
+  if (found) { PetscCheck(nn == pu->dim,PETSC_COMM_WORLD,PETSC_ERR_ARG_SIZ,"Option -%sO. Expected %" PetscInt_FMT " entries, found %" PetscInt_FMT "",prefix,pu->dim,nn); }
   /* Length */
   PetscCall(PetscMalloc1(pu->dim,&pu->L));
   for (d=0; d<pu->dim; d++) { pu->L[d] = 1.0; } // Default length
-  PetscCall(PetscSNPrintf(option_name, PETSC_MAX_PATH_LEN-1, "-%sL",prefix));
-  PetscCall(PetscOptionsGetRealArray(NULL,NULL,option_name,pu->L,&nn,&found));
-  if (found) { PetscCheck(nn == pu->dim,PETSC_COMM_WORLD,PETSC_ERR_ARG_SIZ,"Option %s. Expected %" PetscInt_FMT " entries, found %" PetscInt_FMT "",option_name,pu->dim,nn); }
+  PetscCall(PetscOptionsGetRealArray(NULL,prefix,"-L",pu->L,&nn,&found));
+  if (found) { PetscCheck(nn == pu->dim,PETSC_COMM_WORLD,PETSC_ERR_ARG_SIZ,"Option -%sL. Expected %" PetscInt_FMT " entries, found %" PetscInt_FMT "",prefix,pu->dim,nn); }
 
   /* Overlap */
   pu->overlap = 1.0;
-  PetscCall(PetscSNPrintf(option_name, PETSC_MAX_PATH_LEN-1, "-%soverlap",prefix));
-  PetscCall(PetscOptionsGetReal(NULL,NULL,option_name,&pu->overlap,&found));
+  PetscCall(PetscOptionsGetReal(NULL,prefix,"-overlap",&pu->overlap,&found));
+
+  /* Shape factor */
+  PetscCall(PetscOptionsGetReal(NULL,prefix,"-shape_factor",&pu->shape_fac,&found));
+  PetscCheck(pu->shape_fac > 0.0,PETSC_COMM_WORLD,PETSC_ERR_ARG_OUTOFRANGE,"Shape factor must be positive. Found: %g",pu->shape_fac);
 
   PetscFunctionReturn(PETSC_SUCCESS);
 }
@@ -264,8 +265,10 @@ PetscErrorCode PartitionOfUnityCreate(PartitionOfUnity *pu)
   PetscCall(PUCreateDMDA(p));
   /* Create the local DMDA to hold partitions */
   PetscCall(PUCreateDMDALocal(p));
-  /* Set the epsilon factor for RBF */
-  PetscCall(PartitionOfUnityComputeEpsilon(p));
+  /* Set the support factor for weights kernel */
+  PetscCall(PartitionOfUnityComputeSupport(p));
+  /* Set the shape factor for interpolation kernel */
+  PetscCall(PartitionOfUnityComputeShapeFactor(p));
 
   *pu = p;
   PetscFunctionReturn(PETSC_SUCCESS);
@@ -289,7 +292,7 @@ PetscErrorCode PartitionOfUnityDestroy(PartitionOfUnity *pu)
   PetscFunctionReturn(PETSC_SUCCESS);
 }
 
-PetscErrorCode PartitionOfUnityComputeEpsilon(PartitionOfUnity pu)
+PetscErrorCode PartitionOfUnityComputeSupport(PartitionOfUnity pu)
 {
   DM        dap = NULL;
   PetscInt  d,dim,global_npart;
@@ -299,17 +302,28 @@ PetscErrorCode PartitionOfUnityComputeEpsilon(PartitionOfUnity pu)
   /* Get the parallel DMDA */
   PetscCall(PUGetDMDA(pu,&dap));
   PetscCall(DMDAGetInfo(dap,&dim,&M[0],&M[1],&M[2],NULL,NULL,NULL,NULL,NULL,NULL,NULL,NULL,NULL));
-  /* Compute the RBF epsilon factor */
+  /* Compute the support factor for weights kernel */
   global_npart = 1;
   for (d=0; d<dim; d++) { global_npart *= M[d]; }
-  /* Set epsilon parameter */
+  /* Get the box length */
   box_length = 0.0;
   for (d=0; d<dim; d++) {
     box_length = PetscMax(box_length,(pu->L[d] - pu->O[d]));
   }
   overlap = pu->overlap * box_length;
+  /* Support radius */
   radius  = overlap / PetscPowReal(global_npart,1.0/dim);
-  pu->epsilon = 1.0 / radius;
+  /* Support factor */
+  pu->epsilon_w = 1.0 / radius;
+  PetscFunctionReturn(PETSC_SUCCESS);
+}
+
+PetscErrorCode PartitionOfUnityComputeShapeFactor(PartitionOfUnity pu)
+{
+  PetscReal epsilon_w = 0.0;
+  PetscFunctionBeginUser;
+  PetscCall(PUGetSupportFactor(pu,&epsilon_w));
+  pu->epsilon_r = pu->shape_fac * epsilon_w;
   PetscFunctionReturn(PETSC_SUCCESS);
 }
 
@@ -399,12 +413,21 @@ PetscErrorCode PUGetGlobalToLocalElementMap(PartitionOfUnity pu, PetscInt **ptos
   PetscFunctionReturn(PETSC_SUCCESS);
 }
 
-PetscErrorCode PUGetEpsilon(PartitionOfUnity pu, PetscReal *epsilon)
+PetscErrorCode PUGetSupportFactor(PartitionOfUnity pu, PetscReal *epsilon)
 {
   PetscFunctionBeginUser;
   PetscCheck(pu,PETSC_COMM_SELF,PETSC_ERR_ARG_NULL,"Partition of Unity structure is NULL. Call PartitionOfUnityCreate() first.");
-  PetscCheck(pu->epsilon > 0.0,PETSC_COMM_SELF,PETSC_ERR_ARG_WRONGSTATE,"Partition of Unity epsilon not computed yet. Call PartitionOfUnityComputeEpsilon() first.");
-  if (epsilon) { *epsilon = pu->epsilon; }
+  PetscCheck(pu->epsilon_w > 0.0,PETSC_COMM_SELF,PETSC_ERR_ARG_WRONGSTATE,"Partition of Unity epsilon not computed yet. Call PartitionOfUnityComputeSupport() first.");
+  if (epsilon) { *epsilon = pu->epsilon_w; }
+  PetscFunctionReturn(PETSC_SUCCESS);
+}
+
+PetscErrorCode PUGetShapeFactor(PartitionOfUnity pu, PetscReal *epsilon)
+{
+  PetscFunctionBeginUser;
+  PetscCheck(pu,PETSC_COMM_SELF,PETSC_ERR_ARG_NULL,"Partition of Unity structure is NULL. Call PartitionOfUnityCreate() first.");
+  PetscCheck(pu->epsilon_r > 0.0,PETSC_COMM_SELF,PETSC_ERR_ARG_WRONGSTATE,"Partition of Unity epsilon should not be negative. Found: %1.4e.", pu->epsilon_r);
+  if (epsilon) { *epsilon = pu->epsilon_r; }
   PetscFunctionReturn(PETSC_SUCCESS);
 }
 

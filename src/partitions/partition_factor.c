@@ -116,7 +116,7 @@ PetscErrorCode PartitionSetUpRBFMatrix_Factor(LagRBFCtx ctx, Partition p, PetscR
   PetscFunctionBeginUser;
 
   PetscCall(LagRBFGetPartitionOfUnity(ctx,&pu));
-  PetscCall(PUGetEpsilon(pu,&epsilon));
+  PetscCall(PUGetShapeFactor(pu,&epsilon));
   PetscCall(PUGetDimension(pu,&dim));
   PetscCall(LagRBFGetKernelType(ctx,&ktype));
   /* Create the RBF matrix, fill it and factor it */

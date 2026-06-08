@@ -114,7 +114,7 @@ PetscErrorCode PointwiseInterpolation_AVX256(
   PetscCall(PetscCalloc1(nfields,&interpolant));
   interpolant_vec = (__m256d *)_mm_malloc(nfields * sizeof(__m256d), 32);
   /* Epsilon for the RBF kernel */
-  epsilon = _mm256_set1_pd(pu->epsilon);
+  epsilon = _mm256_set1_pd(pu->epsilon_r);
   /* Select the appropriate distance computation function */
   switch (dim) {
     case 2:
@@ -162,7 +162,7 @@ PetscErrorCode PointwiseInterpolation_AVX256(
         dist += dx * dx;
       }
       dist = PetscSqrtReal(dist);
-      rbf_d[dpidx] = kernel_fn(dist, pu->epsilon);
+      rbf_d[dpidx] = kernel_fn(dist, pu->epsilon_r);
     }
     /* Initialize the interpolation value for the point p */
     PetscCall(PetscArrayzero(&values_i[nfields*np],nfields));

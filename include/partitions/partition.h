@@ -34,8 +34,8 @@ PetscErrorCode PartitionGetMap(Partition p, PetscInt *ncells, PetscInt **map);
 PetscErrorCode PartitionGetDataPointsIdx(Partition p, PetscInt *ndata, PetscInt **data_idx);
 PetscErrorCode PartitionGetCoefficientsMat(Partition p, Mat *X);
 PetscErrorCode PartitionGetRBFMatrix(Partition p, Mat *A);
-PetscErrorCode PartitionGetEpsilon(Partition p, PetscReal *epsilon);
-PetscErrorCode PartitionSetEpsilon(Partition p, PetscReal epsilon);
+PetscErrorCode PartitionGetShapeFactor(Partition p, PetscReal *epsilon);
+PetscErrorCode PartitionSetShapeFactor(Partition p, PetscReal epsilon);
 PetscErrorCode PartitionsSetIndex(PartitionOfUnity pu, Partition *partitions);
 PetscErrorCode PartitionGetIndex(Partition p, PetscInt *idx);
 #endif

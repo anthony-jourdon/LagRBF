@@ -295,7 +295,7 @@ static PetscErrorCode SwarmInterpSetWeights_Scalar(LagRBFCtx ctx, DM sw)
   PetscCall(DMSwarmGetField(sw, cellFieldName, NULL, NULL, (void **)&cellid));
   /* Weights */
   PetscCall(DMSwarmGetField(sw, "weights", &nn, NULL, (void **)&weights));
-  PetscCall(PUGetEpsilon(pu,&epsilon));
+  PetscCall(PUGetSupportFactor(pu,&epsilon));
   for (np=0; np<npoints; np++) {
     PetscInt  eidx,eidx_local,nidx_e;
     PetscReal sum_w = 0.0;

@@ -127,7 +127,7 @@ PetscErrorCode PartitionSetUpRBFMatrix_KSP(LagRBFCtx ctx, Partition p, PetscReal
   PetscReal        epsilon;
   PetscFunctionBeginUser;
   PetscCall(LagRBFGetPartitionOfUnity(ctx,&pu));
-  PetscCall(PUGetEpsilon(pu,&epsilon));
+  PetscCall(PUGetShapeFactor(pu,&epsilon));
   PetscCall(PUGetDimension(pu,&dim));
   PetscCall(LagRBFGetKernelType(ctx,&ktype));
   /* Method-specific context */

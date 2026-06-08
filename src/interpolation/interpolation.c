@@ -45,7 +45,7 @@ PetscErrorCode PointwiseInterpolation_Scalar(
   PetscCall(PUGetDimension(pu,&dim));
   PetscCall(PUGetDMDALocal(pu,&da));
   PetscCall(DMDAGetElements(da,&nel,&nen,&elidx));
-  PetscCall(PUGetEpsilon(pu,&epsilon));
+  PetscCall(PUGetShapeFactor(pu,&epsilon));
   /* Allocate memory for the interpolant */
   PetscCall(PetscCalloc1(nfields,&interpolant));
   for (np=0; np<npoints_i; np++) {
