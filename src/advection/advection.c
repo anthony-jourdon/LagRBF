@@ -376,7 +376,7 @@ PetscErrorCode AdvectionComputeTimestep_CFL(LagRBFCtx ctx, DM swarm, PetscReal *
   PetscCall(LagRBFGetPartitionOfUnity(ctx,&pu));
   PetscCall(LagRBFGetAdvectionCtx(ctx,&adv_ctx));
 
-  PetscCall(PUGetEpsilon(pu,&epsilon));
+  PetscCall(PUGetSupportFactor(pu,&epsilon));
   radius = 1.0 / epsilon;
   constant = ctx->cfl_fac; // CFL constant
 
