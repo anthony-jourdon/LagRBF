@@ -22,9 +22,10 @@ class LagRBFInterpolator:
     part = np.full(self.dim, 8, dtype=np.int32)
     self.partitions = kwargs.get("partitions", part)
     self.options_file = options_file
-    self.log_view = kwargs.get("log_view", False)
-    self.kernel   = kwargs.get("kernel", 2) # default to Wendland C2 kernel
-    self.overlap  = kwargs.get("overlap", 1.0) # default to 1.0
+    self.log_view  = kwargs.get("log_view", False)
+    self.kernel    = kwargs.get("kernel", 2) # default to Wendland C2 kernel
+    self.overlap   = kwargs.get("overlap", 1.0) # default to 1.0
+    self.shape_fac = kwargs.get("shape_fac", 1.0) # default to 1.0
 
     if self.options_file is None:
       options = self.generate_options()
@@ -61,6 +62,7 @@ class LagRBFInterpolator:
       s += f",{self.L[i]}"
     s += " # mesh end\n"
     s += f"-pu_mesh_overlap {self.overlap} # overlap factor between partitions\n"
+    s += f"-pu_mesh_shape_factor {self.shape_fac} # shape factor for the RBF kernel\n"
     s += f"-n_interpolation_fields {self.nfields} # number of fields to interpolate\n"
     s += f"-kernel_type {self.kernel} # kernel type\n"
     s += "-solve_method 2\n"
