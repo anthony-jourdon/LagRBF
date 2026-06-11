@@ -653,7 +653,7 @@ static PetscErrorCode CountZerosInRBFMatrix(LagRBFCtx ctx, DM swarm)
   PetscCall(LagRBFGetPartitionOfUnity(ctx,&pu));
   PetscCall(LagRBFGetPartitions(ctx,&partitions));
   PetscCall(PUGetNPartitionsLocal(pu,&npart));
-  PetscCall(PUGetEpsilon(pu,&epsilon));
+  PetscCall(PUGetSupportFactor(pu,&epsilon));
   
   PetscCall(DMSwarmSortGetAccess(swarm));
   PetscCall(DMGetDimension(swarm,&dim));

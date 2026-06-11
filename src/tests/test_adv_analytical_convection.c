@@ -247,7 +247,7 @@ static PetscErrorCode Test()
   radius  = overlap / PetscPowReal(pu->npart,1.0/pu->dim);//PetscSqrtReal(pu->npart);
   epsilon = 1.0 / radius;
   for (k=0; k<pu->npart; k++) { 
-    PetscCall(PartitionSetEpsilon(partitions[k],epsilon)); // set the epsilon for the RBF kernel
+    PetscCall(PartitionSetShapeFactor(partitions[k],epsilon)); // set the epsilon for the RBF kernel
   } 
   PetscCall(PartitionsSetIndex(pu,partitions));
   /* Set data points */

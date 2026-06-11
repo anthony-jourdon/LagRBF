@@ -47,7 +47,7 @@ static PetscErrorCode PartitionTestGetters(PartitionOfUnity pu, Partition *parti
     PartitionGetMap(p,&ncells,&map);
     PartitionGetDataPointsIdx(p,&ndata,&data_idx);
     PartitionGetCoefficientsMat(p,&X);
-    PartitionGetEpsilon(p,&epsilon);
+    PartitionGetShapeFactor(p,&epsilon);
     PetscPrintf(PETSC_COMM_WORLD,"Partition[%" PetscInt_FMT "]: ncells=%" PetscInt_FMT ", ndata=%" PetscInt_FMT ", epsilon=%g\n",i,ncells,ndata,epsilon);
     if (ncells > 0) {
       for (k=0; k<ncells; k++) {
@@ -121,7 +121,7 @@ static PetscErrorCode Test()
   radius  = overlap / PetscSqrtReal(pu->npart);
   epsilon = 1.0 / radius;
   for (k=0; k<pu->npart; k++) { 
-    PetscCall(PartitionSetEpsilon(partitions[k],epsilon)); // set the epsilon for the RBF kernel
+    PetscCall(PartitionSetShapeFactor(partitions[k],epsilon)); // set the epsilon for the RBF kernel
   } 
   PetscCall(PartitionsSetIndex(pu,partitions));
   /* Set interpolation points */
@@ -444,12 +444,15 @@ static PetscErrorCode Test_4()
 
 static PetscErrorCode Test_BuildFilenameTemplateUsage(void)
 {
+  char prefix[PETSC_MAX_PATH_LEN];
   char filename[PETSC_MAX_PATH_LEN];
   PetscInt nt;
   char **fnames;
   char *coor_filename;
   
   PetscFunctionBeginUser;
+
+  PetscCall(PetscSNPrintf(prefix,PETSC_MAX_PATH_LEN-1,"data_"));
 
   PetscCall(BuildFilenameFromTemplate(
     "{directory}{prefix}{step:07}{separator}{field}",
@@ -484,7 +487,7 @@ static PetscErrorCode Test_BuildFilenameTemplateUsage(void)
   ));
   PetscCall(PetscPrintf(PETSC_COMM_WORLD,"Template 3 -> %s\n",filename));
 
-  PetscCall(GetFilelistFromOptions(39, &nt, &fnames, &coor_filename));
+  PetscCall(GetFilelistFromOptions(prefix, 39, &nt, &fnames, &coor_filename));
   for (PetscInt i=0; i<nt; i++) {
     PetscCall(PetscPrintf(PETSC_COMM_WORLD,"Filename from options[%d]: %s\n",i,fnames[i]));
   }
@@ -559,7 +562,7 @@ PetscErrorCode TestMemoryUsage()
       PetscCall(PartitionFillDataPointsIdx(p,swarm_data));
       PetscCall(PartitionGetDataPointsIdx(p,&npoints,&pidx));
       if (npoints == 0) continue;
-      PetscCall(PartitionGetEpsilon(p,&epsilon));
+      PetscCall(PartitionGetShapeFactor(p,&epsilon));
       /* RBF matrix */
       zero_count = 0;
       for (i=0; i<npoints; i++) {

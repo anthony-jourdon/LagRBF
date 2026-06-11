@@ -283,7 +283,7 @@ static PetscErrorCode CountZerosInRBFMatrix(LagRBFCtx ctx, DM swarm)
   PetscCall(LagRBFGetPartitionOfUnity(ctx,&pu));
   PetscCall(LagRBFGetPartitions(ctx,&partitions));
   PetscCall(PUGetNPartitionsLocal(pu,&npart));
-  PetscCall(PUGetEpsilon(pu,&epsilon));
+  PetscCall(PUGetSupportFactor(pu,&epsilon));
   
   PetscCall(DMSwarmSortGetAccess(swarm));
   PetscCall(DMGetDimension(swarm,&dim));
@@ -360,7 +360,7 @@ static PetscErrorCode Test_advection()
   PetscCall(PartitionOfUnityMeshView(pu));
   PetscCall(PartitionOfUnityMeshView_Seq(pu));
 
-  PetscCall(PUGetEpsilon(pu,&epsilon));
+  PetscCall(PUGetSupportFactor(pu,&epsilon));
   PetscPrintf(PETSC_COMM_WORLD,"Epsilon from PU: %g\n",epsilon);
   PetscCall(CreateSwarmData(ctx, &ctx->swd));
   swarm_data = ctx->swd;
