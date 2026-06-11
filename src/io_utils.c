@@ -385,19 +385,17 @@ PetscErrorCode BuildFilenameFromTemplate(
   PetscFunctionReturn(PETSC_SUCCESS);
 }
 
-PetscErrorCode GetFilelistFromOptions(PetscInt step, PetscInt *nfiles, char ***filenames, char **coorfname)
+PetscErrorCode GetFilelistFromOptions(const char *prefix, PetscInt step, PetscInt *nfiles, char ***filenames, char **coorfname)
 {
   PetscInt    nt,nn,f;
   char        *coor_fname = NULL;
   char        **fnames = NULL, **fieldnames = NULL;
   char        template[PETSC_MAX_PATH_LEN],template_dir[PETSC_MAX_PATH_LEN];
-  char        prefix[PETSC_MAX_PATH_LEN],name_prefix[PETSC_MAX_PATH_LEN],separator[PETSC_MAX_PATH_LEN];
+  char        name_prefix[PETSC_MAX_PATH_LEN],separator[PETSC_MAX_PATH_LEN];
   char        directory[PETSC_MAX_PATH_LEN],dir_prefix[PETSC_MAX_PATH_LEN],basename[PETSC_MAX_PATH_LEN],sub_dir[PETSC_MAX_PATH_LEN];
   char        coor_name[PETSC_MAX_PATH_LEN];
   PetscBool   found;
   PetscFunctionBeginUser;
-
-  PetscCall(PetscSNPrintf(prefix,PETSC_MAX_PATH_LEN-1,"data_"));
 
   /* Default template -> StagYY naming convention: outdir/model_t00039 */
   PetscCall(PetscSNPrintf(template, PETSC_MAX_PATH_LEN-1, "{directory}{prefix}{separator}{field}{step:05}"));

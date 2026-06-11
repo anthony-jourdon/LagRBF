@@ -14,6 +14,6 @@ PetscErrorCode ISLoadFromFile(IS is, const char *name);
 PetscErrorCode GetTimeStepsFromOptions(PetscInt *nsteps, PetscInt **steps, PetscReal **time_steps);
 PetscErrorCode RestoreTimeSteps(PetscInt **steps, PetscReal **time_steps);
 PetscErrorCode BuildFilenameFromTemplate(const char template_name[], const char directory[], const char prefix[], const char field[], const char separator[], PetscInt step, char out[]);
-PetscErrorCode GetFilelistFromOptions(PetscInt step, PetscInt *nfiles, char ***filenames, char **coorfname);
+PetscErrorCode GetFilelistFromOptions(const char *prefix, PetscInt step, PetscInt *nfiles, char ***filenames, char **coorfname);
 PetscErrorCode RestoreFilelist(PetscInt nfiles, char ***filenames, char **coorfname);
 #endif
