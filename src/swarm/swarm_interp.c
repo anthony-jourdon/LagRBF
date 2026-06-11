@@ -50,6 +50,7 @@ PetscErrorCode SwarmInterpCreate(LagRBFCtx ctx, DM *sw)
   const PetscInt   *elidx;
   char             dm_name[PETSC_MAX_PATH_LEN],dm_prefix[PETSC_MAX_PATH_LEN];
   PetscFunctionBeginUser;
+  PetscPrintf(PETSC_COMM_WORLD,"[[ %s ]]\n",PETSC_FUNCTION_NAME);
   /* Create interpolation points */
   PetscCall(LagRBFGetPartitionOfUnity(ctx,&pu));
   PetscCall(PUGetDMDA(pu,&dap));
