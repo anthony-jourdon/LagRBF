@@ -73,22 +73,20 @@ PetscErrorCode SwarmSetFromPetscFiles(DM sw, const char **filenames, PetscInt nf
   PetscFunctionReturn(PETSC_SUCCESS);
 }
 
-PetscErrorCode PetscLoadDataToSwarmFromFiles(LagRBFCtx ctx, DM sw)
+PetscErrorCode PetscLoadToSwarmFromFiles(LagRBFCtx ctx, DM sw)
 {
-  PartitionOfUnity pu;
-  CellInfo         *ci;
   PetscMPIInt      rank;
   PetscInt         nfiles,step;
   char             **filenames;
   char             *coor_fname;
+  const char       *prefix;
   PetscFunctionBeginUser;
 
   PetscCallMPI(MPI_Comm_rank(PETSC_COMM_WORLD,&rank));
-  PetscCall(LagRBFGetPartitionOfUnity(ctx,&pu));
-  PetscCall(LagRBFGetCellInfo(ctx,&ci));
   PetscCall(LagRBFGetStep(ctx,&step));
 
-  PetscCall(GetFilelistFromOptions(step,&nfiles,&filenames,&coor_fname));
+  PetscCall(DMGetOptionsPrefix(sw, &prefix));
+  PetscCall(GetFilelistFromOptions(prefix,step,&nfiles,&filenames,&coor_fname));
   /* Read data only on rank 0 */
   if (rank == 0) {
     PetscCall(SwarmSetFromPetscFiles(sw, (const char **)filenames, nfiles, (const char *)coor_fname));
@@ -97,6 +95,21 @@ PetscErrorCode PetscLoadDataToSwarmFromFiles(LagRBFCtx ctx, DM sw)
   PetscCall(PetscBarrier((PetscObject)NULL));
   /* Free filenames */
   PetscCall(RestoreFilelist(nfiles,&filenames,&coor_fname));
+  PetscFunctionReturn(PETSC_SUCCESS);
+}
+
+PetscErrorCode PetscLoadDataToSwarmFromFiles(LagRBFCtx ctx, DM sw)
+{
+  PartitionOfUnity pu;
+  CellInfo         *ci;
+  PetscFunctionBeginUser;
+
+  PetscCall(LagRBFGetPartitionOfUnity(ctx,&pu));
+  PetscCall(LagRBFGetCellInfo(ctx,&ci));
+
+  /* Load on swarm */
+  PetscCall(PetscLoadToSwarmFromFiles(ctx,sw));
+
   /* Send data to other ranks */
   PetscCall(DMSwarmAssignMigrateBasic(ctx,sw));
   /* Duplicate ghost points */
