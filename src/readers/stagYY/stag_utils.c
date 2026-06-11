@@ -10,12 +10,14 @@ PetscErrorCode StagGetFilelistFromOptions(PetscInt step, PetscInt *nfiles, char 
 {
   PetscInt    nn,f;
   char        **fieldnames = NULL;
+  char        prefix[PETSC_MAX_PATH_LEN];
   PetscBool   found,found_vp;
   PetscBool   *scalar;
   PetscFunctionBeginUser;
 
+  PetscCall(PetscSNPrintf(prefix,PETSC_MAX_PATH_LEN-1,"data_"));
   /* Assemble the list of files to read */
-  PetscCall(GetFilelistFromOptions(step,nfiles,filenames,NULL));
+  PetscCall(GetFilelistFromOptions((const char *)prefix,step,nfiles,filenames,NULL));
   /* Array to know which fields are scalar and which are vector */
   PetscCall(PetscMalloc1(*nfiles,&scalar));
   PetscCall(PetscMalloc1(*nfiles,&fieldnames));
