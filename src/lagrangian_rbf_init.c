@@ -43,9 +43,16 @@ static PetscErrorCode LagRBFWriteInitialInfo(void)
 
 PetscErrorCode LagRBFInitialize(int *argc,char ***args,const char file[],const char help[])
 {
+  PetscBool initialized = PETSC_FALSE;
   PetscFunctionBeginUser;
 
-  PetscCall(PetscInitialize(argc,args,file,help));
+  /* Check if petsc has already been initialized */
+  PetscCall(PetscInitialized(&initialized));
+  /* Initialize petsc if not already done */
+  if (!initialized) { PetscCall(PetscInitialize(argc,args,file,help)); }
+  /* If already initialized and a file is provided, insert the file to options */
+  else if (file)    { PetscCall(PetscOptionsInsertFile(PETSC_COMM_WORLD,NULL,file,PETSC_TRUE)); }
+
   PetscCall(PetscLogDefaultBegin());
   PetscCall(LagRBFWriteInitialInfo());
 
