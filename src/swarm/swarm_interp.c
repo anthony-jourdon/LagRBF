@@ -398,10 +398,10 @@ PetscErrorCode SwarmInterpAssignUniquePointIndex(DM sw, PetscInt start_idx, Pets
   /* give particles a unique identifier */
   np_local = (PetscInt64)(end_idx - start_idx);
   PetscCallMPI(MPI_Scan(&np_local,&np_global,1,MPIU_INT64,MPI_SUM,comm));
-  //printf("rank %d : np_local = %" PetscInt64_FMT ", np_global = %" PetscInt64_FMT "\n",(int)rank,np_local,np_global);
+  //PetscPrintf(PETSC_COMM_SELF, "rank %d : np_local = %" PetscInt64_FMT ", np_global = %" PetscInt64_FMT "\n",(int)rank,np_local,np_global);
   for (p=start_idx; p<end_idx; p++) {
     pidx[p] = max + (np_global-np_local) + (PetscInt64)(p-start_idx);
-    //printf("assigning %" PetscInt_FMT " -> pid = %" PetscInt64_FMT " \n", p, pidx[p] );
+    //PetscPrintf(PETSC_COMM_SELF, "rank %d : assigning %" PetscInt_FMT " -> pid = %" PetscInt64_FMT " \n", (int)rank, p, pidx[p] );
   }
   PetscCall(DMSwarmRestoreField(sw,DMSwarmField_pid,&bs,&dtype,(void **)&pidx));
   PetscFunctionReturn(PETSC_SUCCESS);
