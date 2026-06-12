@@ -5,9 +5,8 @@ liblagrangian-offline-y.c += $(call thisdir, \
 	io_utils.c \
 	geodynamics_fields.c \
 	cell_info.c \
-	interface.c \
 	time_loop.c \
 )
 
 # include subdirectories
-include $(call incsubdirs, tests partitions advection readers swarm kernels petsc_private interpolation drivers)
+include $(call incsubdirs, tests partitions advection readers swarm kernels petsc_private interpolation drivers interface)

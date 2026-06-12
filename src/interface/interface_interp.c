@@ -6,6 +6,7 @@
 #include "cell_info.h"
 #include "partitions/partition.h"
 #include "interpolation.h"
+#include "interface/interface_interp.h"
 
 static PetscErrorCode FillSwarm(LagRBFCtx ctx, DM sw, PetscInt npoints, PetscReal *coords, PetscReal *values)
 {
