@@ -7,6 +7,17 @@
 #include "partitions/partition.h"
 #include "interpolation.h"
 
+PetscErrorCode InterfacePetscErrorPrinter(PetscErrorCode ierr, const char *function_name)
+{
+  const char *err_str;
+  char       *specific;
+  PetscFunctionBeginUser;
+  if (!ierr) { PetscFunctionReturn(PETSC_SUCCESS); }
+  PetscCall(PetscErrorMessage(ierr, &err_str, &specific));
+  PetscPrintf(PETSC_COMM_WORLD, "ERROR: %s() failed with error code %d: %s\nERROR: %s\n", function_name, ierr, err_str, specific ? specific : "");
+  PetscFunctionReturn(ierr);
+}
+
 PetscErrorCode FillSwarm(
   LagRBFCtx  ctx, 
   DM         sw, 

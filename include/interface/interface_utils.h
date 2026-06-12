@@ -5,5 +5,6 @@
 
 PetscErrorCode FillSwarm(LagRBFCtx ctx, DM sw, PetscInt npoints, PetscReal *coords, PetscReal *values, PetscInt64 *pidx);
 PetscErrorCode AssembleArray_Allreduce(PetscReal *local_array, PetscInt nlocal, PetscReal  *global_array, PetscInt nglobal, PetscInt64 *gidx, PetscInt nfields, MPI_Comm comm);
+PetscErrorCode InterfacePetscErrorPrinter(PetscErrorCode ierr, const char *function_name);
 
 #endif
