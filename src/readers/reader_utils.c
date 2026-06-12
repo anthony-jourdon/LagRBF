@@ -1,6 +1,4 @@
 #include <petsc.h>
-#include "readers/stagYY/hdf5_read_fields.h"
-#include "readers/stagYY/hdf5_read_coor.h"
 
 void ReadersGetRankDistribution(MPI_Comm comm, int nfiles, int *idx_start, int *idx_end, int *nlocal_files)
 {
@@ -33,17 +31,4 @@ void ReadersGetRankDistribution(MPI_Comm comm, int nfiles, int *idx_start, int *
   if (idx_end)      { *idx_end     = iend;          }
   if (nlocal_files) { *nlocal_files = iend - istart; }
   return;
-}
-
-PetscErrorCode StagReshapeCoordinates(PetscInt dim, StagFieldInfo cinfo, PetscReal *coor)
-{
-  PetscInt p,d;
-  PetscInt *sub_idx = (PetscInt*)cinfo->user;
-  PetscFunctionBeginUser;
-  for (p=0; p<cinfo->npoints; p++) {
-    for (d=0; d<dim; d++) {
-      coor[dim*p + d] = cinfo->field[ cinfo->npoints*sub_idx[d] + p ];
-    }
-  }
-  PetscFunctionReturn(PETSC_SUCCESS);
 }

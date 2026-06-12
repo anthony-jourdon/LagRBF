@@ -7,76 +7,7 @@
 #include "partitions/partition.h"
 #include "interpolation.h"
 #include "interface/interface_interp.h"
-
-static PetscErrorCode FillSwarm(LagRBFCtx ctx, DM sw, PetscInt npoints, PetscReal *coords, PetscReal *values)
-{
-  DMSwarmCellDM    celldm;
-  PetscInt         dim;
-  PetscReal        *pcoords;
-  const char       **coordFields;
-  PetscFunctionBeginUser;
-
-  PetscCall(DMGetDimension(sw,&dim));
-  /* Set swarm size */
-  PetscCall(DMSwarmSetLocalSizes(sw,npoints,-1));
-  /* Fill swarm */
-  if (npoints > 0) {
-    PetscCall(DMSwarmGetCellDMActive(sw,&celldm));
-    PetscCall(DMSwarmCellDMGetCoordinateFields(celldm, NULL, &coordFields));
-    PetscCall(DMSwarmGetField(sw, coordFields[0], NULL, NULL, (void **)&pcoords));
-    /* Copy coordinates */
-    PetscCall(PetscArraycpy(pcoords,coords,npoints*dim));
-    PetscCall(DMSwarmRestoreField(sw, coordFields[0], NULL, NULL, (void **)&pcoords));
-    /* Fill values */
-    if (values != NULL) {
-      PetscInt  nfields;
-      PetscReal *fval;
-      PetscCall(DMSwarmGetField(sw,"fields",&nfields,NULL,(void **)&fval));
-      PetscCall(PetscArraycpy(fval,values,npoints*nfields));
-      PetscCall(DMSwarmRestoreField(sw,"fields",&nfields,NULL,(void **)&fval));
-    }
-  }
-  PetscCall(SwarmFieldAssignUniqueIndex(sw,DMSwarmField_pid, 0, npoints));
-  /* Migrate: send data to their correct ranks according to spatial decomposition */
-  PetscCall(DMSwarmAssignMigrateBasic(ctx, sw));
-  
-  PetscFunctionReturn(PETSC_SUCCESS);
-}
-
-PetscErrorCode AssembleArray_Allreduce(
-  PetscReal  *local_array,  // local (rank owned) array of size nlocal*nfields
-  PetscInt   nlocal,        // number of points in the local array 
-  PetscReal  *global_array, // global array of size nglobal*nfields (output), all ranks have it
-  PetscInt   nglobal,       // total number of points in the global array
-  PetscInt64 *gidx,         // global point IDs corresponding to the local points (size nlocal)
-  PetscInt   nfields,       // number of fields per point
-  MPI_Comm   comm           // communicator
-)
-{
-  PetscInt    np,f,nentries;
-  PetscMPIInt nentries_mpi;
-  PetscFunctionBeginUser;
-
-  nentries = nglobal * nfields;
-  /* Zero the global array because we will be summing into it */
-  PetscCall(PetscArrayzero(global_array, nentries));
-  for (np=0; np<nlocal; np++) {
-    PetscInt64 pid = gidx[np]-1; // convert to 0-based index
-    PetscCheck(
-      pid >= 0 && pid < nglobal, PETSC_COMM_SELF, PETSC_ERR_ARG_OUTOFRANGE,
-      "pid %" PetscInt64_FMT " out of range [0, %" PetscInt_FMT ")", pid, nglobal
-    );
-    /* Each rank fills its portion of the global array */
-    for (f=0; f<nfields; f++) {
-      global_array[pid * nfields + f] = local_array[np * nfields + f];
-    }
-  }
-  PetscCall(PetscMPIIntCast(nentries, &nentries_mpi));
-  /* Perform reduction to assemble the global array */
-  PetscCallMPI(MPI_Allreduce(MPI_IN_PLACE, global_array, nentries_mpi, MPIU_REAL, MPI_SUM, comm));
-
-  PetscFunctionReturn(PETSC_SUCCESS);
-}
+#include "interface/interface_utils.h"
 
 /*
   Build a full points_values array on every rank.
@@ -85,13 +16,10 @@ PetscErrorCode AssembleArray_Allreduce(
 */
 static PetscErrorCode FieldsAssembleArray_Allreduce(DM swarm_interp, PetscReal *points_values, PetscInt npoints_global)
 {
-  MPI_Comm      comm;
-  PetscInt      nlocal = 0, nfields = 0;
-  PetscInt      i, f;
-  PetscInt      nentries;
-  PetscMPIInt   nentries_mpi;
-  PetscInt64    *pids = NULL;
-  PetscReal     *fvals = NULL;
+  MPI_Comm   comm;
+  PetscInt   nlocal = 0, nfields = 0;
+  PetscInt64 *pids = NULL;
+  PetscReal  *fvals = NULL;
 
   PetscFunctionBeginUser;
   PetscCall(PetscObjectGetComm((PetscObject)swarm_interp, &comm));
@@ -123,7 +51,6 @@ static PetscErrorCode LagRBF_Interpolate_Interface(
   PartitionOfUnity pu;
   CellInfo         *ci;
   DM               swarm_data,swarm_interp;
-  PetscInt         npoints_i;
   PetscMPIInt      rank;
   PetscFunctionBeginUser;
 
@@ -150,8 +77,8 @@ static PetscErrorCode LagRBF_Interpolate_Interface(
   PetscCall(SwarmInterpCreate(ctx,&swarm_interp));
 
   /* Fill swarms */
-  PetscCall(FillSwarm(ctx, swarm_data,   ndata_local,   data_coords,   data_values));
-  PetscCall(FillSwarm(ctx, swarm_interp, npoints_local, points_coords, NULL));
+  PetscCall(FillSwarm(ctx, swarm_data,   ndata_local,   data_coords,   data_values, NULL));
+  PetscCall(FillSwarm(ctx, swarm_interp, npoints_local, points_coords, NULL, NULL));
   PetscCall(DMSwarmSetMigrateType(swarm_interp,DMSWARM_MIGRATE_DMCELLNSCATTER));
 
   /* Duplicate ghost data points */

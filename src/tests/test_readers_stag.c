@@ -2,8 +2,6 @@ static const char help[] = "Test to read HDF5 files.\n\n";
 
 #include <petsc.h>
 #include "readers/reader_utils.h"
-#include "readers/stagYY/hdf5_read_coor.h"
-#include "readers/stagYY/hdf5_read_fields.h"
 #include "lagrangian_rbf_init.h"
 #include "lagrangian_rbf.h"
 #include "io_utils.h"
