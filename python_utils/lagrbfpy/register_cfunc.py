@@ -11,9 +11,12 @@ def load_shared_lib():
   return clib
 
 def register_functions(clib:ctypes.CDLL):
-  cfuncs = {}
   petsc_int_c = np.ctypeslib.as_ctypes_type(np.dtype(PETSc.IntType))
   petsc_real_dtype = np.dtype(PETSc.RealType)
+  ###################################################################
+  # Stand alone interpolation function
+  ###################################################################
+  cfuncs = {}
   # function lagrbf_interpolate() in src/interface.c
   cfunc = clib.lagrbf_interpolate
   cfunc.restype = None
@@ -28,6 +31,23 @@ def register_functions(clib:ctypes.CDLL):
     ctypes.c_char_p                                    # char *options_file
   ]
   cfuncs["lagrbf_interpolate"] = cfunc
+
+  ###################################################################
+  # LagRBF context creation
+  ###################################################################
+  cfunc = clib.lagrbf_create
+  cfunc.restype = ctypes.c_void_p # void *ctx
+  cfunc.argtypes = [] # no arguments
+  cfuncs["lagrbf_create"] = cfunc
+
+  ###################################################################
+  # LagRBF context cleanup
+  ###################################################################
+  cfunc = clib.lagrbf_destroy
+  cfunc.restype = None
+  cfunc.argtypes = [ctypes.c_void_p] # void *ctx
+  cfuncs["lagrbf_destroy"] = cfunc
+
   return cfuncs
 
 def load_cfuncs():

@@ -116,8 +116,9 @@ void lagrbf_interpolate(
   char   *options_file
 )
 {
-  
-  LagRBF_Interpolate_Interface(
+  PetscErrorCode ierr;
+  PetscFunctionBeginUser;
+  ierr = LagRBF_Interpolate_Interface(
     ndata_local,
     data_coords,
     data_values,
@@ -127,5 +128,8 @@ void lagrbf_interpolate(
     npoints_global,
     options_file
   );
-  
+  if (ierr) {
+    InterfacePetscErrorPrinter(ierr, "lagrbf_interpolate");
+  }
+  PetscFunctionReturnVoid();
 }
