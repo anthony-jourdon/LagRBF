@@ -26,7 +26,8 @@ struct _p_AdvectionCtx {
   void            *user_fn; // user-defined context for the velocity function
   PetscErrorCode (*destroy)(AdvectionCtx);
   PetscErrorCode (*advection)(LagRBFCtx,DM,DM);
-  PetscErrorCode (*velocity_fn)(PetscReal*,PetscReal*,void*); // user-defined function to compute the velocity at given coordinates
+  PetscErrorCode (*velocity_fn)(PetscReal*,PetscReal*,void*); // user-defined point-wise function to compute the velocity at given coordinates
+  PetscErrorCode (*velocity_fn_batch)(PetscInt,PetscInt,PetscReal*,PetscReal*,void*); // user-defined batch function to compute the velocity at given coordinates
 };
 
 PetscErrorCode LagRBF_AdvectionCtxCreate(LagRBFCtx ctx, AdvectionScheme scheme, const char *velocity_name);
@@ -38,6 +39,7 @@ PetscErrorCode AdvectionInitializeTimestepVelocity(LagRBFCtx ctx, DM swarm);
 PetscErrorCode AdvectionSetTimeStep(AdvectionCtx ctx, PetscReal dt);
 PetscErrorCode AdvectionSetVelocityName(AdvectionCtx ctx,const char *name);
 PetscErrorCode AdvectionSetVelocityFunction(AdvectionCtx ctx, PetscErrorCode (*velocity_fn)(PetscReal*,PetscReal*,void*), void *user);
+PetscErrorCode AdvectionSetVelocityFunctionBatch(AdvectionCtx ctx, PetscErrorCode (*velocity_fn_batch)(PetscInt,PetscInt,PetscReal*,PetscReal*,void*), void *user);
 PetscErrorCode AdvectionSetVelocityType(AdvectionCtx ctx, VelocityType vtype);
 /* Getters */
 PetscErrorCode AvectionCtxGetScheme(AdvectionCtx ctx, AdvectionScheme *scheme);

@@ -259,6 +259,15 @@ PetscErrorCode AdvectionSetVelocityFunction(AdvectionCtx ctx, PetscErrorCode (*v
   PetscFunctionReturn(PETSC_SUCCESS);
 }
 
+PetscErrorCode AdvectionSetVelocityFunctionBatch(AdvectionCtx ctx, PetscErrorCode (*velocity_fn_batch)(PetscInt,PetscInt,PetscReal*,PetscReal*,void*), void *user)
+{
+  PetscFunctionBeginUser;
+  ctx->velocity_type     = ANALYTICAL;
+  ctx->velocity_fn_batch = velocity_fn_batch;
+  ctx->user_fn           = user;
+  PetscFunctionReturn(PETSC_SUCCESS);
+}
+
 PetscErrorCode AdvectionCopyVelocityField(LagRBFCtx ctx, DM swarm)
 {
   AdvectionCtx adv_ctx;
@@ -287,7 +296,6 @@ PetscErrorCode AdvectionEvaluateVelocityFunction(AdvectionCtx adv_ctx, DM swarm)
   const char    *velocity_name,**coorFieldName;
   PetscFunctionBeginUser;
   PetscPrintf(PETSC_COMM_WORLD,"[[ %s ]]\n",PETSC_FUNCTION_NAME);
-  PetscCheck(adv_ctx->velocity_fn,PETSC_COMM_SELF,PETSC_ERR_ARG_NULL,"AdvectionCtx->velocity_fn is NULL, please provide a valid function");
   PetscCall(DMSwarmGetLocalSize(swarm,&npoints));
   PetscCall(DMGetDimension(swarm,&dim));
   PetscCall(DMSwarmGetCellDMActive(swarm, &celldm));
@@ -296,9 +304,20 @@ PetscErrorCode AdvectionEvaluateVelocityFunction(AdvectionCtx adv_ctx, DM swarm)
   PetscCall(DMSwarmGetField(swarm, coorFieldName[0], NULL, NULL, (void **)&coords));
   PetscCall(DMSwarmGetField(swarm, velocity_name,    NULL, NULL, (void **)&velocity));
   /* Evaluate the velocity at the current particle positions */
+  if (adv_ctx->velocity_fn_batch) { /* If a batch function is available */
+    PetscCall(adv_ctx->velocity_fn_batch(npoints, dim, coords, velocity, adv_ctx->user_fn));
+  } else { /* Point-wise evaluation */
+    PetscCheck(adv_ctx->velocity_fn,PETSC_COMM_SELF,PETSC_ERR_ARG_NULL,"AdvectionCtx->velocity_fn is NULL, please provide a valid function");
+    for (np=0; np<npoints; np++) {
+      PetscCall(adv_ctx->velocity_fn(&coords[dim*np], &velocity[dim*np], adv_ctx->user_fn));
+    }
+  }
+  #if 0
+  PetscCheck(adv_ctx->velocity_fn,PETSC_COMM_SELF,PETSC_ERR_ARG_NULL,"AdvectionCtx->velocity_fn is NULL, please provide a valid function");
   for (np=0; np<npoints; np++) {
     adv_ctx->velocity_fn(&coords[dim*np], &velocity[dim*np], adv_ctx->user_fn);
   }
+  #endif
   PetscCall(DMSwarmRestoreField(swarm, coorFieldName[0], NULL, NULL, (void **)&coords));
   PetscCall(DMSwarmRestoreField(swarm, velocity_name,    NULL, NULL, (void **)&velocity));
   PetscFunctionReturn(PETSC_SUCCESS);
