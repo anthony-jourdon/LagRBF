@@ -1,9 +1,11 @@
+import os
 import numpy as np
 import ctypes
 from petsc4py import PETSc
+from pyvista import PolyData
 
-from .. import cfuncs
-from ..swarm_utils import PointSwarm
+from .. import cfuncs, print
+from ..utils import PointContainer
 
 class LagRBFCtx:
   def __init__(self, petsc_options:dict|None=None, **kwargs):
@@ -21,7 +23,12 @@ class LagRBFCtx:
     self.options = petsc_options
     if self.options is None:
       self.options:dict = PETSc.Options()
-    
+
+    self.output_path = kwargs.get("output_path", self.options.getString("output_path", "output"))
+    if not os.path.exists(self.output_path):
+      os.makedirs(self.output_path)
+      print(f"Created output directory: {self.output_path}")
+
     self.dim = kwargs.get("dim", self.options.getInt("pu_mesh_dim", 3) )
     # spatial dimension of the problem
     self.options["pu_mesh_dim"] = self.dim
@@ -188,11 +195,11 @@ class LagRBFCtx:
     else:       self.interp_filled = True
     return
   
-  def fill_data(self, coords:np.ndarray, values:np.ndarray, pidx:np.ndarray|None=None):
+  def fill_data(self, coords:np.ndarray, values:np.ndarray, pidx:np.ndarray|None=None) -> None:
     self.fill_swarm(coords=coords, values=values, pidx=pidx, is_data=True)
     return
   
-  def fill_points(self, coords:np.ndarray, values:np.ndarray|None=None, pidx:np.ndarray|None=None):
+  def fill_points(self, coords:np.ndarray, values:np.ndarray|None=None, pidx:np.ndarray|None=None) -> None:
     self.fill_swarm(coords=coords, values=values, pidx=pidx, is_data=False)
     return
   
@@ -203,7 +210,7 @@ class LagRBFCtx:
       pidx:np.ndarray|None=None,
       fieldname:str="fields",
       is_data:bool=False
-    ):
+    ) -> None:
 
     npoints = 0
     nfields = 0
@@ -241,6 +248,36 @@ class LagRBFCtx:
 
     return
 
+  def save(
+      self, 
+      comm:PETSc.Comm, 
+      fname:str, 
+      fields_size:dict[str, int],
+      output_points:PointContainer,
+      fieldname:str="fields",
+      is_data:bool=False,
+    ) -> None:
+
+    self.output(
+      coords=output_points.coords,
+      fvals=output_points.values,
+      pidx=output_points.pidx,
+      fieldname=fieldname,
+      is_data=is_data
+    )
+    # write to disk only on rank 0
+    rank = comm.getRank()
+    if rank == 0:
+      swarm = PolyData(output_points.coords)
+      idx = 0
+      for fieldname, bs in fields_size.items():
+        swarm.point_data[fieldname] = output_points.values[:, idx:idx+bs]
+        idx += bs
+      swarm.point_data["pidx"] = output_points.pidx
+      swarm.save(fname)
+      del swarm
+    return
+
   def interpolate_c(self) -> None:
     if not self.data_filled:
       raise RuntimeError("Data have not been provided, use fill_swarm() to provide data points")
@@ -260,7 +297,7 @@ class LagRBFCtx:
       raise RuntimeError(f"lagrbf_reset_coefficients failed with error code {ierr}, see PETSc error for details.")
     return
   
-  def set_advection_function(self, *args, **kwargs):
+  def set_advection_function(self, *args, **kwargs) -> None:
     """
     Set the advection function to be used for advecting points. 
     Two possibilities:
@@ -305,10 +342,9 @@ class LagRBFCtx:
     )
     if ierr != 0:
       raise RuntimeError(f"lagrbf_advection_function_batch failed with error code {ierr}, see PETSc error for details.")
-    
     return
 
-  def advect_analytical_c(self, time_start:float, time_end:float):
+  def advect_analytical_c(self, time_start:float, time_end:float) -> None:
     if not self.interp_filled:
       raise RuntimeError("Swarm to advect has not been provided, use fill_swarm() to provide the points to advect")
     ierr = cfuncs["lagrbf_avect_analytical"](
@@ -320,7 +356,7 @@ class LagRBFCtx:
       raise RuntimeError(f"lagrbf_advect failed with error code {ierr}, see PETSc error for details.")
     return
 
-  def advect_interpolate_c( self, time_start:float, time_end:float):
+  def advect_interpolate_c( self, time_start:float, time_end:float) -> None:
     if not self.data_filled:
       raise RuntimeError("Data have not been provided, use fill_swarm() to provide data points")
     if not self.interp_filled:

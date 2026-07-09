@@ -4,15 +4,16 @@ petsc4py.init(sys.argv) # maybe this should be called in scripts, I don't know y
 
 from . import register_cfunc
 cfuncs = register_cfunc.load_cfuncs()
+def print(*args):
+  petsc4py.PETSc.Sys.Print(*args)
 
 from . import utils
 from . import petsc_io
 from . import swarm_utils
 from . import interface
 from . import interpolation
+from . import advection
 
-def print(*args):
-  petsc4py.PETSc.Sys.Print(*args)
 
 from .utils.points_container import PointContainer
 from .utils.halton_seq import halton_sequence_scalar, halton_sequence_vector, halton_sequence
@@ -23,6 +24,7 @@ from .petsc_io.petscvec_writer import PetscVecWriteToFile, PetscVecWriteBlockSiz
 from .interface.context import LagRBFCtx
 from .analytical_flow import HarmonicFlow, ToroidalFlow, PoloidalFlow, FlowData, toroidal_poloidal_flow, Ctoroidal_poloidal_flow, Ctoroidal_poloidal_flow_batch
 from .interpolation import LagRBFInterpolator
+from .advection import Advection, AdvectionAnalytical, AdvectionInterpolation
 
 __all__ = [
   "PointContainer",
@@ -53,5 +55,8 @@ __all__ = [
   "toroidal_poloidal_flow",
   "Ctoroidal_poloidal_flow",
   "Ctoroidal_poloidal_flow_batch",
-  "LagRBFInterpolator"
+  "LagRBFInterpolator",
+  "Advection",
+  "AdvectionAnalytical",
+  "AdvectionInterpolation",
 ]
