@@ -14,6 +14,7 @@ from . import interpolation
 def print(*args):
   petsc4py.PETSc.Sys.Print(*args)
 
+from .utils.points_container import PointContainer
 from .utils.halton_seq import halton_sequence_scalar, halton_sequence_vector, halton_sequence
 from .swarm_utils import PointSwarm
 from .utils.timeseries import timeseries_process, timeseries_compare, timeseries_write_step, timeseries_write_new, timeseries_append, timeseries_write
@@ -24,6 +25,7 @@ from .analytical_flow import HarmonicFlow, ToroidalFlow, PoloidalFlow, FlowData,
 from .interpolation import LagRBFInterpolator
 
 __all__ = [
+  "PointContainer",
   "halton_sequence_scalar",
   "halton_sequence_vector",
   "halton_sequence",

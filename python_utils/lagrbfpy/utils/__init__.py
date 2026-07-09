@@ -2,6 +2,7 @@ from .timeseries import timeseries_process, timeseries_compare, timeseries_write
 from .write_vtp import write_vtp
 from .io_utils import IOutils
 from .halton_seq import halton_sequence, halton_sequence_scalar, halton_sequence_vector
+from .points_container import PointContainer
 
 __all__ = [
   'timeseries_process',
@@ -14,5 +15,6 @@ __all__ = [
   'IOutils',
   'halton_sequence',
   'halton_sequence_scalar',
-  'halton_sequence_vector'
+  'halton_sequence_vector',
+  'PointContainer'
 ]

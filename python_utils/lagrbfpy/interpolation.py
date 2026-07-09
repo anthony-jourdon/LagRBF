@@ -4,7 +4,7 @@ import lagrbfpy as lrb
 from petsc4py import PETSc
 
 from .interface import LagRBFCtx
-from .swarm_utils import PointSwarm
+from .utils.points_container import PointContainer
 
 class LagRBFInterpolator(LagRBFCtx):
   def __init__(self, petsc_options:dict|None=None, **kwargs):
@@ -13,19 +13,28 @@ class LagRBFInterpolator(LagRBFCtx):
   
   def interpolate(
       self, 
-      swarm_data:PointSwarm, 
-      swarm_interp:PointSwarm, 
-      out_coords:np.ndarray|None=None,
-      out_fvals:np.ndarray|None=None,
-      out_pidx:np.ndarray|None=None,
+      data:PointContainer,
+      points:PointContainer,
+      output:PointContainer,
       fieldname:str="fields",
     ):
-    self.fill_interpolate(swarm_data, swarm_interp)
+    self.fill_data(
+      coords=data.coords,
+      values=data.values,
+      pidx=data.pidx
+    )
+    self.fill_points(
+      coords=points.coords,
+      values=points.values,
+      pidx=points.pidx
+    )
+    self.interpolate_c()
     self.output(
-      coords=out_coords,
-      fvals=out_fvals,
-      pidx=out_pidx,
+      coords=output.coords,
+      fvals=output.values,
+      pidx=output.pidx,
       fieldname=fieldname,
       is_data=False
     )
+    self.reset_coefficients()
     return
