@@ -5,5 +5,6 @@
 
 PetscErrorCode InternalForwardAdvectionLoop(LagRBFCtx ctx, DM swarm_data, DM swarm_interp, PetscReal time, PetscReal time_next);
 PetscErrorCode ForwardTimeLoop(LagRBFCtx ctx, DM swarm_data, DM swarm_interp, PetscInt nsteps, PetscInt steps[], PetscReal time_steps[], PetscInt restart_idx);
+PetscErrorCode ForwardAnalyticalAdvection(LagRBFCtx ctx, DM sw, PetscReal time, PetscReal time_next);
 
 #endif

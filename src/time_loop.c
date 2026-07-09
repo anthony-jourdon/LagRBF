@@ -142,3 +142,53 @@ PetscErrorCode ForwardTimeLoop(
   }
   PetscFunctionReturn(PETSC_SUCCESS);
 }
+
+/*
+  Advect a set of point using analytical velocity function (no interpolation)
+*/
+PetscErrorCode ForwardAnalyticalAdvection(LagRBFCtx ctx, DM sw, PetscReal time, PetscReal time_next)
+{
+  PartitionOfUnity pu;
+  CellInfo         *ci;
+  AdvectionScheme  adv_scheme;
+  PetscInt         it;
+  PetscFunctionBeginUser;
+
+  PetscCall(LagRBFGetPartitionOfUnity(ctx,&pu));
+  PetscCall(LagRBFGetCellInfo(ctx,&ci));
+  PetscCall(LagRBFGetAdvectionScheme(ctx,&adv_scheme));
+  PetscCall(AdvectionInitializeTimestepVelocity(ctx,sw));
+  it = 0;
+  while (time < time_next) {
+    PetscReal dt;
+
+    PetscPrintf(PETSC_COMM_WORLD,"    Internal advection step [[ %" PetscInt_FMT " ]] : time = %1.4e\n",it,time);
+    /* Compute timestep */
+    if (adv_scheme == DOPRI) {
+      PetscReal dt_cfl, dt_dopri;
+      PetscCall(LagRBFGetTimeStep(ctx,&dt_dopri));
+      PetscCall(AdvectionComputeTimestep_CFL(ctx, sw, &dt_cfl));
+      dt = PetscMin(dt_dopri, dt_cfl);
+      PetscPrintf(PETSC_COMM_WORLD,"  DOPRI time step: %1.4e, CFL time step: %1.4e, selected time step: %1.4e\n",dt_dopri, dt_cfl, dt);
+    } else {
+      PetscCall(AdvectionComputeTimestep_CFL(ctx, sw, &dt));
+    }
+    /* Adjust timestep if necessary to not exceed the next time step */
+    if (time + dt > time_next) {
+      dt = time_next - time;
+      PetscPrintf(PETSC_COMM_WORLD,"Timestep exceeding next step. Adjusting internal time step to %1.4e.\n",dt);
+    }
+    PetscCall(LagRBFSetTimeStep(ctx,dt));
+    /* Advect, note that swarm_data is NULL in this analytical function case */
+    PetscCall(LagRBF_AdvectSwarm(ctx, sw, NULL));
+    
+    /* Setup velocity for next step */
+    PetscCall(AdvectionInitializeTimestepVelocity(ctx,sw));
+    /* Update time */
+    time += dt;
+    PetscCall(LagRBFSetTime(ctx,time));
+    it++;
+  }
+
+  PetscFunctionReturn(PETSC_SUCCESS);
+}
