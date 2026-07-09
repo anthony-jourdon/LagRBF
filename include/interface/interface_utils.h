@@ -29,4 +29,6 @@ LAGRBF_EXPORT PetscErrorCode lagrbf_output(
   const char *fieldname
 );
 
+LAGRBF_EXPORT PetscErrorCode lagrbf_reset_coefficients(void *ctx);
+
 #endif

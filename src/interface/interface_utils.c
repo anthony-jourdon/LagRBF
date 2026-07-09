@@ -302,3 +302,16 @@ PetscErrorCode lagrbf_fill_swarm(
   }
   PetscFunctionReturn(PETSC_SUCCESS);
 }
+
+PetscErrorCode lagrbf_reset_coefficients(void *ctx)
+{
+  LagRBFCtx      user = (LagRBFCtx)ctx;
+  PetscErrorCode ierr;
+  PetscFunctionBeginUser;
+  ierr = LagRBF_PartitionsReset(user);
+  if (ierr) {
+    InterfacePetscErrorPrinter(ierr, "LagRBF_PartitionsReset");
+    PetscFunctionReturn(ierr);
+  }
+  PetscFunctionReturn(PETSC_SUCCESS);
+}
