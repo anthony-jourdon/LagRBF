@@ -157,6 +157,16 @@ def register_functions(clib:ctypes.CDLL):
   ]
   cfuncs["lagrbf_avect_interpolate"] = cfunc
 
+  ###################################################################
+  # LagRBF reset interpolation coefficients
+  ###################################################################
+  cfunc = clib.lagrbf_reset_coefficients
+  cfunc.restype = ctypes.c_int # PetscErrorCode
+  cfunc.argtypes = [
+    ctypes.c_void_p  # void *ctx
+  ]
+  cfuncs["lagrbf_reset_coefficients"] = cfunc
+
   return cfuncs
 
 

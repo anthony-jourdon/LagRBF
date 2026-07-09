@@ -188,6 +188,14 @@ class LagRBFCtx:
     else:       self.interp_filled = True
     return
   
+  def fill_data(self, coords:np.ndarray, values:np.ndarray, pidx:np.ndarray|None=None):
+    self.fill_swarm(coords=coords, values=values, pidx=pidx, is_data=True)
+    return
+  
+  def fill_points(self, coords:np.ndarray, values:np.ndarray|None=None, pidx:np.ndarray|None=None):
+    self.fill_swarm(coords=coords, values=values, pidx=pidx, is_data=False)
+    return
+  
   def output(
       self,
       coords:np.ndarray|None=None,
@@ -233,7 +241,7 @@ class LagRBFCtx:
 
     return
 
-  def interpolate_c(self):
+  def interpolate_c(self) -> None:
     if not self.data_filled:
       raise RuntimeError("Data have not been provided, use fill_swarm() to provide data points")
     if not self.interp_filled:
@@ -244,29 +252,14 @@ class LagRBFCtx:
     ierr = cfuncs["lagrbf_interpolation"](ctx)
     if ierr != 0:
       raise RuntimeError(f"lagrbf_interpolation failed with error code {ierr}, see PETSc error for details.")
-
-  def fill_interpolate(
-      self,
-      swarm_data:PointSwarm,  
-      swarm_interp:PointSwarm 
-    ):
-    # fill data
-    pidx = swarm_data.point_data.pop("pidx", None)
-    self.fill_swarm(
-      swarm_data.points,
-      swarm_data.point_data,
-      pidx,
-      True
-    )
-    self.fill_swarm(
-      swarm_interp.points,
-      None,
-      swarm_interp.point_data.get("pidx", None),
-      False
-    )
-    self.interpolate_c()
     return
 
+  def reset_coefficients(self) -> None:
+    ierr = cfuncs["lagrbf_reset_coefficients"](self.ctx)
+    if ierr != 0:
+      raise RuntimeError(f"lagrbf_reset_coefficients failed with error code {ierr}, see PETSc error for details.")
+    return
+  
   def set_advection_function(self, *args, **kwargs):
     """
     Set the advection function to be used for advecting points. 
