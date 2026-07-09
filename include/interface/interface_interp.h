@@ -3,7 +3,9 @@
 
 #include "lagrangian_rbf.h"
 
-LAGRBF_EXPORT void lagrbf_interpolate(
+PetscErrorCode Interface_Interpolation(LagRBFCtx ctx);
+
+LAGRBF_EXPORT void lagrbf_interpolate_driver(
   PetscInt   ndata_local,
   PetscReal *data_coords,
   PetscReal *data_values,
@@ -13,5 +15,7 @@ LAGRBF_EXPORT void lagrbf_interpolate(
   PetscInt   npoints_global,
   char      *options_file
 );
+
+LAGRBF_EXPORT PetscErrorCode lagrbf_interpolation(void *ctx);
 
 #endif

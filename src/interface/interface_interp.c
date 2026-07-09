@@ -28,7 +28,7 @@ static PetscErrorCode FieldsAssembleArray_Allreduce(DM swarm_interp, PetscReal *
   PetscCall(DMSwarmGetField(swarm_interp, "fields", &nfields, NULL, (void **)&fvals));
   PetscCall(DMSwarmGetField(swarm_interp, DMSwarmField_pid, NULL, NULL, (void **)&pids));
 
-  PetscCall(AssembleArray_Allreduce(fvals,nlocal,points_values,npoints_global,pids,nfields,comm));
+  PetscCall(AssembleArray_Allreduce(fvals,nlocal,points_values,npoints_global,pids,nfields,PETSC_REAL,comm));
 
   PetscCall(DMSwarmRestoreField(swarm_interp, DMSwarmField_pid, NULL, NULL, (void **)&pids));
   PetscCall(DMSwarmRestoreField(swarm_interp, "fields", &nfields, NULL, (void **)&fvals));
@@ -36,7 +36,22 @@ static PetscErrorCode FieldsAssembleArray_Allreduce(DM swarm_interp, PetscReal *
   PetscFunctionReturn(PETSC_SUCCESS);
 }
 
-static PetscErrorCode LagRBF_Interpolate_Interface(
+PetscErrorCode Interface_Interpolation(LagRBFCtx ctx)
+{
+  DM swd = ctx->swd;
+  DM swi = ctx->swi;
+  PetscFunctionBeginUser;
+  
+  PetscCheck(swi, PETSC_COMM_SELF, PETSC_ERR_ARG_NULL, "Interpolation swarm (ctx->swi) is NULL");
+  PetscCheck(swd, PETSC_COMM_SELF, PETSC_ERR_ARG_NULL, "Data swarm (ctx->swd) is NULL");
+  /* Interpolation */
+  PetscCall(LagRBF_PartitionsSetUp(ctx,swd,swi));
+  PetscCall(RBFInterpolation(ctx,swi,swd,"fields"));
+  
+  PetscFunctionReturn(PETSC_SUCCESS);
+}
+
+static PetscErrorCode Interface_InterpolateDriver(
   PetscInt  ndata_local,
   PetscReal *data_coords,
   PetscReal *data_values,
@@ -105,20 +120,20 @@ static PetscErrorCode LagRBF_Interpolate_Interface(
   PetscFunctionReturn(PETSC_SUCCESS);
 }
 
-void lagrbf_interpolate(
-  PetscInt    ndata_local,
+void lagrbf_interpolate_driver(
+  PetscInt   ndata_local,
   PetscReal *data_coords,
   PetscReal *data_values,
-  PetscInt    npoints_local,
+  PetscInt   npoints_local,
   PetscReal *points_coords,
   PetscReal *points_values,
-  PetscInt    npoints_global,
-  char   *options_file
+  PetscInt   npoints_global,
+  char      *options_file
 )
 {
   PetscErrorCode ierr;
   PetscFunctionBeginUser;
-  ierr = LagRBF_Interpolate_Interface(
+  ierr = Interface_InterpolateDriver(
     ndata_local,
     data_coords,
     data_values,
@@ -132,4 +147,17 @@ void lagrbf_interpolate(
     InterfacePetscErrorPrinter(ierr, "lagrbf_interpolate");
   }
   PetscFunctionReturnVoid();
+}
+
+PetscErrorCode lagrbf_interpolation(void *ctx)
+{
+  LagRBFCtx      user = (LagRBFCtx)ctx;
+  PetscErrorCode ierr;
+  PetscFunctionBeginUser;
+  ierr = Interface_Interpolation(user);
+  if (ierr) {
+    InterfacePetscErrorPrinter(ierr, "Interface_Interpolation");
+    PetscFunctionReturn(ierr);
+  }
+  PetscFunctionReturn(PETSC_SUCCESS);
 }
