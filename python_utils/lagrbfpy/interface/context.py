@@ -191,16 +191,16 @@ class LagRBFCtx:
     )
     if ierr != 0:
       raise RuntimeError(f"lagrbf_fill_swarm failed with error code {ierr}, see PETSc error for details.")
-    if is_data: self.data_filled   = True
-    else:       self.interp_filled = True
     return
   
   def fill_data(self, coords:np.ndarray, values:np.ndarray, pidx:np.ndarray|None=None) -> None:
     self.fill_swarm(coords=coords, values=values, pidx=pidx, is_data=True)
+    self.data_filled = True
     return
   
   def fill_points(self, coords:np.ndarray, values:np.ndarray|None=None, pidx:np.ndarray|None=None) -> None:
     self.fill_swarm(coords=coords, values=values, pidx=pidx, is_data=False)
+    self.interp_filled = True
     return
   
   def output(
@@ -218,11 +218,11 @@ class LagRBFCtx:
       raise ValueError("At least one of coords, fvals, or pidx must be provided.")
     if coords is not None:
       npoints = coords.shape[0]
-      coords = self._begin_c(coords, self.PetscReal)
+      coords  = self._begin_c(coords, self.PetscReal)
     if fvals is not None:
       npoints = fvals.shape[0]
       nfields = fvals.shape[1]
-      fvals = self._begin_c(fvals, self.PetscReal)
+      fvals   = self._begin_c(fvals, self.PetscReal)
     if pidx is not None:
       npoints = pidx.shape[0]
     
@@ -245,7 +245,6 @@ class LagRBFCtx:
       coords = self._end_c(coords, self.dim)
     if fvals is not None:
       fvals = self._end_c(fvals, bs=nfields)
-
     return
 
   def save(
@@ -280,9 +279,9 @@ class LagRBFCtx:
 
   def interpolate_c(self) -> None:
     if not self.data_filled:
-      raise RuntimeError("Data have not been provided, use fill_swarm() to provide data points")
+      raise RuntimeError("Data have not been provided, use fill_data() to provide data points")
     if not self.interp_filled:
-      raise RuntimeError("Interpolation swarm has not been provided, use fill_swarm() to provide the points on which to interpolate")
+      raise RuntimeError("Interpolation swarm has not been provided, use fill_points() to provide the points on which to interpolate")
 
     ctx = self.ctx
 

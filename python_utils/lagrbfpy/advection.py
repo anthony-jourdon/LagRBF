@@ -61,6 +61,7 @@ class AdvectionAnalytical(Advection):
     rank = comm.getRank()
     self.fill_points( coords=points.coords, values=points.values, pidx=points.pidx )
     for step in range(self.nsteps-1):
+      PETSc.Sys.Print(f"\n[[ STEP: {step} ]]: Advecting points from time {self.time_steps[step]:.6e} to {self.time_steps[step+1]:.6e}")
       # advect points from time_steps[step] to time_steps[step+1]
       self.advect_analytical_c(
         self.time_steps[step  ],
@@ -98,13 +99,14 @@ class AdvectionInterpolation(Advection):
     output:PointContainer, 
     comm:PETSc.Comm, 
     fields:dict[str, int],
-    prefix:str|None=None
+    prefix:str=""
   ):
     if not callable(get_data):
       raise ValueError("get_data must be a callable function that returns a PointContainer.")
     rank = comm.getRank()
     self.fill_points( coords=points.coords, values=points.values, pidx=points.pidx )
     for step in range(self.nsteps):
+      PETSc.Sys.Print(f"\n[[ STEP: {step} ]]: Advecting points from time {self.time_steps[step]:.6e} to {self.time_steps[step+1]:.6e}")
       data:PointContainer = get_data(**data_args)
       self.fill_data(coords=data.coords, values=data.values, pidx=data.pidx)
       # interpolate
