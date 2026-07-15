@@ -1,9 +1,5 @@
 import os
-import ctypes
-import comm
 import numpy as np
-import pyvista as pvs
-import sphericart as spc
 import lagrbfpy as lf
 
 from petsc4py import PETSc
@@ -207,7 +203,7 @@ if __name__ == "__main__":
     "RBF", 
     "benchmark", 
     "lagrbf_benchmarks",
-    "RK4_CFL0.1_v3.5"
+    "test_petsc3.25"
   )
   models = [
     # Toroidal models
