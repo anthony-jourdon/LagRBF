@@ -291,7 +291,10 @@ class AdvectionInterpolation(Advection):
     rank = comm.getRank()
     self.fill_points( coords=points.coords, values=points.values, pidx=points.pidx )
     for step in range(self.nsteps):
-      PETSc.Sys.Print(f"\n[[ STEP: {step} ]]: Advecting points from time {self.time_steps[step]:.6e} to {self.time_steps[step+1]:.6e}")
+      if step == self.nsteps-1:
+        PETSc.Sys.Print(f"\n[[ STEP: {step} ]]: Last step, no advection performed, only outputting points and interpolated values at time {self.time_steps[step]:.6e}")
+      else:
+        PETSc.Sys.Print(f"\n[[ STEP: {step} ]]: Advecting points from time {self.time_steps[step]:.6e} to {self.time_steps[step+1]:.6e}")
       data:PointContainer = get_data(**data_args)
       self.fill_data(coords=data.coords, values=data.values, pidx=data.pidx)
       # interpolate
