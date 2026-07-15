@@ -93,8 +93,8 @@ $(liblagrbf-shared) : $(liblagrbf-y.c:%.c=$(OBJDIR)/%.o)
 
 info:
 	-@echo "—————————————————————————————————————————————————————————————————"
-	-@echo " lagrbf"
-	-@echo "    git url: https://notyetset.git"
+	-@echo " LagRBF: Lagrangian points Radial Basis Function library"
+	-@echo "    git url: https://github.com/anthony-jourdon/LagRBF"
 	-@echo "—————————————————————————————————————————————————————————————————"
 	-@echo $(AVX_INFO_MSG) 
 	-@echo "—————————————————————————————————————————————————————————————————"
