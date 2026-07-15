@@ -7,9 +7,13 @@ AdvectionEvaluateVelocity
 
    **Input Parameters**
 
-   - ``ctx`` - The `LagRBFCtx` context
-   - ``swi`` - The `DM` swarm containing the interpolation points (particles)
-   - ``swd`` - The `DM` swarm containing the data points (velocity field). Can be NULL if using an analytical velocity field.
+   - ``ctx`` (:c:type:`LagRBFCtx`) - The `LagRBFCtx` context
+   - ``swi`` (`DM <https://petsc.org/release/manualpages/DM/DM/>`_) - The `DM` swarm containing the interpolation points (particles)
+   - ``swd`` (`DM <https://petsc.org/release/manualpages/DM/DM/>`_) - The `DM` swarm containing the data points (velocity field). Can be NULL if using an analytical velocity field.
+
+   **Output Parameters**
+
+   - ``PETSC_SUCCESS`` - if successful
 
    **Notes**
 

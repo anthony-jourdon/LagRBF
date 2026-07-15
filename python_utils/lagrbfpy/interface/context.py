@@ -8,72 +8,72 @@ from .. import cfuncs, print
 from ..utils import PointContainer
 
 class LagRBFCtx:
+  """
+  Class to interface the C context and functions for Lagrangian advection and interpolation using
+  Radial Basis Functions (RBFs) in parallel using `PETSc`_.
+  This is a low level class and it is very unlikely that users will need to use it directly. 
+  Instead, use the classes :py:class:`LagRBFInterpolator <lagrbfpy.LagRBFInterpolator>`, 
+  :py:class:`AdvectionAnalytical <lagrbfpy.AdvectionAnalytical>` or
+  :py:class:`AdvectionInterpolation <lagrbfpy.AdvectionInterpolation>` 
+  classes which provides a higher level interface.
+
+  .. note::
+    Calling this class will automatically create a new C context and initialize it with the provided options.
+    To perform interpolation and/or advection in the same context i.e., same domain with same options, do not
+    create a new instance of this class, but rather use the same instance to call the methods. 
+
+
+  :param dict petsc_options:
+    A dictionary of PETSc options to configure the context.
+    Can be created as
+
+    .. code-block:: python
+
+        petsc_options = PETSc.Options()
+
+    If not provided, a new `PETSc.Options` object will be created.
+
+  :param int dim:
+    The spatial dimension of the problem (default: ``3``).
+  :param numpy.ndarray minCoords:
+    The minimum coordinates of the partition of unity domain (default: array of zeros).
+  :param numpy.ndarray maxCoords:
+    The maximum coordinates of the partition of unity domain (default: array of ones).
+  :param numpy.ndarray npartitions:
+    The number of partitions of the partition of unity domain in each spatial direction (default: array of 4s).
+  :param int nfields:
+    The number of fields to interpolate (default: ``0``). 
+    A vector field of size 3 would have ``nfields=3``, 
+    a scalar field would have ``nfields=1``, etc.
+    Many fields can be interpolated at once,
+    ``nfields`` represents the total size of all fields to be interpolated.
+  :param float overlap:
+    The overlap between the partitions in the partition of unity method (default: ``1``).
+  :param float shape_factor:
+    The shape factor for the RBFs support (default: ``1``).
+  :param int kernel:
+    The type of kernel to use (default: ``2``: Wendland's C2 function).
+  :param bool advection:
+    Whether to perform advection (default: False).
+  :param int advection_scheme:
+    The advection scheme to use (default: ``2``: RK4).
+    Available schemes are:
+
+    - ``0``: Euler
+    - ``1``: RK2
+    - ``2``: RK4
+    - ``3``: Dormand-Prince 5(4)
+  
+  :param float advection_cfl:
+    The Courant-Friedrichs-Lewy number for the advection scheme (default: ``0.5``).
+  :param float rmin:
+    The minimum radius for the advection in spherical domains (default: ``0``).
+  :param float rmax:
+    The maximum radius for the advection in spherical domains (default: ``1.0e132``).
+
+  :Methods:
+  """
   def __init__(self, petsc_options:dict|None=None, **kwargs):
-    """
-    Class to interface the C context and functions for Lagrangian advection and interpolation using
-    Radial Basis Functions (RBFs) in parallel using `PETSc`_.
-    This is a low level class and it is very unlikely that users will need to use it directly. 
-    Instead, use the classes :py:class:`LagRBFInterpolator <lagrbfpy.LagRBFInterpolator>`, 
-    :py:class:`AdvectionAnalytical <lagrbfpy.AdvectionAnalytical>` or
-    :py:class:`AdvectionInterpolation <lagrbfpy.AdvectionInterpolation>` 
-    classes which provides a higher level interface.
-
-    .. note::
-      Calling this class will automatically create a new C context and initialize it with the provided options.
-      To perform interpolation and/or advection in the same context i.e., same domain with same options, do not
-      create a new instance of this class, but rather use the same instance to call the methods. 
-
-
-    :param dict petsc_options:
-      A dictionary of PETSc options to configure the context.
-      Can be created as
-
-      .. code-block:: python
-
-          petsc_options = PETSc.Options()
-
-      If not provided, a new `PETSc.Options` object will be created.
-
-    :param int dim:
-      The spatial dimension of the problem (default: ``3``).
-    :param numpy.ndarray minCoords:
-      The minimum coordinates of the partition of unity domain (default: array of zeros).
-    :param numpy.ndarray maxCoords:
-      The maximum coordinates of the partition of unity domain (default: array of ones).
-    :param numpy.ndarray npartitions:
-      The number of partitions of the partition of unity domain in each spatial direction (default: array of 4s).
-    :param int nfields:
-      The number of fields to interpolate (default: ``0``). 
-      A vector field of size 3 would have ``nfields=3``, 
-      a scalar field would have ``nfields=1``, etc.
-      Many fields can be interpolated at once,
-      ``nfields`` represents the total size of all fields to be interpolated.
-    :param float overlap:
-      The overlap between the partitions in the partition of unity method (default: ``1``).
-    :param float shape_factor:
-      The shape factor for the RBFs support (default: ``1``).
-    :param int kernel:
-      The type of kernel to use (default: ``2``: Wendland's C2 function).
-    :param bool advection:
-      Whether to perform advection (default: False).
-    :param int advection_scheme:
-      The advection scheme to use (default: ``2``: RK4).
-      Available schemes are:
-
-      - ``0``: Euler
-      - ``1``: RK2
-      - ``2``: RK4
-      - ``3``: Dormand-Prince 5(4)
-    
-    :param float advection_cfl:
-      The Courant-Friedrichs-Lewy number for the advection scheme (default: ``0.5``).
-    :param float rmin:
-      The minimum radius for the advection in spherical domains (default: ``0``).
-    :param float rmax:
-      The maximum radius for the advection in spherical domains (default: ``1.0e132``).
-
-    :Methods:
-    """
     self.data_filled:bool   = False
     self.interp_filled:bool = False
     self.PetscReal:np.dtype = np.dtype(PETSc.RealType)
@@ -212,6 +212,7 @@ class LagRBFCtx:
     :param objs: 
       Keyword arguments representing the objects to store.
       Example: 
+      
       .. code-block:: python
 
           store_ref(advection_fn=my_function, advection_data=my_data)

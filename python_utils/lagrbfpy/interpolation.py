@@ -16,6 +16,7 @@ class LagRBFInterpolator(LagRBFCtx):
   :param dict petsc_options: 
     A dictionary of PETSc options to configure the interpolation process.
     Can be created as 
+    
     .. code-block:: python
 
         petsc_options = PETSc.Options()
