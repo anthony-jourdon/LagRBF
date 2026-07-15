@@ -9,7 +9,7 @@
 # PETSc variables (assumes PETSC_DIR and PETSC_ARCH are set in your environment)
 include ${PETSC_DIR}/${PETSC_ARCH}/lib/petsc/conf/petscvariables
 
-all : info liblagrangian tests drivers save_config
+all : info liblagrbf tests drivers save_config
 
 # Compilation options are to be placed in makefile.arch;
 # if that (untracked) file does not exist, defaults are copied there
@@ -62,7 +62,7 @@ LAG_INC := $(PETSC_CC_INCLUDES) -I$(PWD)/include
 thisdir = $(addprefix $(dir $(lastword $(MAKEFILE_LIST))),$(1))
 incsubdirs = $(addsuffix /local.mk,$(call thisdir,$(1)))
 
-liblagrangian-offline-y.c      :=
+liblagrbf-offline-y.c      :=
 lagrangian-offline-tests-y.c   :=
 lagrangian-offline-drivers-y.c :=
 
@@ -83,13 +83,13 @@ else # Show the full command line
   quiet = $($1)
 endif
 
-.PHONY: liblagrangian liblagrangian-static liblagrangian-shared tests drivers
+.PHONY: liblagrbf liblagrbf-static liblagrbf-shared tests drivers
 
-liblagrangian-static = $(LIBDIR)/liblagrangian.$(AR_LIB_SUFFIX)
-liblagrangian-shared = $(LIBDIR)/liblagrangian.so
-liblagrangian : $(liblagrangian-static) $(liblagrangian-shared)
-$(liblagrangian-static) : $(liblagrangian-offline-y.c:%.c=$(OBJDIR)/%.o)
-$(liblagrangian-shared) : $(liblagrangian-offline-y.c:%.c=$(OBJDIR)/%.o) 
+liblagrbf-static = $(LIBDIR)/liblagrbf.$(AR_LIB_SUFFIX)
+liblagrbf-shared = $(LIBDIR)/liblagrbf.so
+liblagrbf : $(liblagrbf-static) $(liblagrbf-shared)
+$(liblagrbf-static) : $(liblagrbf-offline-y.c:%.c=$(OBJDIR)/%.o)
+$(liblagrbf-shared) : $(liblagrbf-offline-y.c:%.c=$(OBJDIR)/%.o) 
 
 info:
 	-@echo "—————————————————————————————————————————————————————————————————"
@@ -123,12 +123,12 @@ LAG_COMPILE.c = $(call quiet,$(cc_name)) -c $(PCC_FLAGS) $(CCPPFLAGS) $(LAG_CFLA
 
 # Test executables
 tests: $(lagrangian-offline-tests-y.c:%.c=$(BINDIR)/%.app)
-$(lagrangian-offline-tests-y.c:%.c=$(BINDIR)/%.app) : $(liblagrangian-static)
+$(lagrangian-offline-tests-y.c:%.c=$(BINDIR)/%.app) : $(liblagrbf-static)
 .SECONDARY: $(lagrangian-offline-tests-y.c:%.c=$(OBJDIR)/%.o)
 
 # Drivers
 drivers: $(lagrangian-offline-drivers-y.c:%.c=$(BINDIR)/%.app)
-$(lagrangian-offline-drivers-y.c:%.c=$(BINDIR)/%.app) : $(liblagrangian-static)
+$(lagrangian-offline-drivers-y.c:%.c=$(BINDIR)/%.app) : $(liblagrbf-static)
 .SECONDARY: $(lagrangian-offline-drivers-y.c:%.c=$(OBJDIR)/%.o)
 
 $(BINDIR)/%.app : $(OBJDIR)/%.o | $$(@D)/.DIR
@@ -153,7 +153,7 @@ clean:
 print:
 	@echo $($(VAR))
 
-srcs.c := $(liblagrangian-offline-y.c) $(lagrangian-offline-tests-y.c) $(lagrangian-offline-drivers-y.c)
+srcs.c := $(liblagrbf-offline-y.c) $(lagrangian-offline-tests-y.c) $(lagrangian-offline-drivers-y.c)
 srcs.o := $(srcs.c:%.c=$(OBJDIR)/%.o)
 srcs.d := $(srcs.o:%.o=%.d)
 # Tell make that srcs.d are all up to date.  Without this, the include
