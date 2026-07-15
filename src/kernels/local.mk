@@ -1,3 +1,3 @@
-liblagrbf-offline-y.c += $(call thisdir, \
+liblagrbf-y.c += $(call thisdir, \
 	kernels_rbf.c \
 )

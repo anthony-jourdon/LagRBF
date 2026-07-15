@@ -1,4 +1,4 @@
-liblagrbf-offline-y.c += $(call thisdir, \
+liblagrbf-y.c += $(call thisdir, \
   advection_ctx.c \
   advection.c \
   runge_kutta_1.c \

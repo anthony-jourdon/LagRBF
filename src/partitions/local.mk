@@ -1,4 +1,4 @@
-liblagrbf-offline-y.c += $(call thisdir, \
+liblagrbf-y.c += $(call thisdir, \
 	partition.c \
 	partition_solve.c \
 	partition_factor.c \
@@ -7,12 +7,12 @@ liblagrbf-offline-y.c += $(call thisdir, \
 )
 
 ifeq ($(HAVE_AVX512),1)
-liblagrbf-offline-y.c += $(call thisdir, \
+liblagrbf-y.c += $(call thisdir, \
   partition_asmb_avx.c \
   partition_asmb_avx512.c \
 )
 else ifeq ($(HAVE_AVX256),1)
-liblagrbf-offline-y.c += $(call thisdir, \
+liblagrbf-y.c += $(call thisdir, \
   partition_asmb_avx.c \
 )
 endif

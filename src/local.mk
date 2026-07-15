@@ -1,4 +1,4 @@
-liblagrbf-offline-y.c += $(call thisdir, \
+liblagrbf-y.c += $(call thisdir, \
 	lagrangian_rbf_init.c \
 	lagrangian_rbf.c \
 	partition_of_unity.c \

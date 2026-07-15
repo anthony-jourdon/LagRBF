@@ -1,4 +1,4 @@
-liblagrbf-offline-y.c += $(call thisdir, \
+liblagrbf-y.c += $(call thisdir, \
 	reader_utils.c \
 )
 
