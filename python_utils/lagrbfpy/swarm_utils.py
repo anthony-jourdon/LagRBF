@@ -8,16 +8,37 @@ except ImportError:
 
 class PointSwarm(pvs.PolyData):
   """
-  A simple wrapper around pyvista.PolyData to represent a set of points in space.
+  A simple wrapper around PyVista's :py:class:`PolyData <pyvista.PolyData>` to represent a set of points in space.
+  The constructor can take any PyVista :py:class:`PolyData <pyvista.PolyData>` constructor arguments, 
+  but also allows for the generation of structured or Halton point distributions in Cartesian, spherical, 
+  or toroidal domain.
+
+  :param str point_type:
+    The type of point distribution to generate. 
+    Can be ``"structured"`` or ``"halton"``. 
+    If None, the points are taken from the provided :py:class:`PolyData <pyvista.PolyData>` arguments.
+  :param str coordinate_type:
+    The type of coordinates to use.
+    Can be ``"cartesian"``, ``"spherical"``, or ``"toroidal"``. 
+    If None, defaults to ``"cartesian"``.
+  :param numpy.ndarray O:
+    The minimum coordinates (lower bounds) of the point distribution.
+  :param numpy.ndarray L:
+    The maximum coordinates (upper bounds) of the point distribution.
+  :param numpy.ndarray n:
+    The number of points. 
+    If ``point_type`` is ``"structured"``, this should be an array of integers specifying 
+    the number of points along each dimension.
+    If ``point_type`` is ``"halton"``, this can be a single integer specifying 
+    the total number of points, if an array of integers is provided, the product of its entries is done.
+  :param float R:
+    The major radius of the torus, used only if ``coordinate_type`` is ``"toroidal"``.
   """
   def __init__(
       self, 
       *args, 
       **kwargs
     ) -> None:
-    """
-    Initialize the PointSwarm object.
-    """
     self.point_type = kwargs.pop("point_type", None)
     if self.point_type is None:
       super().__init__(*args, **kwargs)
@@ -52,6 +73,23 @@ class PointSwarm(pvs.PolyData):
       super().__init__(points)
 
   def structured_coordinates(self, O:np.ndarray|list|tuple, L:np.ndarray|list|tuple, n:np.ndarray|list|tuple) -> np.ndarray:
+    """
+    Generate an uniform structured grid of points.
+    The points are generated in a grid defined by the lower bounds `O`, upper bounds `L`, 
+    and the number of points `n` along each dimension.
+
+    :param numpy.ndarray|list|tuple O:
+      The minimum coordinates (lower bounds) of the grid.
+    :param numpy.ndarray|list|tuple L:
+      The maximum coordinates (upper bounds) of the grid.
+    :param numpy.ndarray|list|tuple n:
+      The number of points along each dimension. Should be an array of integers.
+    :return:
+      An array of shape ``(N, 3)`` containing the generated points, where `N` 
+      is the total number of points (product of entries in `n`).
+    :rtype: 
+      numpy.ndarray
+    """
     if isinstance(O, (list, tuple)):
       O = np.asarray(O, dtype=np.float64)
     if isinstance(L, (list, tuple)):
@@ -76,6 +114,27 @@ class PointSwarm(pvs.PolyData):
     return points
 
   def halton_coordinates(self, O:np.ndarray|list|tuple, L:np.ndarray|list|tuple, n:int|np.integer) -> np.ndarray:
+    """
+    Generate a set of points in Cartesian coordinates using the 
+    :py:func:`Halton sequence <lagrbfpy.halton_sequence>`.
+    The points are generated in a box defined by the lower bounds `O`, upper bounds `L`, 
+    and the total number of points `n`.
+
+    .. note::
+      The bases used for the Halton sequence are the first three prime numbers (2, 3, 5) 
+      for the x, y, and z dimensions respectively.
+
+    :param numpy.ndarray|list|tuple O:
+      The minimum coordinates (lower bounds) of the box.
+    :param numpy.ndarray|list|tuple L:
+      The maximum coordinates (upper bounds) of the box.
+    :param int n:
+      The total number of points to generate.
+    :return:
+      An array of shape ``(n, 3)`` containing the generated points.
+    :rtype:
+      numpy.ndarray
+    """
     if isinstance(O, (list, tuple)):
       O = np.asarray(O, dtype=np.float64)
     if isinstance(L, (list, tuple)):
@@ -103,6 +162,30 @@ class PointSwarm(pvs.PolyData):
     return points
 
   def spherical_coordinates(self, points_r:np.ndarray, dim:int) -> np.ndarray:
+    """
+    Generate a structured uniform Cartesian coordinates sphere from spherical coordinates.
+
+    .. note::
+      The point distribution is called "uniform" because the points are generated in a structured manner,
+      but the actual distribution of points on the sphere **is not** uniform, the distance between points
+      varies with the polar angle.
+      For a truly uniform distribution of points on a sphere, consider using the 
+      :py:meth:`halton_spherical_coordinates` method.
+
+    :param numpy.ndarray points_r:
+      An array of shape ``(N, 3)`` containing the spherical coordinates of the points,
+      where `N` is the total number of points. 
+      The first column should contain the radial distances, 
+      the second column should contain the polar angles (in radians), 
+      and the third column should contain the azimuthal angles (in radians).
+      This parameter can be generated using the :py:meth:`structured_coordinates` method.
+    :param int dim:
+      The spatial dimension of the points. Should be either 2 or 3.
+    :return:
+      An array of shape ``(N, 3)`` containing the generated Cartesian coordinates of the points.
+    :rtype:
+      numpy.ndarray
+    """
     points_x = np.zeros_like(points_r)
     if dim == 2:
       points_x[:, 0] = points_r[:, 0] * np.cos(points_r[:, 1])
@@ -117,6 +200,27 @@ class PointSwarm(pvs.PolyData):
     return points_x
   
   def halton_spherical_coordinates(self, O:np.ndarray|list|tuple, L:np.ndarray|list|tuple, n:int|np.integer) -> np.ndarray:
+    """
+    Generate a set of points in a sphere (or a disc) using a :py:func:`Halton sequence <lagrbfpy.halton_sequence>`.
+    
+    .. note::
+      The bases used for the Halton sequence are the first three prime numbers (2, 3, 5) 
+      for the radial, polar, and azimuthal dimensions respectively.
+      This method generate a point distribution that fill the spherical domain much more uniformly 
+      than the :py:meth:`structured_coordinates` method.
+
+    :param numpy.ndarray|list|tuple O:
+      The minimum coordinates (lower bounds) of the spherical domain.
+    :param numpy.ndarray|list|tuple L:
+      The maximum coordinates (upper bounds) of the spherical domain.
+    :param int n:
+      The total number of points to generate.
+    :return:
+      An array of shape ``(N, 3)`` containing the generated points, where `N` 
+      is the total number of points (product of entries in `n`).
+    :rtype:
+      numpy.ndarray
+    """
     if isinstance(O, (list, tuple)):
       O = np.asarray(O, dtype=np.float64)
     if isinstance(L, (list, tuple)):
@@ -151,6 +255,19 @@ class PointSwarm(pvs.PolyData):
     return points
   
   def torus_coordinates(self, points_r:np.ndarray, R:float) -> np.ndarray:
+    """
+    Convert torus coordinates to Cartesian coordinates.
+    
+    :param numpy.ndarray points_r:
+      The torus coordinates (radial, polar, azimuthal).
+    :param float R:
+      The major radius of the torus.
+    :return:
+      An array of shape ``(N, 3)`` containing the Cartesian coordinates, where `N` 
+      is the total number of points.
+    :rtype:
+      numpy.ndarray
+    """
     points_x = np.zeros_like(points_r)
     points_x[:, 0] = (R + points_r[:, 0] * np.sin(points_r[:, 1])) * np.cos(points_r[:, 2])
     points_x[:, 1] = (R + points_r[:, 0] * np.sin(points_r[:, 1])) * np.sin(points_r[:, 2])
@@ -158,6 +275,25 @@ class PointSwarm(pvs.PolyData):
     return points_x
   
   def halton_torus_coordinates(self, O:np.ndarray|list|tuple, L:np.ndarray|list|tuple, n:int|np.integer, R:float) -> np.ndarray:
+    """
+    Generate a set of points in a torus using a :py:func:`Halton sequence <lagrbfpy.halton_sequence>`.
+    The points are generated in a toroidal domain defined by the lower bounds `O`, upper bounds `L`, 
+    and the total number of points `n`.
+    The major radius of the torus is specified by `R`.
+
+    :param numpy.ndarray|list|tuple O:
+      The minimum coordinates (lower bounds) of the toroidal domain.
+    :param numpy.ndarray|list|tuple L:
+      The maximum coordinates (upper bounds) of the toroidal domain.
+    :param int n:
+      The total number of points to generate.
+    :param float R:
+      The major radius of the torus.
+    :return:
+      An array of shape ``(N, 3)`` containing the generated points, where `N` is the total number of points (product of entries in `n`).
+    :rtype:
+      numpy.ndarray
+    """
     if isinstance(O, (list, tuple)):
       O = np.asarray(O, dtype=np.float64)
     if isinstance(L, (list, tuple)):

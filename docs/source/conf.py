@@ -56,6 +56,7 @@ intersphinx_mapping = {
     "numpy": ("https://numpy.org/doc/stable/", None),
     "matplotlib": ("https://matplotlib.org/stable/", None),
     "sympy": ("https://docs.sympy.org/latest/", None),
+    "pyvista": ("https://docs.pyvista.org/", None),
     "scipy": ("https://docs.scipy.org/doc/scipy/", None)
 }
 

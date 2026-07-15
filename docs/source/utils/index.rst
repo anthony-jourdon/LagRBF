@@ -6,3 +6,4 @@ Python utilities
 
   halton_seq
   timeseries
+  point_swarm
