@@ -1,5 +1,5 @@
 # ==============================================================================
-#   Makefile for lagrangian-offline
+#   Makefile for LagRBF
 # ==============================================================================
 
 .SECONDEXPANSION:           # To expand $$(@D)/.DIR
@@ -14,7 +14,7 @@ all : info liblagrbf tests drivers save_config
 # Compilation options are to be placed in makefile.arch;
 # if that (untracked) file does not exist, defaults are copied there
 makefile.arch:
-	-@echo "[lagrangian-offline config] using config/makefile.arch.default as makefile.arch"
+	-@echo "[lagrbf config] using config/makefile.arch.default as makefile.arch"
 	-@cp config/makefile.arch.default $@
 -include makefile.arch
 
@@ -62,13 +62,13 @@ LAG_INC := $(PETSC_CC_INCLUDES) -I$(PWD)/include
 thisdir = $(addprefix $(dir $(lastword $(MAKEFILE_LIST))),$(1))
 incsubdirs = $(addsuffix /local.mk,$(call thisdir,$(1)))
 
-liblagrbf-offline-y.c      :=
-lagrangian-offline-tests-y.c   :=
-lagrangian-offline-drivers-y.c :=
+liblagrbf-y.c      :=
+lagrbf-tests-y.c   :=
+lagrbf-drivers-y.c :=
 
 # Prepend directory to sources
-#lagrangian-offline-y.c       := $(addprefix src/, $(lagrangian-offline-y.c))
-#lagrangian-offline-tests-y.c := $(addprefix src/tests/, $(lagrangian-offline-tests-y.c))
+#lagrbf-y.c       := $(addprefix src/, $(lagrbf-y.c))
+#lagrbf-tests-y.c := $(addprefix src/tests/, $(lagrbf-tests-y.c))
 
 # Recursively include files for all targets
 include local.mk
@@ -88,12 +88,12 @@ endif
 liblagrbf-static = $(LIBDIR)/liblagrbf.$(AR_LIB_SUFFIX)
 liblagrbf-shared = $(LIBDIR)/liblagrbf.so
 liblagrbf : $(liblagrbf-static) $(liblagrbf-shared)
-$(liblagrbf-static) : $(liblagrbf-offline-y.c:%.c=$(OBJDIR)/%.o)
-$(liblagrbf-shared) : $(liblagrbf-offline-y.c:%.c=$(OBJDIR)/%.o) 
+$(liblagrbf-static) : $(liblagrbf-y.c:%.c=$(OBJDIR)/%.o)
+$(liblagrbf-shared) : $(liblagrbf-y.c:%.c=$(OBJDIR)/%.o) 
 
 info:
 	-@echo "—————————————————————————————————————————————————————————————————"
-	-@echo " lagrangian-offline"
+	-@echo " lagrbf"
 	-@echo "    git url: https://notyetset.git"
 	-@echo "—————————————————————————————————————————————————————————————————"
 	-@echo $(AVX_INFO_MSG) 
@@ -122,14 +122,14 @@ LAG_CFLAGS_PIC+=-fPIC
 LAG_COMPILE.c = $(call quiet,$(cc_name)) -c $(PCC_FLAGS) $(CCPPFLAGS) $(LAG_CFLAGS) $(LAG_CFLAGS_PIC) $(LAG_INC) $(CFLAGS) $(C_DEPFLAGS) $(LAG_CFLAGS_EXTENSIONS)
 
 # Test executables
-tests: $(lagrangian-offline-tests-y.c:%.c=$(BINDIR)/%.app)
-$(lagrangian-offline-tests-y.c:%.c=$(BINDIR)/%.app) : $(liblagrbf-static)
-.SECONDARY: $(lagrangian-offline-tests-y.c:%.c=$(OBJDIR)/%.o)
+tests: $(lagrbf-tests-y.c:%.c=$(BINDIR)/%.app)
+$(lagrbf-tests-y.c:%.c=$(BINDIR)/%.app) : $(liblagrbf-static)
+.SECONDARY: $(lagrbf-tests-y.c:%.c=$(OBJDIR)/%.o)
 
 # Drivers
-drivers: $(lagrangian-offline-drivers-y.c:%.c=$(BINDIR)/%.app)
-$(lagrangian-offline-drivers-y.c:%.c=$(BINDIR)/%.app) : $(liblagrbf-static)
-.SECONDARY: $(lagrangian-offline-drivers-y.c:%.c=$(OBJDIR)/%.o)
+drivers: $(lagrbf-drivers-y.c:%.c=$(BINDIR)/%.app)
+$(lagrbf-drivers-y.c:%.c=$(BINDIR)/%.app) : $(liblagrbf-static)
+.SECONDARY: $(lagrbf-drivers-y.c:%.c=$(OBJDIR)/%.o)
 
 $(BINDIR)/%.app : $(OBJDIR)/%.o | $$(@D)/.DIR
 	$(call quiet,PCC_LINKER) $(LAG_CFLAGS) -o $@ $^ $(PETSC_SNES_LIB) $(LAG_LIB)
@@ -153,7 +153,7 @@ clean:
 print:
 	@echo $($(VAR))
 
-srcs.c := $(liblagrbf-offline-y.c) $(lagrangian-offline-tests-y.c) $(lagrangian-offline-drivers-y.c)
+srcs.c := $(liblagrbf-y.c) $(lagrbf-tests-y.c) $(lagrbf-drivers-y.c)
 srcs.o := $(srcs.c:%.c=$(OBJDIR)/%.o)
 srcs.d := $(srcs.o:%.o=%.d)
 # Tell make that srcs.d are all up to date.  Without this, the include
