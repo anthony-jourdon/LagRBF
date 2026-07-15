@@ -68,3 +68,14 @@ __pycache__/
 *.vtp
 
 .DIR
+
+# documentation
+*.html
+*.js
+*.png
+*.css
+*.woff
+*.woff2
+*.ttf
+*.eot
+*.doctree
