@@ -7,3 +7,4 @@ LagRBF documentation
 
   api/python/index
   api/c/generated/index
+  utils/index
