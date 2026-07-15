@@ -11,7 +11,7 @@
 PetscErrorCode InterfacePetscErrorPrinter(PetscErrorCode ierr, const char *function_name)
 {
   const char *err_str;
-  char       *specific;
+  const char *specific;
   PetscFunctionBeginUser;
   if (!ierr) { PetscFunctionReturn(PETSC_SUCCESS); }
   PetscCall(PetscErrorMessage(ierr, &err_str, &specific));
