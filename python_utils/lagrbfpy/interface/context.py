@@ -85,7 +85,7 @@ class LagRBFCtx:
 
     self.output_path = kwargs.get("output_path", self.options.getString("output_path", "output"))
     if not os.path.exists(self.output_path):
-      os.makedirs(self.output_path)
+      os.makedirs(self.output_path, exist_ok=True)
       print(f"Created output directory: {self.output_path}")
 
     self.dim = kwargs.get("dim", self.options.getInt("pu_mesh_dim", 3) )
