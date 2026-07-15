@@ -142,9 +142,9 @@ PetscErrorCode PointwiseInterpolation_Scalar(
 
   Notes:
   Backend is selected at compile time:
-  ``__AVX512F__`` -> PointwiseInterpolation_AVX512()
-  ``__AVX__``     -> PointwiseInterpolation_AVX256()
-  ``fallback``    -> PointwiseInterpolation_Scalar()
+  ``__AVX512F__``: AVX-512 implementation
+  ``__AVX__``: AVX-256 implementation
+  ``fallback``: Scalar implementation
 
 .seealso: DM, DMSWARM, DMSwarmGetField(), DMSwarmRestoreField(), PetscErrorCode
 @*/

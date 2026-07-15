@@ -349,13 +349,17 @@ PetscErrorCode AdvectionInitializeTimestepVelocity(LagRBFCtx ctx, DM swarm)
   AdvectionEvaluateVelocity - Evaluate the velocity field at the current particle positions.
 
   Input Parameters:
-+ ctx  - The `LagRBFCtx` context
-. swi  - The `DM` swarm containing the interpolation points (particles)
-- swd  - The `DM` swarm containing the data points (velocity field). Can be NULL if using an analytical velocity field.
++ ctx (LagRBFCtx)  - The `LagRBFCtx` context
+. swi (DM)         - The `DM` swarm containing the interpolation points (particles)
+- swd (DM)         - The `DM` swarm containing the data points (velocity field). Can be NULL if using an analytical velocity field.
+  
+  Output Parameter:
+. PETSC_SUCCESS - if successful
+
   Notes:
   This function uses the velocity type specified in the `AdvectionCtx` to either:
-    1) Use RBF interpolation to evaluate the velocity at the particle positions
-    2) Use a user-defined function to evaluate the velocity at the particle positions
+  1) Use RBF interpolation to evaluate the velocity at the particle positions
+  2) Use a user-defined function to evaluate the velocity at the particle positions
 @*/
 PetscErrorCode AdvectionEvaluateVelocity(LagRBFCtx ctx, DM swi, DM swd)
 {
@@ -382,6 +386,20 @@ PetscErrorCode AdvectionEvaluateVelocity(LagRBFCtx ctx, DM swi, DM swd)
   PetscFunctionReturn(PETSC_SUCCESS);
 }
 
+/*@
+  AdvectionComputeTimestep_CFL - Compute the timestep based on the CFL condition.
+
+  Input Parameters:
++ ctx (LagRBFCtx)  - The `LagRBFCtx` context
+- swarm (DM)       - The `DM` swarm containing the interpolation points (particles)
+
+  Output Parameter:
+. _dt (PetscReal*) - Pointer to store the computed timestep
+
+  Notes:
+  This function computes the timestep based on the CFL condition, which is determined by the maximum velocity and the support radius of the partition of unity. 
+  The computed timestep is returned through the `_dt` pointer.
+@*/
 PetscErrorCode AdvectionComputeTimestep_CFL(LagRBFCtx ctx, DM swarm, PetscReal *_dt)
 {
   PartitionOfUnity pu;
