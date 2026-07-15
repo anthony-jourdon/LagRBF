@@ -1,5 +1,5 @@
-#ifndef __softname_exp_avx_h
-#define __softname_exp_avx_h
+#ifndef __LagRBF_exp_avx_h
+#define __LagRBF_exp_avx_h
 
 #include <immintrin.h>
 

@@ -1,5 +1,5 @@
-#ifndef __softname_interface_ctx_h
-#define __softname_interface_ctx_h
+#ifndef __LagRBF_interface_ctx_h
+#define __LagRBF_interface_ctx_h
 
 #include "lagrangian_rbf.h"
 

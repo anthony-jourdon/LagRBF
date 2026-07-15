@@ -1,5 +1,5 @@
-#ifndef __softname_partition_h
-#define __softname_partition_h
+#ifndef __LagRBF_partition_h
+#define __LagRBF_partition_h
 
 #include <petsc.h>
 #include "lagrangian_rbf.h"

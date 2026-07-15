@@ -1,5 +1,5 @@
-#ifndef __softname_swarm_load_h
-#define __softname_swarm_load_h
+#ifndef __LagRBF_swarm_load_h
+#define __LagRBF_swarm_load_h
 
 #include "lagrangian_rbf.h"
 

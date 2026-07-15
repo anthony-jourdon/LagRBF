@@ -1,5 +1,5 @@
-#ifndef __softname_cell_info_h
-#define __softname_cell_info_h
+#ifndef __LagRBF_cell_info_h
+#define __LagRBF_cell_info_h
 
 #include <petsc.h>
 #include "partition_of_unity.h"

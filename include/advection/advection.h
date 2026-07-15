@@ -1,5 +1,5 @@
-#ifndef __softname_advection_h
-#define __softname_advection_h
+#ifndef __LagRBF_advection_h
+#define __LagRBF_advection_h
 
 #include "advection/advection_ctx.h"
 

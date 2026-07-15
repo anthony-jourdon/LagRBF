@@ -1,5 +1,5 @@
-#ifndef softname_stag_utils_h
-#define softname_stag_utils_h
+#ifndef LagRBF_stag_utils_h
+#define LagRBF_stag_utils_h
 
 #include <petsc.h>
 #include "lagrangian_rbf.h"

@@ -1,5 +1,5 @@
-#ifndef __softname_interpolation_h
-#define __softname_interpolation_h
+#ifndef __LagRBF_interpolation_h
+#define __LagRBF_interpolation_h
 
 #include <petsc.h>
 #include "lagrangian_rbf.h"

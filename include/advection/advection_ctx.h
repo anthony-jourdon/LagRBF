@@ -1,5 +1,5 @@
-#ifndef __softname_advection_ctx_h
-#define __softname_advection_ctx_h
+#ifndef __LagRBF_advection_ctx_h
+#define __LagRBF_advection_ctx_h
 
 #include <petsc.h>
 #include "lagrangian_rbf.h"

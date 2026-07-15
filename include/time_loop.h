@@ -1,5 +1,5 @@
-#ifndef __softname_time_loop_h
-#define __softname_time_loop_h
+#ifndef __LagRBF_time_loop_h
+#define __LagRBF_time_loop_h
 
 #include "lagrangian_rbf.h"
 

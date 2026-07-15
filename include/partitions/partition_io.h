@@ -1,5 +1,5 @@
-#ifndef __softname_partition_io_h
-#define __softname_partition_io_h
+#ifndef __LagRBF_partition_io_h
+#define __LagRBF_partition_io_h
 
 #include "partitions/partition.h"
 #include "io_utils.h"

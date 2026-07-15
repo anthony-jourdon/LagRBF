@@ -1,5 +1,5 @@
-#ifndef __softname_runge_kutta_4_h
-#define __softname_runge_kutta_4_h
+#ifndef __LagRBF_runge_kutta_4_h
+#define __LagRBF_runge_kutta_4_h
 
 #include "advection/advection_ctx.h"
 

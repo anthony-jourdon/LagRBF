@@ -1,5 +1,5 @@
-#ifndef __softname_interface_adv_h
-#define __softname_interface_adv_h
+#ifndef __LagRBF_interface_adv_h
+#define __LagRBF_interface_adv_h
 
 #include "lagrangian_rbf.h"
 

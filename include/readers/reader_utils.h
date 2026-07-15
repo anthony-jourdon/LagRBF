@@ -1,5 +1,5 @@
-#ifndef __softname_reader_utils_h
-#define __softname_reader_utils_h
+#ifndef __LagRBF_reader_utils_h
+#define __LagRBF_reader_utils_h
 
 #include <petsc.h>
 #include "readers/stagYY/stag_utils.h"

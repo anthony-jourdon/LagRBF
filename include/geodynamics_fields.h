@@ -1,4 +1,4 @@
-#ifndef __softname_geodynamics_fields_h
-#define __softname_geodynamics_fields_h
+#ifndef __LagRBF_geodynamics_fields_h
+#define __LagRBF_geodynamics_fields_h
 
 #endif

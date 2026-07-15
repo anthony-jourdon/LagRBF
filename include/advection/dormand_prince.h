@@ -1,5 +1,5 @@
-#ifndef __softname_dormand_prince_4_h
-#define __softname_dormand_prince_4_h
+#ifndef __LagRBF_dormand_prince_4_h
+#define __LagRBF_dormand_prince_4_h
 
 #include <petsc.h>
 

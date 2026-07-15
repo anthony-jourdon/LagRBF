@@ -1,6 +1,6 @@
 
-#ifndef __softname_kernels_rbf_h
-#define __softname_kernels_rbf_h
+#ifndef __LagRBF_kernels_rbf_h
+#define __LagRBF_kernels_rbf_h
 
 #include <petsc.h>
 

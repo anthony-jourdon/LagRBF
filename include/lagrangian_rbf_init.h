@@ -1,5 +1,5 @@
-#ifndef __softname_lagrangian_rbf_init_h
-#define __softname_lagrangian_rbf_init_h
+#ifndef __LagRBF_lagrangian_rbf_init_h
+#define __LagRBF_lagrangian_rbf_init_h
 
 #include <petsc.h>
 

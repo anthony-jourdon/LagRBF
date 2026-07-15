@@ -1,5 +1,5 @@
-#ifndef softname_petsc_dense_h
-#define softname_petsc_dense_h
+#ifndef LagRBF_petsc_dense_h
+#define LagRBF_petsc_dense_h
 
 #include <petsc.h>
 

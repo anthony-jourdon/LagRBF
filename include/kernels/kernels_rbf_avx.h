@@ -1,5 +1,5 @@
-#ifndef __softname_kernels_rbf_avx_h
-#define __softname_kernels_rbf_avx_h
+#ifndef __LagRBF_kernels_rbf_avx_h
+#define __LagRBF_kernels_rbf_avx_h
 
 #if defined(__AVX__)
 #include <immintrin.h>
