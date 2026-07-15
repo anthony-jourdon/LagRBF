@@ -16,7 +16,7 @@ def wrap_ndpointer(dtype=None, ndim=None, shape=None, flags=None):
 
 def load_shared_lib():
   libdir   = os.path.join(os.path.dirname(__file__),"..","..",os.environ["PETSC_ARCH"],"lib")
-  clibname = "liblagrangian.so"
+  clibname = "liblagrbf.so"
   clib = ctypes.cdll.LoadLibrary(os.path.join(libdir, clibname))
   return clib
 
