@@ -1,5 +1,6 @@
 
 import sys, petsc4py
+import warnings
 petsc4py.init(sys.argv) # maybe this should be called in scripts, I don't know yet
 
 from . import register_cfunc
@@ -22,9 +23,24 @@ from .utils.timeseries import timeseries_process, timeseries_compare, timeseries
 from .petsc_io.petscvec_loader import PetscVecLoadFromFile, PetscVecLoadBlockSizeFromFile, PetscVecLoad, PetscISLoadFromFile, PetscMatDenseLoadFromFile
 from .petsc_io.petscvec_writer import PetscVecWriteToFile, PetscVecWriteBlockSizeToFile, PetscVecWrite, PetscISWriteToFile
 from .interface.context import LagRBFCtx
-from .analytical_flow import HarmonicFlow, ToroidalFlow, PoloidalFlow, FlowData, toroidal_poloidal_flow, Ctoroidal_poloidal_flow, Ctoroidal_poloidal_flow_batch
 from .interpolation import LagRBFInterpolator
 from .advection import Advection, AdvectionAnalytical, AdvectionInterpolation
+
+_ANALYTICAL_FLOW_AVAILABLE = True
+try:
+  from .analytical_flow import HarmonicFlow, ToroidalFlow, PoloidalFlow, FlowData, toroidal_poloidal_flow, Ctoroidal_poloidal_flow, Ctoroidal_poloidal_flow_batch
+except ModuleNotFoundError as exc:
+  if exc.name == "sphericart":
+    _ANALYTICAL_FLOW_AVAILABLE = False
+    warnings.warn(
+      "Optional dependency 'sphericart' is not installed. "
+      "Analytical flow helpers and advection_benchmark.py are unavailable, "
+      "but the rest of lagrbfpy will continue to work.",
+      UserWarning,
+      stacklevel=2,
+    )
+  else:
+    raise
 
 __all__ = [
   "PointContainer",
@@ -48,15 +64,19 @@ __all__ = [
   "PetscISWriteToFile",
   "LagRBFCtx",
   "PointSwarm",
-  "HarmonicFlow",
-  "ToroidalFlow",
-  "PoloidalFlow",
-  "FlowData",
-  "toroidal_poloidal_flow",
-  "Ctoroidal_poloidal_flow",
-  "Ctoroidal_poloidal_flow_batch",
   "LagRBFInterpolator",
   "Advection",
   "AdvectionAnalytical",
   "AdvectionInterpolation",
 ]
+
+if _ANALYTICAL_FLOW_AVAILABLE:
+  __all__ += [
+    "HarmonicFlow",
+    "ToroidalFlow",
+    "PoloidalFlow",
+    "FlowData",
+    "toroidal_poloidal_flow",
+    "Ctoroidal_poloidal_flow",
+    "Ctoroidal_poloidal_flow_batch",
+  ]
