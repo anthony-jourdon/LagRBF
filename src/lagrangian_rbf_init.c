@@ -27,7 +27,20 @@ extern PetscLogEvent LAGRBF_CellInfoSetUp;
 static PetscErrorCode LagRBFWriteInitialInfo(void)
 {
   PetscFunctionBeginUser;
-
+  PetscPrintf(PETSC_COMM_WORLD,"\n");
+  PetscPrintf(PETSC_COMM_WORLD,"  ░██                               ░█████████  ░████████   ░██████████\n");
+  PetscPrintf(PETSC_COMM_WORLD,"  ░██                               ░██     ░██ ░██    ░██  ░██        \n");
+  PetscPrintf(PETSC_COMM_WORLD,"  ░██          ░██████    ░████████ ░██     ░██ ░██    ░██  ░██        \n");
+  PetscPrintf(PETSC_COMM_WORLD,"  ░██               ░██  ░██    ░██ ░█████████  ░████████   ░█████████ \n");
+  PetscPrintf(PETSC_COMM_WORLD,"  ░██          ░███████  ░██    ░██ ░██   ░██   ░██     ░██ ░██        \n");
+  PetscPrintf(PETSC_COMM_WORLD,"  ░██         ░██   ░██  ░██   ░███ ░██    ░██  ░██     ░██ ░██        \n");
+  PetscPrintf(PETSC_COMM_WORLD,"  ░██████████  ░█████░██  ░█████░██ ░██     ░██ ░█████████  ░██        \n");
+  PetscPrintf(PETSC_COMM_WORLD,"                                ░██                                    \n");
+  PetscPrintf(PETSC_COMM_WORLD,"                          ░███████                                     \n");
+  PetscPrintf(PETSC_COMM_WORLD,"\n");
+  PetscPrintf(PETSC_COMM_WORLD,"———————————————————————————————————————————————————————————————————————\n");
+  PetscPrintf(PETSC_COMM_WORLD," LagRBF: Lagrangian points Radial Basis Function library\n");
+  PetscPrintf(PETSC_COMM_WORLD,"    git url: https://github.com/anthony-jourdon/LagRBF\n");
 #if defined(__AVX512F__) 
   PetscPrintf(PETSC_COMM_WORLD,"** AVX-512 detected - optimized kernels will be used.\n");
 #elif defined(__AVX__)
@@ -37,7 +50,7 @@ static PetscErrorCode LagRBFWriteInitialInfo(void)
   PetscPrintf(PETSC_COMM_WORLD,"** If your system supports AVX, consider adding options,\n");
   PetscPrintf(PETSC_COMM_WORLD,"** e.g. -march=native, to LAG_CFLAGS in makefile.arch\n");
 #endif
-
+  PetscPrintf(PETSC_COMM_WORLD,"———————————————————————————————————————————————————————————————————————\n");
   PetscFunctionReturn(PETSC_SUCCESS);
 }
 
