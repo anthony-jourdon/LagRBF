@@ -291,16 +291,16 @@ static PetscErrorCode PointSetPolarToCartesianCoordinate(PetscReal params[], Pet
 }
 
 /*@
-  DMSwarmSetPointsSphericalCoordinates_Halton - Set point coordinates in a `DMSWARM` on a regular (ijk) spherical grid
+  DMSwarmSetPointsSphericalCoordinates_Uniform - Set point coordinates in a `DMSWARM` on a regular (ijk) spherical grid
 
   Collective
 
   Input Parameters:
-+ sw      - the `DMSWARM`
-. min     - minimum coordinate values in the r, theta, phi directions (array of length dim)
-. max     - maximum coordinate values in the r, theta, phi directions (array of length dim)
-. npoints - number of points in each spatial direction (array of length dim)
-- mode    - indicates whether to append points to the swarm (`ADD_VALUES`), or over-ride existing points (`INSERT_VALUES`)
++ sw      (DM)         - the `DMSWARM`
+. min     (PetscReal*) - minimum coordinate values in the r, theta, phi directions (array of length dim)
+. max     (PetscReal*) - maximum coordinate values in the r, theta, phi directions (array of length dim)
+. npoints (PetscInt*)  - number of points in each spatial direction (array of length dim)
+- mode    (InsertMode) - indicates whether to append points to the swarm (`ADD_VALUES`), or over-ride existing points (`INSERT_VALUES`)
 
   Notes:
   When using mode = `INSERT_VALUES`, this method will reset the number of particles in the `DMSWARM`

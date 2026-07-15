@@ -6,6 +6,15 @@
 
 #define LAGRBF_EXPORT __attribute__((visibility("default")))
 
+/*@C
+  LagRBFCtx - Context for the Lagrangian RBF interpolation
+  
+  RST:
+    .. code-block:: c
+
+      struct _p_LagRBFCtx *LagRBFCtx;
+
+@*/
 typedef struct _p_LagRBFCtx        *LagRBFCtx;
 typedef struct _p_Partition        *Partition;
 typedef struct _p_PartitionOfUnity *PartitionOfUnity;

@@ -126,6 +126,28 @@ PetscErrorCode PointwiseInterpolation_Scalar(
   PetscFunctionReturn(PETSC_SUCCESS);
 }
 
+/*@C
+  RBFInterpolation - Interpolate values of one field from data swarm points to interpolation swarm points
+
+  Collective
+
+  Input Parameters:
++ ctx (LagRBFCtx)         - the LagRBF context
+. swi (DM)                - interpolation swarm (target points)
+. swd (DM)                - data swarm (source points)
+- fieldname (const char*) - name of the field to interpolate
+
+  Output Parameter:
+. PETSC_SUCCESS - if successful
+
+  Notes:
+  Backend is selected at compile time:
+  ``__AVX512F__`` -> PointwiseInterpolation_AVX512()
+  ``__AVX__``     -> PointwiseInterpolation_AVX256()
+  ``fallback``    -> PointwiseInterpolation_Scalar()
+
+.seealso: DM, DMSWARM, DMSwarmGetField(), DMSwarmRestoreField(), PetscErrorCode
+@*/
 PetscErrorCode RBFInterpolation(LagRBFCtx ctx, DM swi, DM swd, const char *fieldname)
 {
   DMSwarmCellDM    celldm_i,celldm_d;
