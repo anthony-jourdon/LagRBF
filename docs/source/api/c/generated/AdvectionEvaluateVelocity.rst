@@ -23,4 +23,4 @@ AdvectionEvaluateVelocity
 
    **Source**
 
-   - ``/home/jourdon/Software/lagrangian-rbf/src/advection/advection.c``
+   - ``src/advection/advection.c``

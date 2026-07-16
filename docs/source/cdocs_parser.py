@@ -16,6 +16,7 @@ Usage:
 from __future__ import annotations
 
 import argparse
+import os
 import re
 import textwrap
 from dataclasses import dataclass, field
@@ -311,7 +312,15 @@ def format_seealso_item(item: str) -> str:
     return f"- {classify_symbol(item)}"
 
 
-def entry_to_rst(entry: DocEntry, documented_types: set[str]) -> str:
+def format_source_path(path_str: str, repo_root: Path) -> str:
+    p = Path(path_str).resolve()
+    try:
+        return p.relative_to(repo_root.resolve()).as_posix()
+    except ValueError:
+        return p.as_posix()
+
+
+def entry_to_rst(entry: DocEntry, documented_types: set[str], repo_root: Path) -> str:
     title = rst_escape_title(entry.name)
     lines: list[str] = []
     lines.append(title)
@@ -381,7 +390,7 @@ def entry_to_rst(entry: DocEntry, documented_types: set[str]) -> str:
 
     lines.append("   **Source**")
     lines.append("")
-    lines.append(f"   - ``{entry.source_file}``")
+    lines.append(f"   - ``{format_source_path(entry.source_file, repo_root)}``")
     lines.append("")
 
     return "\n".join(lines)
@@ -425,7 +434,7 @@ def extract_from_file(path: Path) -> list[DocEntry]:
     return entries
 
 
-def write_outputs(entries: list[DocEntry], out_dir: Path, index_file: Path) -> None:
+def write_outputs(entries: list[DocEntry], out_dir: Path, index_file: Path, repo_root: Path) -> None:
     out_dir.mkdir(parents=True, exist_ok=True)
 
     documented_types = {e.name for e in entries if e.kind == "type"}
@@ -434,7 +443,7 @@ def write_outputs(entries: list[DocEntry], out_dir: Path, index_file: Path) -> N
     for e in entries:
         fname = f"{e.name}.rst"
         path = out_dir / fname
-        path.write_text(entry_to_rst(e, documented_types), encoding="utf-8")
+        path.write_text(entry_to_rst(e, documented_types, repo_root), encoding="utf-8")
         generated_files.append(fname)
 
     generated_files.sort()
@@ -463,6 +472,7 @@ def main() -> int:
     args = ap.parse_args()
 
     src_dirs = [Path(s).resolve() for s in args.src]
+    repo_root = Path(os.path.commonpath([str(p) for p in src_dirs]))
     out_dir = Path(args.out).resolve()
     index_file = Path(args.index).resolve()
 
@@ -472,7 +482,7 @@ def main() -> int:
         all_entries.extend(extract_from_file(f))
 
     all_entries.sort(key=lambda e: (e.name.lower(), e.source_file))
-    write_outputs(all_entries, out_dir, index_file)
+    write_outputs(all_entries, out_dir, index_file, repo_root)
 
     print(f"Generated {len(all_entries)} documented C entries in {out_dir}")
     return 0

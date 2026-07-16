@@ -36,6 +36,23 @@ static PetscErrorCode FieldsAssembleArray_Allreduce(DM swarm_interp, PetscReal *
   PetscFunctionReturn(PETSC_SUCCESS);
 }
 
+/*@C
+  Interface_Interpolation - Interpolate values from data swarm points to interpolation swarm points.
+
+  Collective
+
+  Input Parameters:
+. ctx (LagRBFCtx) - the LagRBF context
+
+  Output Parameter:
+. PETSC_SUCCESS - if successful
+
+  Notes:
+  This function performs interpolation on all fields registered in the data swarm simultaneously. 
+  Calls :c:func:`RBFInterpolation` to perform the interpolation.
+
+.seealso: RBFInterpolation()
+@*/
 PetscErrorCode Interface_Interpolation(LagRBFCtx ctx)
 {
   DM swd = ctx->swd;
@@ -149,6 +166,20 @@ void lagrbf_interpolate_driver(
   PetscFunctionReturnVoid();
 }
 
+/*@C
+  lagrbf_interpolation - Interpolate values of one field from data swarm points to interpolation swarm points. To be called from Python.
+
+  Collective
+
+  Input Parameters:
++ ctx (void*) - the LagRBFCtx context cast to void*
+
+  Output Parameter:
+- ierr (PetscErrorCode) - 0 if successful, PETSc error code if an error occurred
+
+  Notes:
+  Wrapper for :c:func:`Interface_Interpolation` to be called from Python.
+@*/
 PetscErrorCode lagrbf_interpolation(void *ctx)
 {
   LagRBFCtx      user = (LagRBFCtx)ctx;

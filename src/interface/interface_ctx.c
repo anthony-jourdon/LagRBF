@@ -9,6 +9,21 @@
 #include "interface/interface_ctx.h"
 #include "interface/interface_utils.h"
 
+/*@C
+  Interface_LagRBFCreate - Creates the LagRBFCtx context and initializes the data structures from options.
+
+  Collective
+  Input Parameters:
+. ctx (LagRBFCtx*) - pointer to the LagRBFCtx context to be created
+
+  Output Parameter:
+. PETSC_SUCCESS - if successful
+
+  Notes:
+  This function initializes the data structures in the memory. User must call :c:func:`LagRBFCtxDestroy()` to free the memory.
+
+.seealso: LagRBFCtxDestroy(), lagrbf_create(), lagrbf_destroy(), LagRBFCtxCreate(), LagRBFSetFromOptions(), LagRBF_PartitionOfUnityCreate(), LagRBF_PartitionCreate(), LagRBF_CellInfoCreate(), SwarmDataCreate(), SwarmInterpCreate()
+@*/
 PetscErrorCode Interface_LagRBFCreate(LagRBFCtx *ctx)
 {
   LagRBFCtx user;
@@ -34,6 +49,20 @@ PetscErrorCode Interface_LagRBFCreate(LagRBFCtx *ctx)
   PetscFunctionReturn(PETSC_SUCCESS);
 }
 
+/*@C
+  lagrbf_create - Creates the LagRBFCtx context and initializes the data structures from options. To be called from Python.
+
+  Collective
+
+  Output Parameter:
+. ctx (void*) - pointer to the LagRBFCtx context to be created
+
+  Notes:
+  This function initializes the data structures in the memory. User must call :c:func:`lagrbf_destroy` to free the memory.
+  This function is a wrapper for :c:func:`Interface_LagRBFCreate` to be called from Python.
+
+.seealso: lagrbf_destroy(), Interface_LagRBFCreate()
+@*/
 void *lagrbf_create()
 {
   LagRBFCtx ctx;
@@ -47,6 +76,20 @@ void *lagrbf_create()
   PetscFunctionReturn((void *)ctx);
 }
 
+/*@C
+  lagrbf_destroy - Destroys the LagRBFCtx context and frees the memory.
+
+  Collective
+
+  Input Parameter:
+. ctx (void*) - pointer to the LagRBFCtx context to be destroyed
+
+  Notes:
+  This function frees the memory allocated for the LagRBFCtx context. User must call this function when they are done with the context.
+  This function is a wrapper for :c:func:`LagRBFCtxDestroy` to be called from Python.
+
+.seealso: lagrbf_create(), LagRBFCtxDestroy(), Interface_LagRBFCreate()
+@*/
 void lagrbf_destroy(void *ctx)
 {
   LagRBFCtx p = (LagRBFCtx)ctx;

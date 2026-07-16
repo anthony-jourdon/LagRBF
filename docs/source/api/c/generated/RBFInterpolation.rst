@@ -35,4 +35,4 @@ RBFInterpolation
 
    **Source**
 
-   - ``/home/jourdon/Software/lagrangian-rbf/src/interpolation/interpolation.c``
+   - ``src/interpolation/interpolation.c``

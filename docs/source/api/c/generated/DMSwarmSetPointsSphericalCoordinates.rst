@@ -24,4 +24,4 @@ DMSwarmSetPointsSphericalCoordinates
 
    **Source**
 
-   - ``/home/jourdon/Software/lagrangian-rbf/src/swarm/swarm_utils.c``
+   - ``src/swarm/swarm_utils.c``

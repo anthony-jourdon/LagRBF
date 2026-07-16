@@ -19,6 +19,25 @@ PetscErrorCode InterfacePetscErrorPrinter(PetscErrorCode ierr, const char *funct
   PetscFunctionReturn(ierr);
 }
 
+/*@C
+  FillSwarm - Fill a DMSwarm with coordinates, field values and point indices.
+
+  Collective
+
+  Input Parameters:
++ ctx (LagRBFCtx)      - the LagRBFCtx context
+. sw (DM)              - the DMSwarm to fill
+. npoints (PetscInt)   - number of points
+. coords (PetscReal *) - array of coordinates of size ``npoints*dim``
+. values (PetscReal *) - array of field values of size ``npoints*nfields`` (can be ``NULL`` if no field values are provided)
+. pidx (PetscInt64 *)  - array of unique point indices of size ``npoints`` (can be ``NULL`` if not provided and will be assigned automatically)
+
+  Output Parameter:
+. PETSC_SUCCESS - if successful
+
+  Notes:
+  This function fills the DMSwarm with the provided coordinates, field values and point indices. If point indices are not provided, unique indices will be assigned automatically. The swarm is migrated across ranks to ensure that points are on the correct ranks according to the spatial decomposition.
+@*/
 PetscErrorCode FillSwarm(
   LagRBFCtx  ctx, 
   DM         sw, 
@@ -118,15 +137,36 @@ PetscErrorCode FillDataSwarm(
   PetscFunctionReturn(PETSC_SUCCESS);
 }
 
+/*@C
+  AssembleArray_Allreduce - Assemble a global array from local arrays across all ranks using MPI_Allreduce.
+
+  Collective
+
+  Input Parameters:
++ local_array (const void*) - local (rank owned) array of size ``nlocal*nfields``
+. nlocal (PetscInt)          - number of points in the local array 
+. global_array (void*)      - global array of size ``nglobal*nfields`` (output), all ranks will have the assembled array
+. nglobal (PetscInt)         - total number of points in the global array
+. gidx (const PetscInt64*)   - global point IDs corresponding to the local points (size ``nlocal``)
+. nfields (PetscInt)        - number of fields per point
+. array_type (PetscDataType) - data type of the array (PETSC_REAL, PETSC_INT, or PETSC_INT64)
+. comm (MPI_Comm)           - MPI communicator
+
+  Output Parameter:
+. PETSC_SUCCESS - if successful
+
+  Notes:
+  This function assembles a global array from local arrays across all ranks using MPI_Allreduce. Each rank contributes its local array to the global array based on the provided global point IDs. The global array is summed across all ranks, and each rank will have the fully assembled global array after the operation.
+@*/
 PetscErrorCode AssembleArray_Allreduce(
-  const void       *local_array,  // local (rank owned) array of size nlocal*nfields
-  PetscInt         nlocal,        // number of points in the local array 
-  void             *global_array, // global array of size nglobal*nfields (output), all ranks have it
-  PetscInt         nglobal,       // total number of points in the global array
-  const PetscInt64 *gidx,         // global point IDs corresponding to the local points (size nlocal)
-  PetscInt         nfields,       // number of fields per point
-  PetscDataType    array_type,    // PETSC_REAL, PETSC_INT or PETSC_INT64
-  MPI_Comm         comm           // communicator
+  const void       *local_array,  
+  PetscInt         nlocal,        
+  void             *global_array, 
+  PetscInt         nglobal,       
+  const PetscInt64 *gidx,         
+  PetscInt         nfields,       
+  PetscDataType    array_type,    
+  MPI_Comm         comm           
 )
 {
   PetscInt     np,f,nentries;
@@ -195,6 +235,27 @@ PetscErrorCode AssembleArray_Allreduce(
   PetscFunctionReturn(PETSC_SUCCESS);
 }
 
+/*@C
+  Interface_Output_Allreduce - Gather and assemble data from a DMSwarm across all ranks using MPI_Allreduce.
+
+  Collective
+
+  Input Parameters:
++ sw (DM)                - the DMSwarm to gather data from
+. np_global (PetscInt)   - total number of points in the global array
+. global_coor (PetscReal *) - array to store global coordinates of size ``np_global*dim`` (can be ``NULL`` if not needed)
+. global_fields (PetscReal *) - array to store global field values of size ``np_global*nfields`` (can be ``NULL`` if not needed)
+. global_pidx (PetscInt64 *) - array to store global point indices of size ``np_global`` (can be ``NULL`` if not needed)
+. fieldname (const char *) - name of the field to gather (only used if global_fields is not ``NULL``)
+
+  Output Parameter:
+. PETSC_SUCCESS - if successful
+
+  Notes:
+  This function gathers and assembles data from a DMSwarm across all ranks using MPI_Allreduce. Calls :c:func:`AssembleArray_Allreduce()`.
+
+.seealso: AssembleArray_Allreduce()
+@*/
 PetscErrorCode Interface_Output_Allreduce(
   DM          sw,
   PetscInt    np_global,
@@ -250,6 +311,27 @@ PetscErrorCode Interface_Output_Allreduce(
   PetscFunctionReturn(PETSC_SUCCESS);
 }
 
+/*@C
+  lagrbf_output - Gather and assemble data from a DMSwarm across all ranks using MPI_Allreduce. To be called from Python.
+
+  Collective
+
+  Input Parameters:
++ ctx (void*) - the LagRBFCtx context cast to void*
+. is_data (PetscBool) - ``PETSC_TRUE`` if gathering from the data swarm, ``PETSC_FALSE`` if gathering from the interpolation swarm
+. npoints (PetscInt) - total number of points in the global array
+. coords (PetscReal *) - array to store global coordinates of size ``npoints*dim`` (can be ``NULL`` if not needed)
+. fields (PetscReal *) - array to store global field values of size ``npoints*nfields`` (can be ``NULL`` if not needed)
+. pidx (PetscInt64 *) - array to store global point indices of size ``npoints`` (can be ``NULL`` if not needed)
+- fieldname (const char *) - name of the field to gather (only used if fields is not ``NULL``)
+
+  Output Parameter:
+. ierr (PetscErrorCode) - 0 if successful, PETSc error code if an error occurred
+
+  Notes:
+  This function gathers and assembles data from a DMSwarm across all ranks using MPI_Allreduce. Calls :c:func:`Interface_Output_Allreduce()`.
+  The user is responsible for allocating the output arrays (coords, fields, pidx) with the correct sizes before calling this function.
+@*/
 PetscErrorCode lagrbf_output(
   void       *ctx,
   PetscBool   is_data,
@@ -274,6 +356,23 @@ PetscErrorCode lagrbf_output(
   PetscFunctionReturn(PETSC_SUCCESS);
 }
 
+/*@C
+  lagrbf_fill_swarm - Fill the data or interpolation swarm with coordinates and field values. To be called from Python.
+
+  Collective
+
+  Input Parameters:
++ ctx (void*)             - the LagRBFCtx context cast to void*
+. is_data (PetscBool)     - ``PETSC_TRUE`` if filling the data swarm, ``PETSC_FALSE`` if filling the interpolation swarm
+. npoints (PetscInt)      - number of points
+. coords (PetscReal *)    - array of coordinates of size ``npoints*dim``
+. values (PetscReal *)    - array of field values of size ``npoints*nfields`` (can be ``NULL`` if no field values are provided)
+. pidx (PetscInt64 *)     - array of unique point indices of size ``npoints`` (can be ``NULL`` if not provided)
+- fieldname (const char*) - name of the field to fill (only used if values is not ``NULL``)
+
+  Output Parameter:
+. ierr (PetscErrorCode) - 0 if successful, PETSc error code if an error occurred
+@*/
 PetscErrorCode lagrbf_fill_swarm(
   void       *ctx,
   PetscBool   is_data,
@@ -303,6 +402,21 @@ PetscErrorCode lagrbf_fill_swarm(
   PetscFunctionReturn(PETSC_SUCCESS);
 }
 
+/*@C
+  lagrbf_reset_coefficients - Reset the coefficients of the RBF interpolation to zero. To be called from Python.
+
+  Collective
+
+  Input Parameters:
++ ctx (void*) - the LagRBFCtx context cast to void*
+
+  Output Parameter:
+. ierr (PetscErrorCode) - 0 if successful, PETSc error code if an error occurred
+
+  Notes:
+  This function resets the coefficients of the RBF interpolation to zero. User must call :c:func:`lagrbf_reset_coefficients` when they want to reset the coefficients.
+  This function is a wrapper for :c:func:`LagRBF_PartitionsReset` to be called from Python.
+@*/
 PetscErrorCode lagrbf_reset_coefficients(void *ctx)
 {
   LagRBFCtx      user = (LagRBFCtx)ctx;

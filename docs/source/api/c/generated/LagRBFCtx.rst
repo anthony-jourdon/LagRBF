@@ -13,4 +13,4 @@ LagRBFCtx
 
    **Source**
 
-   - ``/home/jourdon/Software/lagrangian-rbf/include/lagrangian_rbf.h``
+   - ``include/lagrangian_rbf.h``

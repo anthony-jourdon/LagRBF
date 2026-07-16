@@ -16,9 +16,49 @@
 
 @*/
 typedef struct _p_LagRBFCtx        *LagRBFCtx;
+
+/*@C
+  Partition - Structure to hold information about a single partition in the partition of unity method.
+
+  RST:
+    .. code-block:: c
+
+      struct _p_Partition *Partition;
+
+@*/
 typedef struct _p_Partition        *Partition;
+
+/*@C
+  PartitionOfUnity - Structure to hold information about the partition of unity method.
+
+  RST:
+    .. code-block:: c
+
+      struct _p_PartitionOfUnity *PartitionOfUnity;
+
+@*/
 typedef struct _p_PartitionOfUnity *PartitionOfUnity;
+
+/*@C
+  AdvectionCtx - Structure to hold information about the advection context.
+
+  RST:
+    .. code-block:: c
+
+      struct _p_AdvectionCtx *AdvectionCtx;
+
+@*/
 typedef struct _p_AdvectionCtx     *AdvectionCtx;
+
+/*@C
+  CellInfo - Structure to hold information about a single cell.
+
+  RST:
+    .. code-block:: c
+
+      struct _p_CellInfo *CellInfo;
+
+@*/
 typedef struct _p_CellInfo         *CellInfo;
 
 typedef enum {

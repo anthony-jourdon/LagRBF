@@ -2,14 +2,28 @@
 #include "partitions/partition_solve.h"
 #include "kernels/kernels_rbf.h"
 
-/*
+/*@C
+  PartitionCreate_PartitionToCellInverseMapping - Create the inverse mapping from partition to cells.
+
+  Collective
+
+  Input Parameters:
++ pu (PartitionOfUnity) - the PartitionOfUnity context
+. partition (Partition*) - array of Partition structures
+
+  Output Parameter:
+. PETSC_SUCCESS - if successful
+
+  Notes:
   Create the inverse map from partition to cells.
   The partition is a node of the DMDA, and the cells are the elements of the DMDA.
   The map is an array of indices, where each index corresponds to a cell that is connected to the partition.
-  The number of cells connected to each partition is stored in ncells.
+  The number of cells connected to each partition is stored in ``ncells``.
   A map array is allocated for each partition and filled with the cell indices.
-  Memory is freed in PartitionDestroy_SinglePartition() for a given partition or in PartitionDestroy() for all partitions.
-*/
+  Memory is freed in :c:func:`PartitionDestroy_SinglePartition()` for a given partition or in :c:func:`PartitionDestroy()` for all partitions.
+
+.seealso: PartitionCreate()
+@*/
 PetscErrorCode PartitionCreate_PartitionToCellInverseMapping(PartitionOfUnity pu, Partition *partition)
 {
   DM             das;
@@ -117,6 +131,23 @@ PetscErrorCode PartitionsSetIndex(PartitionOfUnity pu, Partition *partitions)
   PetscFunctionReturn(PETSC_SUCCESS);
 }
 
+/*@C
+  PartitionCreate_SinglePartition - Create a single partition structure.
+
+  Collective
+
+  Input Parameters:
+. partition (Partition*) - pointer to the Partition structure to create
+
+  Output Parameter:
+. PETSC_SUCCESS - if successful
+
+  Notes:
+  This function allocates memory for a single partition structure and initializes its members to default values.
+  Memory is freed in :c:func:`PartitionDestroy_SinglePartition()` for a given partition.
+
+.seealso: PartitionCreate(), PartitionDestroy_SinglePartition(), PartitionDestroy()
+@*/
 PetscErrorCode PartitionCreate_SinglePartition(Partition *partition)
 {
   Partition p;
@@ -139,6 +170,24 @@ PetscErrorCode PartitionCreate_SinglePartition(Partition *partition)
   PetscFunctionReturn(PETSC_SUCCESS);
 }
 
+/*@C
+  PartitionDestroy_SinglePartition - Destroy a single partition structure.
+
+  Collective
+
+  Input Parameters:
+. partition (Partition*) - pointer to the Partition structure to destroy
+. destroy (PetscErrorCode (*)(Partition)) - function to destroy the partition specific data (can be NULL if not needed)
+
+  Output Parameter:
+. PETSC_SUCCESS - if successful
+
+  Notes:
+  This function frees the memory allocated for a single partition structure.
+  It is called by :c:func:`PartitionDestroy()` for each partition.
+
+.seealso: PartitionDestroy(), PartitionCreate_SinglePartition(), PartitionCreate()
+@*/
 PetscErrorCode PartitionDestroy_SinglePartition(Partition *partition, PetscErrorCode (*destroy)(Partition))
 {
   Partition p = *partition;
@@ -173,6 +222,25 @@ static PetscErrorCode PartitionReset_SinglePartition(Partition p, PetscErrorCode
   PetscFunctionReturn(PETSC_SUCCESS);
 }
 
+/*@C
+  PartitionCreate - Create and initialize all partitions.
+
+  Collective
+
+  Input Parameters:
++ pu (PartitionOfUnity) - the PartitionOfUnity context
+. partition (Partition*) - array of Partition structures
+
+  Output Parameter:
+. PETSC_SUCCESS - if successful
+
+  Notes:
+  This function creates and initializes all partitions of the domain.
+  It allocates memory for each partition and sets up the inverse mapping from partitions to cells.
+  Memory is freed in :c:func:`PartitionDestroy()` for all partitions.
+
+.seealso: PartitionDestroy(), PartitionCreate_SinglePartition(), PartitionDestroy_SinglePartition(), PartitionCreate_PartitionToCellInverseMapping()
+@*/
 PetscErrorCode PartitionCreate(PartitionOfUnity pu, Partition **partition)
 {
   Partition *p;
@@ -192,6 +260,23 @@ PetscErrorCode PartitionCreate(PartitionOfUnity pu, Partition **partition)
   PetscFunctionReturn(PETSC_SUCCESS);
 }
 
+/*@C
+  PartitionDestroy - Destroy all partitions in the array.
+
+  Collective
+
+  Input Parameters:
++ pu (PartitionOfUnity) - the PartitionOfUnity context
+. partition (Partition*) - array of Partition structures
+
+  Output Parameter:
+. PETSC_SUCCESS - if successful
+
+  Notes:
+  This function destroys all partitions in the array by freeing their associated data.
+
+.seealso: PartitionCreate(), PartitionDestroy_SinglePartition()
+@*/
 PetscErrorCode PartitionDestroy(PartitionOfUnity pu, Partition **partition)
 {
   PetscInt n,npart;
@@ -207,6 +292,21 @@ PetscErrorCode PartitionDestroy(PartitionOfUnity pu, Partition **partition)
   PetscFunctionReturn(PETSC_SUCCESS);
 }
 
+/*@C
+  PartitionFillDataPointsIdx - Fill the data points indices for a partition.
+
+  Collective
+
+  Input Parameters:
++ p (Partition) - the Partition data structure
+. swarm (DM)    - the swarm data structure
+
+  Output Parameter:
+. PETSC_SUCCESS - if successful
+
+  Notes:
+  This function fills the data points indices for a partition by retrieving the points associated with each cell connected to the partition.
+@*/
 PetscErrorCode PartitionFillDataPointsIdx(Partition p, DM swarm)
 {
   PetscInt iel,offset,cellidx,ncells;
@@ -267,6 +367,26 @@ static PetscErrorCode PartitionSetUp_SinglePartition(LagRBFCtx ctx, Partition p,
   PetscFunctionReturn(PETSC_SUCCESS);
 }
 
+/*@C
+  LagRBF_PartitionsSetUp - Set up all partitions and solve the coefficients for interpolation.
+
+  Collective
+
+  Input Parameters:
++ ctx (LagRBFCtx) - the LagRBF context
+. swd (DM)        - the data swarm DM
+. swi (DM)        - the interpolation swarm DM
+
+  Output Parameter:
+. PETSC_SUCCESS - if successful
+
+  Notes:
+  This function sets up all partitions and solves for the coefficients needed for interpolation.
+  It retrieves the necessary information from the PartitionOfUnity context and the swarms, and iterates over each point in the interpolation swarm to set up and solve the corresponding partitions.
+  Partitions are set up and solved only once, even if multiple points are connected to the same partition. Thus the necessity to reset them with :c:func:`PartitionReset()` between calls to this function if the data swarm changes.
+
+.seealso: PartitionReset()
+@*/
 PetscErrorCode LagRBF_PartitionsSetUp(LagRBFCtx ctx, DM swd, DM swi)
 {
   PartitionOfUnity pu;
@@ -330,6 +450,20 @@ PetscErrorCode LagRBF_PartitionsSetUp(LagRBFCtx ctx, DM swd, DM swi)
   PetscFunctionReturn(PETSC_SUCCESS);
 }
 
+/*@C
+  LagRBF_PartitionsReset - Reset the partitions to their initial state, clearing any computed coefficients and data point indices.
+
+  Collective
+
+  Input Parameters:
++ ctx (LagRBFCtx) - the LagRBF context
+
+  Output Parameter:
+. PETSC_SUCCESS - if successful
+
+  Notes:
+  This function resets the partitions based on the solve method specified in the LagRBFCtx context. It clears any computed coefficients and data point indices, preparing the partitions for a new setup or solve.
+@*/
 PetscErrorCode LagRBF_PartitionsReset(LagRBFCtx ctx)
 {
   PartitionOfUnity pu;
