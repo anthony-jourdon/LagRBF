@@ -1,5 +1,6 @@
 import numpy as np
 import pyvista as pvs
+from petsc4py import PETSc
 
 try:
   from .utils.halton_seq import halton_sequence
@@ -45,9 +46,11 @@ class PointSwarm(pvs.PolyData):
     else:
       comm = kwargs.pop("comm", None)
       if comm is not None:
+        self.comm = comm
         self.rank = comm.getRank()
         self.size = comm.getSize()
       else:
+        self.comm = PETSc.COMM_SELF
         self.rank = 0
         self.size = 1
 
@@ -57,6 +60,19 @@ class PointSwarm(pvs.PolyData):
       if O is None or L is None or N is None:
         raise ValueError("O, L, and n must be provided when point_type is specified.")
       coor_type = kwargs.pop("coordinate_type", "cartesian")
+
+      # Determine the number of points per rank for Halton sequence generation
+      if self.point_type == "halton":
+        if isinstance(N, (list, tuple, np.ndarray)):
+          N = np.asarray(N, dtype=np.int64).prod()
+        else:
+          N = int(N)
+        N_per_rank  = N // self.size 
+        N_remainder = N % self.size
+        if self.rank == self.size - 1:
+          N = N_per_rank + N_remainder
+        else:
+          N = N_per_rank
 
       TYPE = self.point_type + "_" + coor_type
       match TYPE:
@@ -80,30 +96,7 @@ class PointSwarm(pvs.PolyData):
           raise ValueError(f"Unknown point_type and coordinate_type combination: {TYPE}. Supported combinations are 'structured_cartesian', 'structured_spherical', 'halton_cartesian', and 'halton_spherical'.")
       super().__init__(points)
 
-  def structured_coordinates(self, O:np.ndarray|list|tuple, L:np.ndarray|list|tuple, n:np.ndarray|list|tuple) -> np.ndarray:
-    """
-    Generate an uniform structured grid of points.
-    The points are generated in a grid defined by the lower bounds `O`, upper bounds `L`, 
-    and the number of points `n` along each dimension.
-
-    :param numpy.ndarray|list|tuple O:
-      The minimum coordinates (lower bounds) of the grid.
-    :param numpy.ndarray|list|tuple L:
-      The maximum coordinates (upper bounds) of the grid.
-    :param numpy.ndarray|list|tuple n:
-      The number of points along each dimension. Should be an array of integers.
-    :return:
-      An array of shape ``(N, 3)`` containing the generated points, where `N` 
-      is the total number of points (product of entries in `n`).
-    :rtype: 
-      numpy.ndarray
-    """
-    if isinstance(O, (list, tuple)):
-      O = np.asarray(O, dtype=np.float64)
-    if isinstance(L, (list, tuple)):
-      L = np.asarray(L, dtype=np.float64)
-    if isinstance(n, (list, tuple)):
-      n = np.asarray(n, dtype=np.int32)
+  def structured_coordinates_SEQ(self, O:np.ndarray|list|tuple, L:np.ndarray|list|tuple, n:np.ndarray|list|tuple) -> np.ndarray:
     # get spatial dimension
     dim = O.shape[0]
     if dim < 2 or dim > 3:
@@ -121,6 +114,56 @@ class PointSwarm(pvs.PolyData):
       points[:, d] = X[d].ravel(order="F")
     return points
 
+  def structured_coordinates_MPI(self, O:np.ndarray|list|tuple, L:np.ndarray|list|tuple, n:np.ndarray|list|tuple) -> np.ndarray:
+    # get spatial dimension
+    dim = O.shape[0]
+    if dim < 2 or dim > 3:
+      raise ValueError(f"Dimension must be 2, or 3. Found dim = {dim}")
+    
+    # use petsc DMDA to generate structured grid of points in parallel
+    da = PETSc.DMDA().create(dim=dim, dof=1, sizes=n, comm=self.comm)
+    da.setUniformCoordinates(O[0], L[0], O[1], L[1], O[2], L[2])
+    coords    = da.getCoordinates()
+    bs        = coords.getBlockSize()
+    LA_coords = coords.getArray(readonly=True).reshape(-1, bs)
+    da.destroy()
+    return LA_coords
+
+  def structured_coordinates(self, O:np.ndarray|list|tuple, L:np.ndarray|list|tuple, n:np.ndarray|list|tuple) -> np.ndarray:
+    """
+    Generate an uniform structured grid of points.
+    The points are generated in a grid defined by the lower bounds `O`, upper bounds `L`, 
+    and the number of points `n` along each dimension.
+
+    :param numpy.ndarray|list|tuple O:
+      The minimum coordinates (lower bounds) of the grid.
+    :param numpy.ndarray|list|tuple L:
+      The maximum coordinates (upper bounds) of the grid.
+    :param numpy.ndarray|list|tuple n:
+      The number of points along each dimension. Should be an array of integers.
+    :return:
+      An array of shape ``(N, 3)`` containing the generated points, where `N` 
+      is the total number of points (product of entries in `n`).
+    :rtype: 
+      numpy.ndarray
+
+    .. note::
+      In parallel, the points are generated using PETSc's DMDA (Distributed Array) functionality,
+      which distributes the points across the available MPI ranks.
+
+    """
+    if isinstance(O, (list, tuple)):
+      O = np.asarray(O, dtype=np.float64)
+    if isinstance(L, (list, tuple)):
+      L = np.asarray(L, dtype=np.float64)
+    if isinstance(n, (list, tuple)):
+      n = np.asarray(n, dtype=np.int32)
+    if self.size > 1:
+      points = self.structured_coordinates_MPI(O, L, n)
+    else:
+      points = self.structured_coordinates_SEQ(O, L, n)
+    return points
+  
   def halton_coordinates(self, O:np.ndarray|list|tuple, L:np.ndarray|list|tuple, n:int|np.integer) -> np.ndarray:
     """
     Generate a set of points in Cartesian coordinates using the 

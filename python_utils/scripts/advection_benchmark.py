@@ -28,15 +28,12 @@ def analytical(
   output_dir = os.path.join(root, "advection_analytical", mtype, outdirname)
   pvdfile    = "advection_analytical.pvd"
   rank = comm.getRank()
-  # create points on rank 0
-  if rank == 0:
-    swarm = lf.PointSwarm(
-      O=swarmO, L=swarmL, n=npoints,
-      point_type="halton",
-      coordinate_type="spherical",
-    )
-  else:
-    swarm = lf.PointSwarm()
+  swarm = lf.PointSwarm(
+    comm=comm,
+    O=swarmO, L=swarmL, n=npoints,
+    point_type="halton",
+    coordinate_type="spherical",
+  )
     
   options["log_view"] = None
   advection = lf.AdvectionAnalytical(
@@ -98,21 +95,19 @@ def interpolation(
   output_dir = os.path.join(root, "advection_interpolation", mtype, outdirname)
   pvdfile    = "advection_interpolation.pvd"
 
-  # create points on rank 0
-  if rank == 0:
-    swarm_data = lf.PointSwarm(
-      O=swarmO, L=swarmL, n=npoints,
-      point_type="halton",
-      coordinate_type="spherical",
-    )
-    swarm_interp = lf.PointSwarm(
-      O=swarmO, L=swarmL, n=npoints,
-      point_type="halton",
-      coordinate_type="spherical",
-    )
-  else:
-    swarm_data   = lf.PointSwarm()
-    swarm_interp = lf.PointSwarm()
+  # create points
+  swarm_data = lf.PointSwarm(
+    comm=comm,
+    O=swarmO, L=swarmL, n=npoints,
+    point_type="halton",
+    coordinate_type="spherical",
+  )
+  swarm_interp = lf.PointSwarm(
+    comm=comm,
+    O=swarmO, L=swarmL, n=npoints,
+    point_type="halton",
+    coordinate_type="spherical",
+  )
   
   # create the advection object
   nfields = 3
