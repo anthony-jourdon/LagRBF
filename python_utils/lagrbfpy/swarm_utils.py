@@ -43,6 +43,14 @@ class PointSwarm(pvs.PolyData):
     if self.point_type is None:
       super().__init__(*args, **kwargs)
     else:
+      comm = kwargs.pop("comm", None)
+      if comm is not None:
+        self.rank = comm.getRank()
+        self.size = comm.getSize()
+      else:
+        self.rank = 0
+        self.size = 1
+
       O = kwargs.pop("O", None)
       L = kwargs.pop("L", None)
       N = kwargs.pop("n", None)
@@ -152,9 +160,9 @@ class PointSwarm(pvs.PolyData):
     # Generate Halton sequence points in [0,1]^dim
     halton_points = np.zeros((npoints, dim), dtype=np.float64)
     bases = [2, 3, 5]  # Use first three prime numbers as bases for 3D
+    indices = np.arange(npoints, dtype=np.int64) + self.rank*npoints
     for d in range(dim):
       base = bases[d]  # Use different bases for each dimension
-      indices = np.arange(npoints, dtype=np.int64)
       halton_points[:, d] = halton_sequence(indices+1, base)
     # Scale and translate to the desired domain [O, L]
     points = np.zeros((npoints, 3), dtype=np.float64)
@@ -234,7 +242,8 @@ class PointSwarm(pvs.PolyData):
     if dim < 2 or dim > 3:
       raise ValueError(f"Dimension must be 2, or 3. Found dim = {dim}")
     
-    indices = np.arange(npoints, dtype=np.int64)
+    indices = np.arange(npoints, dtype=np.int64) + self.rank*npoints
+    print(f"rank = {self.rank}, npoints = {npoints}, indices = {indices}")
     params  = np.zeros((npoints, 3), dtype=np.float64)
     bases = [2, 3, 5]  # Use first three prime numbers
 
@@ -307,7 +316,7 @@ class PointSwarm(pvs.PolyData):
     if dim != 3:
       raise ValueError(f"Dimension must be 3 for torus coordinates. Found dim = {dim}")
     
-    indices = np.arange(npoints, dtype=np.int64)
+    indices = np.arange(npoints, dtype=np.int64) + self.rank*npoints
     params  = np.zeros((npoints, 3), dtype=np.float64)
     bases = [2, 3, 5]  # Use first three prime numbers
 
