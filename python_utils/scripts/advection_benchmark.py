@@ -1,6 +1,8 @@
+from logging import root
 import os
 import numpy as np
 import lagrbfpy as lf
+import pyvista as pvs
 
 from petsc4py import PETSc
 
@@ -10,23 +12,22 @@ Note: numbers are scaled by the following factors:
 - time:   1.0 Myr
 A and B chosen so the max velocity is ~3.5 cm/yr
 """
-
-def main_analytical(root:str, degree_t:int, degree_p:int, order_t:int, order_p:int, radial_dt:int, radial_dp:int, A:float, B:float) -> None:
-  comm    = PETSc.COMM_WORLD
-  rank    = comm.getRank()
+def analytical(
+    comm, 
+    root:str,
+    mtype:str,
+    outdirname:str,
+    swarmO:np.ndarray, 
+    swarmL:np.ndarray, 
+    npoints:np.int32,
+    r0:float,
+    r1:float,
+    velocity_data:lf.FlowData,
+  ) -> None:
   options = PETSc.Options()
-
-  outdirname = f"Ht{degree_t}_{order_t}-Hp{degree_p}_{order_p}-rt{radial_dt}-rp{radial_dp}-A{A:.1e}-B{B:.1e}"
-  output_dir = os.path.join(root, "advection_analytical", outdirname)
+  output_dir = os.path.join(root, "advection_analytical", mtype, outdirname)
   pvdfile    = "advection_analytical.pvd"
-
-  r0 = 1.2 # inner radius
-  r1 = 2.2 # outer radius
-
-  swarmO  = np.array([r0, 0, 0], dtype=np.float64)
-  swarmL  = np.array([r1, 2*np.pi, 2*np.pi], dtype=np.float64)
-  npoints = np.int32(32768) #32**3
-
+  rank = comm.getRank()
   # create points on rank 0
   if rank == 0:
     swarm = lf.PointSwarm(
@@ -36,21 +37,8 @@ def main_analytical(root:str, degree_t:int, degree_p:int, order_t:int, order_p:i
     )
   else:
     swarm = lf.PointSwarm()
-
-  # setup velocity data structure
-  velocity_data = lf.FlowData(
-    degree_t=np.int32(degree_t),
-    degree_p=np.int32(degree_p),
-    order_t=np.int32(order_t),
-    order_p=np.int32(order_p),
-    radial_dt=np.int32(radial_dt),
-    radial_dp=np.int32(radial_dp),
-    A=np.float64(A),
-    B=np.float64(B),
-    r0=np.float64(r0),
-    r1=np.float64(r1)
-  )
-
+    
+  options["log_view"] = None
   advection = lf.AdvectionAnalytical(
     petsc_options=options,
     output_path=output_dir,
@@ -62,11 +50,10 @@ def main_analytical(root:str, degree_t:int, degree_p:int, order_t:int, order_p:i
     rmax=r1,
     advection_cfl=0.1,
     time_start=0.0,
-    time_end=1000.0,
-    nsteps=11,
+    time_end=10000.0,
+    nsteps=101,
     pvdfilename=pvdfile
   )
-  
   # initial state
   swarm.point_data["velocity"] = lf.toroidal_poloidal_flow(swarm.points, velocity_data)
   if rank == 0:
@@ -94,22 +81,22 @@ def main_analytical(root:str, degree_t:int, degree_p:int, order_t:int, order_p:i
   del advection
   return
 
-def main_interpolation(root:str, degree_t:int, degree_p:int, order_t:int, order_p:int, radial_dt:int, radial_dp:int, A:float, B:float) -> None:
-  comm    = PETSc.COMM_WORLD
-  rank    = comm.getRank()
-  options = PETSc.Options()
-
-  outdirname = f"Ht{degree_t}_{order_t}-Hp{degree_p}_{order_p}-rt{radial_dt}-rp{radial_dp}-A{A:.1e}-B{B:.1e}"
-  output_dir = os.path.join(root, "advection_interpolation", outdirname)
+def interpolation(
+    comm, 
+    root:str,
+    mtype:str,
+    outdirname:str,
+    swarmO:np.ndarray, 
+    swarmL:np.ndarray, 
+    npoints:np.int32,
+    r0:float,
+    r1:float,
+    velocity_data:lf.FlowData,
+  ):
+  options    = PETSc.Options()
+  rank       = comm.getRank()
+  output_dir = os.path.join(root, "advection_interpolation", mtype, outdirname)
   pvdfile    = "advection_interpolation.pvd"
-
-  r0 = 1.2 # inner radius
-  r1 = 2.2 # outer radius
-
-  nfields = 3
-  swarmO  = np.array([r0, 0, 0], dtype=np.float64)
-  swarmL  = np.array([r1, 2*np.pi, 2*np.pi], dtype=np.float64)
-  npoints = np.int32(32768) #32**3
 
   # create points on rank 0
   if rank == 0:
@@ -126,21 +113,10 @@ def main_interpolation(root:str, degree_t:int, degree_p:int, order_t:int, order_
   else:
     swarm_data   = lf.PointSwarm()
     swarm_interp = lf.PointSwarm()
-
-  velocity_data = lf.FlowData(
-    degree_t=np.int32(degree_t),
-    degree_p=np.int32(degree_p),
-    order_t=np.int32(order_t),
-    order_p=np.int32(order_p),
-    radial_dt=np.int32(radial_dt),
-    radial_dp=np.int32(radial_dp),
-    A=np.float64(A),
-    B=np.float64(B),
-    r0=np.float64(r0),
-    r1=np.float64(r1)
-  )
   
   # create the advection object
+  nfields = 3
+  options["log_view"] = None
   advection = lf.AdvectionInterpolation(
     petsc_options=options,
     output_path=output_dir,
@@ -148,15 +124,15 @@ def main_interpolation(root:str, degree_t:int, degree_p:int, order_t:int, order_
     nfields=nfields,
     minCoords=np.array([ -2.5, -2.5, -2.5], dtype=np.float64),
     maxCoords=np.array([  2.5,  2.5,  2.5], dtype=np.float64),
-    npartitions=np.array([8, 8, 8], dtype=np.int32),
-    overlap=1.1,
-    shape_factor=0.5,
+    npartitions=np.array([12, 12, 12], dtype=np.int32),
+    overlap=1.2,
+    shape_factor=0.25,
     rmin=r0,
     rmax=r1,
     advection_cfl=0.1,
     time_start=0.0,
-    time_end=1000.0,
-    nsteps=11,
+    time_end=10000.0,
+    nsteps=101,
     pvdfilename=pvdfile
   )
 
@@ -175,17 +151,24 @@ def main_interpolation(root:str, degree_t:int, degree_p:int, order_t:int, order_
     pidx=output_pidx
   )
   # callback function to get the data for interpolation during advection
-  def get_data(swarm_data:lf.PointSwarm) -> lf.PointContainer:
+  def get_data(step:np.int32, path:str, rank:int) -> lf.PointContainer:
+    if rank == 0:
+      # read the data from the vtp file
+      fname      = os.path.join(path, f"step{step:05d}.vtp")
+      swarm_data = pvs.read(fname)
+    else:
+      swarm_data = lf.PointSwarm()
+      swarm_data.point_data["velocity"] = -1
     data = lf.PointContainer(
       coords=swarm_data.points,
-      values=swarm_data.point_data["velocity"],
+      values=swarm_data.point_data["velocity"]
     )
     return data
   
   # advect
   advection.advect(
     get_data=get_data,
-    data_args={"swarm_data": swarm_data}, 
+    data_args={"step": 0, "path": os.path.join(root, "advection_analytical", mtype, outdirname), "rank": rank}, 
     points=points, 
     output=output, 
     comm=comm, 
@@ -195,15 +178,45 @@ def main_interpolation(root:str, degree_t:int, degree_p:int, order_t:int, order_
   del advection
   return
 
+def main(root:str, degree_t:int, degree_p:int, order_t:int, order_p:int, radial_dt:int, radial_dp:int, A:float, B:float) -> None:
+  comm    = PETSc.COMM_WORLD
+  outdirname = f"Ht{degree_t}_{order_t}-Hp{degree_p}_{order_p}-rt{radial_dt}-rp{radial_dp}-A{A:.1e}-B{B:.1e}"
+  if degree_t == 0:
+    mtype = "Poloidal"
+  elif degree_p == 0:
+    mtype = "Toroidal"
+  else:
+    mtype = "Mixed"
+
+  r0 = 1.2 # inner radius
+  r1 = 2.2 # outer radius
+
+  swarmO  = np.array([r0, 0, 0], dtype=np.float64)
+  swarmL  = np.array([r1, 2*np.pi, 2*np.pi], dtype=np.float64)
+  npoints = np.int32(32768) #32**3
+
+  # setup velocity data structure
+  velocity_data = lf.FlowData(
+    degree_t=np.int32(degree_t),
+    degree_p=np.int32(degree_p),
+    order_t=np.int32(order_t),
+    order_p=np.int32(order_p),
+    radial_dt=np.int32(radial_dt),
+    radial_dp=np.int32(radial_dp),
+    A=np.float64(A),
+    B=np.float64(B),
+    r0=np.float64(r0),
+    r1=np.float64(r1)
+  )
+
+  analytical(   comm, root, mtype, outdirname, swarmO, swarmL, npoints, r0, r1, velocity_data)
+  interpolation(comm, root, mtype, outdirname, swarmO, swarmL, npoints, r0, r1, velocity_data)
+  return
+
 if __name__ == "__main__":
   root = os.path.join(
-    os.environ["M3D_DIR"], 
-    "Stagyy", 
-    "Pandora", 
-    "RBF", 
-    "benchmark", 
-    "lagrbf_benchmarks",
-    "test_petsc3.25"
+    os.environ["SCRATCH"], 
+    "LagRBF_benchmark"
   )
   models = [
     # Toroidal models
@@ -229,6 +242,4 @@ if __name__ == "__main__":
     lf.print(f"  degree_t: {degree_t}, order_t: {order_t}, radial_dt: {radial_dt}")
     lf.print(f"  degree_p: {degree_p}, order_p: {order_p}, radial_dp: {radial_dp}")
     lf.print(f"  A: {A}, B: {B}")
-    
-    main_analytical(root, degree_t, degree_p, order_t, order_p, radial_dt, radial_dp, A, B)
-    main_interpolation(root, degree_t, degree_p, order_t, order_p, radial_dt, radial_dp, A, B)
+    main(root, degree_t, degree_p, order_t, order_p, radial_dt, radial_dp, A, B)
