@@ -5,6 +5,8 @@ import sphericart as spc
 from petsc4py import PETSc
 from threading import Lock
 
+from .interface import FunctionData, FunctionPointer
+
 # Cache one SolidHarmonics context per degree
 _SOLID_HARMONICS_CACHE: dict[int, spc.SolidHarmonics] = {}
 _SOLID_HARMONICS_CACHE_LOCK = Lock()
@@ -139,7 +141,8 @@ class PoloidalFlow(HarmonicFlow):
 
     return uP
 
-class FlowData(ctypes.Structure):
+#class FlowData(ctypes.Structure):
+class FlowData(FunctionData):
   _fields_ = [
     ("degree_t", ctypes.c_int32),
     ("degree_p", ctypes.c_int32),
@@ -229,5 +232,3 @@ def Ctoroidal_poloidal_flow_batch(npoints, dim, coords, velocity, data_ptr):
   V = np.ctypeslib.as_array(velocity, shape=(npoints, dim))
   V[:, :] = toroidal_poloidal_flow(X, data)
   return 0
-
-
