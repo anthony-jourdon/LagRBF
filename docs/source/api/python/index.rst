@@ -8,3 +8,4 @@ Python API
   interpolation
   advection
   point_container
+  function_pointer

@@ -3,12 +3,61 @@ import numpy as np
 from petsc4py import PETSc
 
 class FunctionData(ctypes.Structure):
+  """
+  Class to hold user-defined data to be passed to a C callback function.
+  Can also be used as a dataclass to hold parameters. 
+  This class can be subclassed to add additional fields as needed. 
+  The base class includes two fields: ``time`` and ``step``, 
+  which can be used to track the simulation time and step number, respectively.
+  """
   _fields_ = [
     ("time", ctypes.c_double),
     ("step", ctypes.c_int32),
   ]
 
 class FunctionPointer:
+  """
+  Class to hold a Python function and its associated data, and create a C function pointer that can be passed to C code.
+  The Python function defining the C callback must have the following prototype:
+
+  .. code-block:: python
+
+    def myfunction(npoints, dim, coords, velocity, data_ptr) -> int:
+      # cast the data pointer to the appropriate type
+      # MyFunctionData is a subclass of FunctionData or 
+      # ctypes.Structure that holds user-defined parameters
+      data = ctypes.cast(
+        data_ptr,
+        ctypes.POINTER(MyFunctionData)
+      ).contents
+      # do something with the data and the coordinates and velocities
+      return 0
+
+  where:
+
+  - ``int npoints``: number of points
+
+  - ``int dim``: dimension of the points
+
+  - ``double* coords``: pointer to an array of coordinates
+
+  - ``double* velocity``: pointer to an array of velocities
+
+  - ``void* data_ptr``: pointer to user-defined data
+
+  The user-defined data can be any subclass of :py:class:`ctypes.Structure`, 
+  including the provided :py:class:`FunctionData` class. 
+  The data can be used to pass parameters to the function.
+
+  :param func: Python function to be called from C code. Must have the signature described above.
+  :param ctypes.Structure data: 
+    User-defined data to be passed to the function. 
+    Can be any subclass of :py:class:`ctypes.Structure`.
+    Default is None, in which case no data is passed to the function.
+
+  The C function pointer can be accessed via the ``cfunc`` attribute,
+  and the user-defined data can be accessed via the ``data`` attribute.
+  """
   def __init__(self, func:callable, data:ctypes.Structure|None=None):
     if data is not None:
       if not isinstance(data, ctypes.Structure):
