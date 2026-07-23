@@ -4,8 +4,10 @@ import ctypes
 from petsc4py import PETSc
 from pyvista import PolyData
 
-from .. import cfuncs, print
+from . import cfuncs
+from .. import print
 from ..utils import PointContainer
+from .function_pointer import FunctionData
 
 class LagRBFCtx:
   """
@@ -243,8 +245,7 @@ class LagRBFCtx:
       raise ValueError(serr)
     
     c_arr = array.view(PetscType)
-    c_arr.shape = (array.size,)
-    return c_arr
+    return c_arr.reshape((array.size,))
   
   def _end_c(self, array:np.ndarray, bs:int=1) -> np.ndarray:
     py_arr = array.reshape((-1, bs), order="C")
@@ -495,7 +496,7 @@ class LagRBFCtx:
       raise RuntimeError(f"lagrbf_reset_coefficients failed with error code {ierr}, see PETSc error for details.")
     return
   
-  def set_advection_function(self, *args, **kwargs) -> None:
+  def __deprecated_set_advection_function(self, *args, **kwargs) -> None:
     """
     Set the advection function to be used for advecting points. 
     Two possibilities:
@@ -557,6 +558,25 @@ class LagRBFCtx:
     )
     if ierr != 0:
       raise RuntimeError(f"lagrbf_advection_function_batch failed with error code {ierr}, see PETSc error for details.")
+    return
+  
+  def set_advection_function(self, func:ctypes.CFUNCTYPE, func_data:ctypes.Structure|None=None) -> None:
+    if not callable(func):
+      raise ValueError("Provided advection function is not callable.")
+    if func_data is None:
+      func_data = FunctionData(time=0.0, step=0)
+    else:
+      if not isinstance(func_data, ctypes.Structure):
+        raise ValueError("Provided advection function data is not a ctypes.Structure.")
+    self.store_ref(advection_fn=func)
+    self.store_ref(advection_data=func_data)
+    ierr = cfuncs["lagrbf_advection_function_batch"](
+      self.ctx,
+      func,
+      ctypes.cast(ctypes.pointer(func_data), ctypes.c_void_p)
+    )
+    if ierr != 0:
+      raise RuntimeError(f"lagrbf_advection_function_batch failed with error code {ierr}, see PETSc error for details.")    
     return
 
   def advect_analytical_c(self, time_start:float, time_end:float) -> None:

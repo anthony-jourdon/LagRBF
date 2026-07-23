@@ -3,8 +3,6 @@ import sys, petsc4py
 import warnings
 petsc4py.init(sys.argv) # maybe this should be called in scripts, I don't know yet
 
-from . import register_cfunc
-cfuncs = register_cfunc.load_cfuncs()
 def print(*args):
   petsc4py.PETSc.Sys.Print(*args)
 
@@ -15,7 +13,7 @@ from . import interface
 from . import interpolation
 from . import advection
 
-
+from .interface import cfuncs
 from .utils.points_container import PointContainer
 from .utils.halton_seq import halton_sequence_scalar, halton_sequence_vector, halton_sequence
 from .swarm_utils import PointSwarm
@@ -23,6 +21,7 @@ from .utils.timeseries import timeseries_process, timeseries_compare, timeseries
 from .petsc_io.petscvec_loader import PetscVecLoadFromFile, PetscVecLoadBlockSizeFromFile, PetscVecLoad, PetscISLoadFromFile, PetscMatDenseLoadFromFile
 from .petsc_io.petscvec_writer import PetscVecWriteToFile, PetscVecWriteBlockSizeToFile, PetscVecWrite, PetscISWriteToFile
 from .interface.context import LagRBFCtx
+from .interface.function_pointer import FunctionPointer, FunctionData
 from .interpolation import LagRBFInterpolator
 from .advection import Advection, AdvectionAnalytical, AdvectionInterpolation
 
@@ -43,6 +42,7 @@ except ModuleNotFoundError as exc:
     raise
 
 __all__ = [
+  "cfuncs",
   "PointContainer",
   "halton_sequence_scalar",
   "halton_sequence_vector",
@@ -63,6 +63,8 @@ __all__ = [
   "PetscVecWrite",
   "PetscISWriteToFile",
   "LagRBFCtx",
+  "FunctionPointer",
+  "FunctionData",
   "PointSwarm",
   "LagRBFInterpolator",
   "Advection",
