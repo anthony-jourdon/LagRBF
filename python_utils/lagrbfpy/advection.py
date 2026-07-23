@@ -171,6 +171,59 @@ class AdvectionAnalytical(Advection):
     super().set_advection_function(func, func_data)
     return
   
+  def advect_step(self, step:int, output:PointContainer, comm:PETSc.Comm, prefix:str=""):
+    """
+    Advect points for a single time step using the registered advection function and the provided timesteps at class instantiation.
+    The advected points are saved to disk.
+
+    :param int step:
+      The index of the time step to perform advection for.
+    :param lagrbfpy.PointContainer output:
+      A :py:class:`PointContainer <lagrbfpy.PointContainer>` class instance to hold the output of the advected points. 
+      Outputs points advected coordinates, their velocity, and their unique point indices.
+    :param PETSc.Comm comm:
+      The PETSc communicator to use.
+    :param str prefix:
+      A prefix to add to the output file names. 
+      Files are named as 
+
+      .. code-block:: python
+
+        step{step_number:05d}{prefix}.vtp
+
+      Default is an empty string.  
+    """
+    time      = self.time_steps[step]
+    time_next = self.time_steps[step+1]
+    PETSc.Sys.Print(f"\n[[ STEP: {step} ]]: Advecting points from time {time:.6e} to {time_next:.6e}")
+    # update the time and step in the func_data structure if they exist
+    func_data = self.get_ref("advection_data")
+    if hasattr(func_data, "time"):
+      func_data.time = np.float64(time)
+    if hasattr(func_data, "step"):
+      func_data.step = np.int32(self.steps[step])
+    # advect points from time_steps[step] to time_steps[step+1]
+    self.advect_analytical_c(time, time_next)
+    # output
+    fname = f"step{(self.steps[step+1]):05d}{prefix}.vtp"
+    self.save(
+      comm, 
+      fname=os.path.join(self.output_path, fname),
+      fields_size={"velocity": self.dim},
+      output_points=output,
+      fieldname="velocity",
+      is_data=False,
+    )
+    # append the timeseries file
+    rank = comm.getRank()
+    if rank == 0:
+      timeseries = {
+        "time": [f"{self.time_steps[step+1]:.6e}"], # store time as string
+        "step": [f"{(self.steps[step+1]):05d}"], # store step number as string
+      }
+      timeseries_write(fname=os.path.join(self.output_path, self.pvdfname), timeseries=timeseries, prefix=prefix, extension="vtp", erase=False)
+    return
+
   def advect(self, points:PointContainer, output:PointContainer, comm:PETSc.Comm, prefix:str=""):
     """
     Advect points using the registered advection function and the provided timesteps at class instantiation.
@@ -197,32 +250,13 @@ class AdvectionAnalytical(Advection):
 
       Default is an empty string.  
     """
-    rank = comm.getRank()
+    try:
+      _ = self.get_ref("advection_fn")
+    except KeyError as e:
+      raise RuntimeError("No advection function has been registered. Please use set_advection_function() to register an advection function before calling advect().") from e
     self.fill_points( coords=points.coords, values=points.values, pidx=points.pidx )
     for step in range(self.nsteps-1):
-      PETSc.Sys.Print(f"\n[[ STEP: {step} ]]: Advecting points from time {self.time_steps[step]:.6e} to {self.time_steps[step+1]:.6e}")
-      # advect points from time_steps[step] to time_steps[step+1]
-      self.advect_analytical_c(
-        self.time_steps[step  ],
-        self.time_steps[step+1]
-      )
-      # output
-      fname = f"step{(self.steps[step+1]):05d}{prefix}.vtp"
-      self.save(
-        comm, 
-        fname=os.path.join(self.output_path, fname),
-        fields_size={"velocity": self.dim},
-        output_points=output,
-        fieldname="velocity",
-        is_data=False,
-      )
-      # append the time series file
-      if rank == 0:
-        timeseries = {
-          "time": [f"{self.time_steps[step+1]:.6e}"], # store time as string
-          "step": [f"{(self.steps[step+1]):05d}"], # store step number as string
-        }
-        timeseries_write(fname=os.path.join(self.output_path, self.pvdfname), timeseries=timeseries, prefix=prefix, extension="vtp", erase=False)
+      self.advect_step(step, output, comm, prefix)
     return
 
 class AdvectionInterpolation(Advection):
@@ -234,6 +268,99 @@ class AdvectionInterpolation(Advection):
     super().__init__(petsc_options=petsc_options, **kwargs)
     return
   
+  def advect_step(
+      self, 
+      step:int, 
+      get_data:callable, 
+      data_args:dict, 
+      output:PointContainer, 
+      comm:PETSc.Comm, 
+      fields:dict[str, int], 
+      prefix:str=""
+    ):
+    """
+    Advect points by interpolating the velocity field from a set of data points for a single time step.
+    The advected points are saved to disk. 
+    The output is done **before** advection and **after** interpolation
+
+    :param int step:
+      The index of the current step to perform advection for.
+    :param callable get_data:
+      A callable function that returns a :py:class:`PointContainer <lagrbfpy.PointContainer>` containing the 
+      data points and their associated values to be used for interpolation at each time step. 
+      The function must accept the step number as the first argument and the keyword arguments provided in 
+      `data_args` and return a :py:class:`PointContainer <lagrbfpy.PointContainer>` instance.
+    :param dict data_args:
+      A dictionary of keyword arguments to be passed to the ``get_data()`` callable function. 
+      This allows the user to provide any additional parameters needed to retrieve the data points 
+      at each time step.
+
+      .. note::
+        The ``data_args`` dictionary can contain the keys ``"step"`` and ``"time"``, 
+        which will be automatically updated to the current step and time for each call to ``get_data()``.
+
+    :param lagrbfpy.PointContainer output:
+      A :py:class:`PointContainer <lagrbfpy.PointContainer>` class instance 
+      to hold the output of the advected points. 
+      Outputs points advected coordinates, their interpolated values, and their unique point indices.
+    :param PETSc.Comm comm:
+      The PETSc communicator to use.
+    :param dict fields:
+      A dictionary specifying the names and sizes of the fields to be interpolated at each time step. 
+      The keys are the field names and the values are the sizes of the fields.
+      Example: ``{"velocity": 3, "pressure": 1}`` for a 3D velocity field and a scalar pressure field.
+    :param str prefix:
+      A prefix to add to the output file names. 
+      Files are named as
+
+      .. code-block:: python
+
+        step{step_number:05d}{prefix}.vtp
+
+      Default is an empty string.
+
+    """
+    if step == self.nsteps-1:
+      PETSc.Sys.Print(f"\n[[ STEP: {step} ]]: Last step, no advection performed, only outputting points and interpolated values at time {self.time_steps[step]:.6e}")
+    else:
+      PETSc.Sys.Print(f"\n[[ STEP: {step} ]]: Advecting points from time {self.time_steps[step]:.6e} to {self.time_steps[step+1]:.6e}")
+    rank = comm.getRank()
+    if "step" in data_args:
+      data_args["step"] = np.int32(self.steps[step])
+    if "time" in data_args:
+      data_args["time"] = np.float64(self.time_steps[step])
+    if "rank" in data_args:
+      data_args["rank"] = np.int32(rank)
+    data:PointContainer = get_data(**data_args)
+    self.fill_data(coords=data.coords, values=data.values, pidx=data.pidx)
+    # interpolate
+    self.interpolate_c()
+    # output
+    fname = f"step{(self.steps[step]):05d}{prefix}.vtp"
+    self.save(
+      comm,
+      fname=os.path.join(self.output_path, fname),
+      fields_size=fields,
+      output_points=output,
+      fieldname="fields",
+      is_data=False,
+    ) 
+    if rank == 0:
+      timeseries = {
+        "time": [f"{self.time_steps[step]:.6e}"], # store time as string
+        "step": [f"{(self.steps[step]):05d}"], # store step number as string
+      }
+      timeseries_write(fname=os.path.join(self.output_path, self.pvdfname), timeseries=timeseries, prefix=prefix, extension="vtp", erase=False)
+    # do not perform advection on the last step, only output the points and interpolated values
+    if step == self.nsteps-1:
+      return
+    # advect points from time_steps[step] to time_steps[step+1]
+    self.advect_interpolate_c(
+      self.time_steps[step  ], 
+      self.time_steps[step+1]
+    )
+    return
+
   def advect(
     self, 
     get_data:callable,
@@ -256,12 +383,17 @@ class AdvectionInterpolation(Advection):
     :param callable get_data:
       A callable function that returns a :py:class:`PointContainer <lagrbfpy.PointContainer>` containing the 
       data points and their associated values to be used for interpolation at each time step. 
-      The function must accept the keyword arguments provided in `data_args` and return a 
-      :py:class:`PointContainer <lagrbfpy.PointContainer>` instance.
+      The function must accept the step number as the first argument and the keyword arguments provided in 
+      `data_args` and return a :py:class:`PointContainer <lagrbfpy.PointContainer>` instance.
     :param dict data_args:
       A dictionary of keyword arguments to be passed to the ``get_data()`` callable function. 
       This allows the user to provide any additional parameters needed to retrieve the data points 
       at each time step.
+
+      .. note::
+        The ``data_args`` dictionary can contain the keys ``"step"`` and ``"time"``, 
+        which will be automatically updated to the current step and time for each call to ``get_data()``.
+
     :param lagrbfpy.PointContainer points:
       A :py:class:`PointContainer <lagrbfpy.PointContainer>` class instance 
       containing the coordinates of the points to be advected. 
@@ -288,39 +420,7 @@ class AdvectionInterpolation(Advection):
     """
     if not callable(get_data):
       raise ValueError("get_data must be a callable function that returns a PointContainer.")
-    rank = comm.getRank()
     self.fill_points( coords=points.coords, values=points.values, pidx=points.pidx )
     for step in range(self.nsteps):
-      if step == self.nsteps-1:
-        PETSc.Sys.Print(f"\n[[ STEP: {step} ]]: Last step, no advection performed, only outputting points and interpolated values at time {self.time_steps[step]:.6e}")
-      else:
-        PETSc.Sys.Print(f"\n[[ STEP: {step} ]]: Advecting points from time {self.time_steps[step]:.6e} to {self.time_steps[step+1]:.6e}")
-      data:PointContainer = get_data(**data_args)
-      self.fill_data(coords=data.coords, values=data.values, pidx=data.pidx)
-      # interpolate
-      self.interpolate_c()
-      # output
-      fname = f"step{(self.steps[step]):05d}{prefix}.vtp"
-      self.save(
-        comm,
-        fname=os.path.join(self.output_path, fname),
-        fields_size=fields,
-        output_points=output,
-        fieldname="fields",
-        is_data=False,
-      )  
-      if rank == 0:
-        timeseries = {
-          "time": [f"{self.time_steps[step]:.6e}"], # store time as string
-          "step": [f"{(self.steps[step]):05d}"], # store step number as string
-        }
-        timeseries_write(fname=os.path.join(self.output_path, self.pvdfname), timeseries=timeseries, prefix=prefix, extension="vtp", erase=False)
-    
-      if step == self.nsteps-1:
-        break
-      # advect points from time_steps[step] to time_steps[step+1]
-      self.advect_interpolate_c(
-        self.time_steps[step  ], 
-        self.time_steps[step+1]
-      )
+      self.advect_step(step, get_data, data_args, output, comm, fields, prefix=prefix)
     return
