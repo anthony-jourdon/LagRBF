@@ -63,16 +63,7 @@ class PointSwarm(pvs.PolyData):
 
       # Determine the number of points per rank for Halton sequence generation
       if self.point_type == "halton":
-        if isinstance(N, (list, tuple, np.ndarray)):
-          N = np.asarray(N, dtype=np.int64).prod()
-        else:
-          N = int(N)
-        N_per_rank  = N // self.size 
-        N_remainder = N % self.size
-        if self.rank == self.size - 1:
-          N = N_per_rank + N_remainder
-        else:
-          N = N_per_rank
+        N = self.halton_points_repart(N)
 
       TYPE = self.point_type + "_" + coor_type
       match TYPE:
@@ -95,6 +86,39 @@ class PointSwarm(pvs.PolyData):
         case _:
           raise ValueError(f"Unknown point_type and coordinate_type combination: {TYPE}. Supported combinations are 'structured_cartesian', 'structured_spherical', 'halton_cartesian', and 'halton_spherical'.")
       super().__init__(points)
+
+  def halton_points_repart(self, N:int|np.integer|list|tuple|np.ndarray) -> int:
+    """
+    Calculate the number of points to be generated on each rank for a Halton sequence,
+    given the total number of points ``N`` and the number of MPI ranks.
+    In addition, it stores the total number of points across all ranks (:py:attr:`global_npoints`) and 
+    the number of points per rank in the instance attributes (:py:attr:`npoints_per_rank`).
+
+    :param int|numpy.integer|list|tuple|numpy.ndarray N:
+      The total number of points to be generated. 
+      If a list, tuple, or numpy array is provided, 
+      the product of its entries is taken as the total number of points.
+    :return:
+      The number of points to be generated on the current rank.
+    :rtype:
+      int
+    """
+    if isinstance(N, (list, tuple, np.ndarray)):
+      N = np.asarray(N, dtype=np.int64).prod()
+    else:
+      N = int(N)
+    # total number of points across all ranks
+    self.global_npoints   = N
+    # number of points per rank
+    self.npoints_per_rank = self.global_npoints // self.size
+    # remainding points to be distributed to the last rank (if the integer division is not exact)
+    npoints_remainder = self.global_npoints % self.size
+    # rank local number of points
+    if self.rank == self.size - 1:
+      local_npoints = self.npoints_per_rank + npoints_remainder
+    else:
+      local_npoints = self.npoints_per_rank
+    return local_npoints
 
   def structured_coordinates_SEQ(self, O:np.ndarray|list|tuple, L:np.ndarray|list|tuple, n:np.ndarray|list|tuple) -> np.ndarray:
     # get spatial dimension
@@ -203,7 +227,7 @@ class PointSwarm(pvs.PolyData):
     # Generate Halton sequence points in [0,1]^dim
     halton_points = np.zeros((npoints, dim), dtype=np.float64)
     bases = [2, 3, 5]  # Use first three prime numbers as bases for 3D
-    indices = np.arange(npoints, dtype=np.int64) + self.rank*npoints
+    indices = np.arange(npoints, dtype=np.int64) + self.rank*self.npoints_per_rank
     for d in range(dim):
       base = bases[d]  # Use different bases for each dimension
       halton_points[:, d] = halton_sequence(indices+1, base)
@@ -285,8 +309,7 @@ class PointSwarm(pvs.PolyData):
     if dim < 2 or dim > 3:
       raise ValueError(f"Dimension must be 2, or 3. Found dim = {dim}")
     
-    indices = np.arange(npoints, dtype=np.int64) + self.rank*npoints
-    print(f"rank = {self.rank}, npoints = {npoints}, indices = {indices}")
+    indices = np.arange(npoints, dtype=np.int64) + self.rank*self.npoints_per_rank
     params  = np.zeros((npoints, 3), dtype=np.float64)
     bases = [2, 3, 5]  # Use first three prime numbers
 
@@ -359,7 +382,7 @@ class PointSwarm(pvs.PolyData):
     if dim != 3:
       raise ValueError(f"Dimension must be 3 for torus coordinates. Found dim = {dim}")
     
-    indices = np.arange(npoints, dtype=np.int64) + self.rank*npoints
+    indices = np.arange(npoints, dtype=np.int64) + self.rank*self.npoints_per_rank
     params  = np.zeros((npoints, 3), dtype=np.float64)
     bases = [2, 3, 5]  # Use first three prime numbers
 
