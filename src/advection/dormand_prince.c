@@ -145,19 +145,44 @@ static PetscErrorCode AdvectionRejectStep_DOPRI(LagRBFCtx ctx, DM swi, DM swd)
   PetscFunctionReturn(PETSC_SUCCESS);
 }
 
+/* 
+  Compute an adaptive time step for the Dormand-Prince integration.
+  We take the step whatever the error is, but we adjust the time step for the next iteration.  
+*/
 PetscErrorCode AdvectionComputeAdaptiveTimeStep_DOPRI(LagRBFCtx ctx, DM swi, DM swd)
 {
   AdvectionCtx adv_ctx;
   DoPriCtx     *data;
+  PetscReal    dt,dt_new,fac,fac_min,fac_max,max_err;
   PetscFunctionBeginUser;
 
   PetscCall(LagRBFGetAdvectionCtx(ctx,&adv_ctx));
   data = (DoPriCtx *)adv_ctx->user;
+
+  /* Update MPI rank and cell id */
+  PetscCall(DMSwarmMigrate(swi,PETSC_TRUE));
+  /* Update weights for interpolation */
+  PetscCall(SwarmInterpSetWeights(ctx,swi));
+  /* Time step */
+  PetscCall(AdvectionGetTimeStep(adv_ctx,&dt));
+  max_err = data->error;
+  fac     = data->dt_fac;
+  fac_min = data->dt_fac_min;
+  /* Adjust the factor if error is above 1.0 */
+  if (max_err <= 1.0) { fac_max = data->dt_fac_max; } 
+  else                { fac_max = 1.0; }
+  /* Compute the new time step */
+  dt_new  = dt * PetscMin( fac_max, PetscMax( fac_min, fac * PetscPowReal( 1.0/max_err, 1.0/6.0 ) ) );
+  PetscPrintf(PETSC_COMM_WORLD,"[[ %s ]] Time step taken with max error: %1.4e, new dt: %1.4e\n",PETSC_FUNCTION_NAME,max_err,dt_new);
+  PetscCall(AdvectionSetTimeStep(adv_ctx,dt_new));
+  
+  #if 0
   if (data->error <= 1.0) {
     PetscCall(AdvectionTakeStep_DOPRI(ctx,swi));
   } else {
     PetscCall(AdvectionRejectStep_DOPRI(ctx,swi,swd));
   }
+  #endif
   PetscFunctionReturn(PETSC_SUCCESS); 
 }
 
