@@ -39,8 +39,7 @@ PetscErrorCode AdvectionEvaluateError_DOPRI(AdvectionCtx ctx, DM swi)
   a_tol   = data->a_tol;
   r_tol   = data->r_tol;
   for (np=0; np<npoints; np++) {
-    PetscReal *v_high = v_i[6]; // last stage
-    PetscReal v_low[] = {0.0, 0.0, 0.0}; // low order velocity
+    PetscReal v_low[] = {0.0, 0.0, 0.0}; // low order (4th) velocity
     PetscReal E,max_value,error,tol;
     /* Compute the low order velocity */
     for (i=0; i<7; i++) {
@@ -50,11 +49,14 @@ PetscErrorCode AdvectionEvaluateError_DOPRI(AdvectionCtx ctx, DM swi)
     }
     E = 0.0;
     for (d=0; d<dim; d++) {
+      PetscReal v_high; // high order (5th) velocity: (coords-x0)/dt since b_7 = 0
+
       max_value = PetscMax(PetscAbs(x0[dim*np + d]), PetscAbs(coords[dim*np + d]));
       /* Get tolerance */
       tol = a_tol + r_tol * max_value;
       /* Compute the error */
-      error = dt * (v_high[dim*np + d] - v_low[d]);
+      v_high = (coords[dim*np + d] - x0[dim*np + d]) / dt;
+      error = dt * (v_high - v_low[d]);
       E += (error * error) / (tol * tol);
     }
     E = PetscSqrtReal(1.0/dim * E);
@@ -165,14 +167,14 @@ PetscErrorCode AdvectionExplicit_DOPRI(LagRBFCtx ctx, DM swi, DM swd)
   AdvectionCtx  adv_ctx;
   PetscInt      npoints,dim,s;
   PetscReal     dt;
-  PetscReal     *coords,*velocity,*x0,*v_stage,*v_high;
+  PetscReal     *coords,*velocity,*x0,*v_stage;
   const char    *velocity_name,**coorFieldName;
   PetscReal     DP_coeffs[6][6] = {
     {       1.0/5.0,               0,              0,            0,               0,         0},
     {      3.0/40.0,        9.0/40.0,              0,            0,               0,         0},
     {     44.0/45.0,      -56.0/15.0,       32.0/9.0,            0,               0,         0},
     {19372.0/6561.0, -25360.0/2187.0, 64448.0/6561.0, -212.0/729.0,               0,         0},
-    { 9017.0/3168.0,     -355.0/33.0, 46732.0/5248.0,   49.0/176.0, -5103.0/18656.0,         0},
+    { 9017.0/3168.0,     -355.0/33.0, 46732.0/5247.0,   49.0/176.0, -5103.0/18656.0,         0},
     {    35.0/384.0,               0,   500.0/1113.0,  125.0/192.0,  -2187.0/6784.0, 11.0/84.0}
   };
   PetscFunctionBeginUser;
@@ -243,16 +245,9 @@ PetscErrorCode AdvectionExplicit_DOPRI(LagRBFCtx ctx, DM swi, DM swd)
     PetscCall(DMSwarmRestoreField(swi, velocity_name, NULL, NULL, (void **)&velocity));
     PetscCall(DMSwarmRestoreField(swi, v_adv_name, NULL, NULL, (void **)&v_stage));
   }
-  /* Advect with high order velocity */
-  PetscCall(DMSwarmGetLocalSize(swi,&npoints));
-  PetscCall(DMSwarmGetField(swi, coorFieldName[0], NULL, NULL, (void **)&coords));
-  PetscCall(DMSwarmGetField(swi, "coor_init",      NULL, NULL, (void **)&x0));
-  PetscCall(DMSwarmGetField(swi, "v_adv_6",        NULL, NULL, (void **)&v_high));
-  PetscCall(AdvectionExplicit(coords,x0,v_high,dt,npoints,dim));
-  PetscCall(AdvectionProjectOntoSphereBoundary(coords,dim,ctx->rmin,ctx->rmax,npoints));
-  PetscCall(DMSwarmRestoreField(swi, coorFieldName[0], NULL, NULL, (void **)&coords));
-  PetscCall(DMSwarmRestoreField(swi, "coor_init",      NULL, NULL, (void **)&x0));
-  PetscCall(DMSwarmRestoreField(swi, "v_adv_6",        NULL, NULL, (void **)&v_high));
+  /* Note: since DP_coeffs[5][j] == b_j (FSAL property), coords already holds the
+     5th-order solution x0 + dt*sum_j b_j*v_j from the last stage-loop iteration
+     above; it must NOT be overwritten here with a 1st-order Euler step using v_adv_6 alone. */
   /* Evaluate error */
   PetscCall(AdvectionEvaluateError_DOPRI(adv_ctx,swi));
   /* Compute adaptive time step and decide if step is taken or rejected */
