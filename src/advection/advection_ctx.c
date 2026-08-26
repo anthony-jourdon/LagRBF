@@ -32,6 +32,7 @@ PetscErrorCode AdvectionCtxCreate(AdvectionCtx *ctx)
   adv->velocity_fn       = NULL;
   adv->velocity_fn_batch = NULL;
   adv->user_fn           = NULL;
+  adv->dt                = 1e-10;
   *ctx = adv;
   PetscFunctionReturn(PETSC_SUCCESS);
 }

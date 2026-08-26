@@ -108,6 +108,7 @@ PetscErrorCode LagRBF_CellInfoCreate(LagRBFCtx ctx)
 PetscErrorCode LagRBFSetFromOptions(LagRBFCtx ctx)
 {
   PetscInt  scheme,kernel_type,solve_method,data_type;
+  PetscReal dt;
   PetscBool found;
   char option_name[PETSC_MAX_PATH_LEN],velocity_name[PETSC_MAX_PATH_LEN];
   PetscFunctionBeginUser;
@@ -161,6 +162,8 @@ PetscErrorCode LagRBFSetFromOptions(LagRBFCtx ctx)
   PetscSNPrintf(velocity_name, PETSC_MAX_PATH_LEN-1, "velocity");
   PetscCall(PetscOptionsGetString(NULL,NULL,option_name,velocity_name,PETSC_MAX_PATH_LEN-1,NULL));
   PetscCall(LagRBF_AdvectionCtxCreate(ctx,(AdvectionScheme)scheme,velocity_name));
+  PetscCall(PetscOptionsGetReal(NULL,NULL,"-dt",&dt,NULL));
+  PetscCall(LagRBFSetTimeStep(ctx,dt));
   PetscFunctionReturn(PETSC_SUCCESS);
 }
 
