@@ -34,6 +34,13 @@ class PointSwarm(pvs.PolyData):
     the total number of points, if an array of integers is provided, the product of its entries is done.
   :param float R:
     The major radius of the torus, used only if ``coordinate_type`` is ``"toroidal"``.
+  :param MPI.Comm comm:
+    The MPI communicator to use for parallel point generation.
+    If not provided, defaults to ``PETSc.COMM_SELF`` (no parallelism).
+  :param list bases:
+    The bases to use for the Halton sequence generation.
+    If not provided, defaults to the first three prime numbers (2, 3, 5) for the 
+    x, y, and z dimensions respectively. **Must be prime numbers**.
   """
   def __init__(
       self, 
@@ -62,8 +69,10 @@ class PointSwarm(pvs.PolyData):
       coor_type = kwargs.pop("coordinate_type", "cartesian")
 
       # Determine the number of points per rank for Halton sequence generation
+      self.bases = None
       if self.point_type == "halton":
         N = self.halton_points_repart(N)
+        self.bases = kwargs.pop("bases", [2, 3, 5])  # Default bases for Halton sequence
 
       TYPE = self.point_type + "_" + coor_type
       match TYPE:
@@ -226,7 +235,7 @@ class PointSwarm(pvs.PolyData):
       raise ValueError(f"Number of points must be at least 1. Found n = {npoints}")
     # Generate Halton sequence points in [0,1]^dim
     halton_points = np.zeros((npoints, dim), dtype=np.float64)
-    bases = [2, 3, 5]  # Use first three prime numbers as bases for 3D
+    bases = self.bases
     indices = np.arange(npoints, dtype=np.int64) + self.rank*self.npoints_per_rank
     for d in range(dim):
       base = bases[d]  # Use different bases for each dimension
@@ -311,7 +320,7 @@ class PointSwarm(pvs.PolyData):
     
     indices = np.arange(npoints, dtype=np.int64) + self.rank*self.npoints_per_rank
     params  = np.zeros((npoints, 3), dtype=np.float64)
-    bases = [2, 3, 5]  # Use first three prime numbers
+    bases = self.bases
 
     if dim == 2:
       u     = halton_sequence(indices, bases[0])
