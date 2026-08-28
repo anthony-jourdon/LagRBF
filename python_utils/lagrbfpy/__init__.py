@@ -12,6 +12,7 @@ from . import swarm_utils
 from . import interface
 from . import interpolation
 from . import advection
+from . import restart
 
 from .interface import cfuncs
 from .utils.points_container import PointContainer
@@ -24,6 +25,7 @@ from .interface.context import LagRBFCtx
 from .interface.function_pointer import FunctionPointer, FunctionData
 from .interpolation import LagRBFInterpolator
 from .advection import Advection, AdvectionAnalytical, AdvectionInterpolation
+from .restart import restart_from_pvd
 
 _ANALYTICAL_FLOW_AVAILABLE = True
 try:

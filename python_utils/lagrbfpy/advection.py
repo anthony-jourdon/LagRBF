@@ -76,6 +76,8 @@ class Advection(LagRBFCtx):
     nsteps     = kwargs.pop("nsteps", None)
     time_steps = kwargs.pop("time_steps", None)
     steps      = kwargs.pop("steps", None)
+    # set the starting step index to 0, this can be changed later if needed for a restart
+    self.start_idx = 0
     # if time_steps is provided we will use it, otherwise we generate it from time_start, time_end and nsteps
     if time_steps is None:
       if time_start is None or time_end is None or nsteps is None:
@@ -421,6 +423,6 @@ class AdvectionInterpolation(Advection):
     if not callable(get_data):
       raise ValueError("get_data must be a callable function that returns a PointContainer.")
     self.fill_points( coords=points.coords, values=points.values, pidx=points.pidx )
-    for step in range(self.nsteps):
+    for step in range(self.start_idx, self.nsteps):
       self.advect_step(step, get_data, data_args, output, comm, fields, prefix=prefix)
     return
