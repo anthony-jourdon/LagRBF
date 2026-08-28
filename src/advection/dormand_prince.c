@@ -49,14 +49,14 @@ PetscErrorCode AdvectionEvaluateError_DOPRI(AdvectionCtx ctx, DM swi)
     }
     E = 0.0;
     for (d=0; d<dim; d++) {
-      PetscReal v_high; // high order (5th) velocity: (coords-x0)/dt since b_7 = 0
+      PetscReal x_low;
 
       max_value = PetscMax(PetscAbs(x0[dim*np + d]), PetscAbs(coords[dim*np + d]));
       /* Get tolerance */
       tol = a_tol + r_tol * max_value;
       /* Compute the error */
-      v_high = (coords[dim*np + d] - x0[dim*np + d]) / dt;
-      error = dt * (v_high - v_low[d]);
+      x_low = x0[dim*np + d] + dt * v_low[d];
+      error = coords[dim*np + d] - x_low;
       E += (error * error) / (tol * tol);
     }
     E = PetscSqrtReal(1.0/dim * E);
