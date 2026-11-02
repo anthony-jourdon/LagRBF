@@ -93,7 +93,7 @@ static PetscErrorCode AdvectionTakeStep_DOPRI(LagRBFCtx ctx, DM swi)
   fac_min = data->dt_fac_min;
   fac_max = data->dt_fac_max;
   max_err = data->error;
-  dt_new  = dt * PetscMin( fac_max, PetscMax( fac_min, fac * PetscPowReal( 1.0/max_err, 1.0/6.0 ) ) );
+  dt_new  = dt * PetscMin( fac_max, PetscMax( fac_min, fac * PetscPowReal( 1.0/max_err, 1.0/5.0 ) ) );
   PetscPrintf(PETSC_COMM_WORLD,"[[ %s ]] Time step accepted with max error: %1.4e, new dt: %1.4e\n",PETSC_FUNCTION_NAME,max_err,dt_new);
   PetscCall(AdvectionSetTimeStep(adv_ctx,dt_new));
   PetscFunctionReturn(PETSC_SUCCESS);
@@ -172,7 +172,7 @@ PetscErrorCode AdvectionComputeAdaptiveTimeStep_DOPRI(LagRBFCtx ctx, DM swi, DM 
   if (max_err <= 1.0) { fac_max = data->dt_fac_max; } 
   else                { fac_max = 1.0; }
   /* Compute the new time step */
-  dt_new  = dt * PetscMin( fac_max, PetscMax( fac_min, fac * PetscPowReal( 1.0/max_err, 1.0/6.0 ) ) );
+  dt_new  = dt * PetscMin( fac_max, PetscMax( fac_min, fac * PetscPowReal( 1.0/max_err, 1.0/5.0 ) ) );
   PetscPrintf(PETSC_COMM_WORLD,"[[ %s ]] Time step taken with max error: %1.4e, new dt: %1.4e\n",PETSC_FUNCTION_NAME,max_err,dt_new);
   PetscCall(AdvectionSetTimeStep(adv_ctx,dt_new));
   
