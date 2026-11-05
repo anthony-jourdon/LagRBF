@@ -10,6 +10,7 @@ extern inline __m512d KernelLinear_AVX512(__m512d r, __m512d epsilon);
 extern inline __m512d KernelWendlandC0_AVX512(__m512d r, __m512d epsilon);
 extern inline __m512d KernelWendlandC2_AVX512(__m512d r, __m512d epsilon);
 extern inline __m512d KernelBump_AVX512(__m512d r, __m512d epsilon);
+extern inline __m512d KernelGaussian_AVX512(__m512d r, __m512d epsilon);
 
 static inline __m512d ComputeDistance_AVX512_2D(PetscReal *coords, PetscInt *idx, __m512d *xi)
 {

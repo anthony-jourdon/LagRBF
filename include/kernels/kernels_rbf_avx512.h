@@ -57,5 +57,14 @@ inline __m512d KernelBump_AVX512(__m512d r, __m512d epsilon)
   rbf         = _mm512_maskz_mov_pd(mask, rbf); // apply mask to zero out values where u < 0
   return rbf;
 }
+
+inline __m512d KernelGaussian_AVX512(__m512d r, __m512d epsilon)
+{
+  __m512d u,u2,rbf;
+  u   = _mm512_mul_pd(epsilon, r); // u = epsilon * r
+  u2  = _mm512_mul_pd(u, u); // u^2
+  rbf = Exp_AVX512(_mm512_mul_pd(u2, _mm512_set1_pd(-1.0))); // exp(-u^2)
+  return rbf;
+}
 #endif
 #endif

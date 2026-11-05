@@ -113,6 +113,9 @@ PetscErrorCode KernelGetFunction_AVX256(KernelType ktype, __m256d (**kernel_avx)
     case KERNEL_BUMP:
       *kernel_avx = KernelBump_AVX256;
       break;
+    case KERNEL_GAUSSIAN:
+      *kernel_avx = KernelGaussian_AVX256;
+      break;
     default:
       SETERRQ(PETSC_COMM_SELF,PETSC_ERR_ARG_OUTOFRANGE,"Unknown kernel type %d for AVX256",ktype);
       break;
@@ -138,6 +141,9 @@ PetscErrorCode KernelGetFunction_AVX512(KernelType ktype, __m512d (**kernel_avx)
       break;
     case KERNEL_BUMP:
       *kernel_avx = KernelBump_AVX512;
+      break;
+    case KERNEL_GAUSSIAN:
+      *kernel_avx = KernelGaussian_AVX512;
       break;
     default:
       SETERRQ(PETSC_COMM_SELF,PETSC_ERR_ARG_OUTOFRANGE,"Unknown kernel type %d for AVX512",ktype);

@@ -56,5 +56,14 @@ inline __m256d KernelBump_AVX256(__m256d r, __m256d epsilon)
   rbf         = _mm256_blendv_pd(_mm256_setzero_pd(), rbf, mask); // apply mask to zero out values where u < 0
   return rbf;
 }
+
+inline __m256d KernelGaussian_AVX256(__m256d r, __m256d epsilon)
+{
+  __m256d u,u2,rbf;
+  u   = _mm256_mul_pd(epsilon, r); // u = epsilon * r
+  u2  = _mm256_mul_pd(u, u); // u^2
+  rbf = Exp_AVX256(_mm256_mul_pd(u2, _mm256_set1_pd(-1.0))); // exp(-u^2)
+  return rbf;
+}
 #endif
 #endif
