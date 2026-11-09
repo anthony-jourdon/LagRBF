@@ -6,5 +6,4 @@ LagRBF documentation
   :caption: Contents
 
   api/python/index
-  api/c/generated/index
   utils/index

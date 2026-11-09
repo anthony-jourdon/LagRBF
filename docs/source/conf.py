@@ -57,7 +57,9 @@ intersphinx_mapping = {
     "matplotlib": ("https://matplotlib.org/stable/", None),
     "sympy": ("https://docs.sympy.org/latest/", None),
     "pyvista": ("https://docs.pyvista.org/", None),
-    "scipy": ("https://docs.scipy.org/doc/scipy/", None)
+    "scipy": ("https://docs.scipy.org/doc/scipy/", None),
+    "mpi4py": ("https://mpi4py.readthedocs.io/en/stable/", None),
+    "petsc4py": ("https://petsc.org/release/petsc4py/", None),
 }
 
 rst_prolog = """
@@ -90,4 +92,5 @@ def _run_cdocs_parser(app):
   subprocess.run(cmd, check=True)
 
 def setup(app):
-  app.connect("builder-inited", _run_cdocs_parser)
+  #app.connect("builder-inited", _run_cdocs_parser)
+  return
