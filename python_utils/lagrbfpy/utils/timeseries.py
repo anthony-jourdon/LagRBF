@@ -9,7 +9,7 @@ def timeseries_process(pvdfname:str|Path, start_line:int|None=None) -> dict:
   
   .. code-block:: python
 
-    r'(?:^(.*(\\d+)?)/)?([Aa-zZ]+0+)?(\\d+)(.*)'
+    r"(?:^(.*(\\d+)?)/)?([Aa-zZ]+0+)?(\\d+)(.*)"
   
   to extract the time, the step directory and the step number from the file name.
 
@@ -201,15 +201,23 @@ def timeseries_append(content:str, timeseries:dict, prefix:str|None=None, extens
 def timeseries_write(fname:str, timeseries:dict, prefix:str|None=None, extension:str="vtp", erase:bool=False) -> None:
   """
   Write or append a timeseries to a .pvd file.
-  If the file already exists and ``erase`` is False, 
-  it will append the new timeseries to the existing file content calling :py:func:`timeseries_append <lagrbfpy.timeseries_append>`. 
-  Otherwise, it will create a new file with the given timeseries as the content calling :py:func:`timeseries_write_new <lagrbfpy.timeseries_write_new>`.
+  If the file already exists and ``erase`` is ``False``, 
+  it will append the new timeseries to the existing file content calling 
+  :py:func:`timeseries_append <lagrbfpy.timeseries_append>`. 
+  Otherwise, it will create a new file with the given timeseries as the content 
+  calling :py:func:`timeseries_write_new <lagrbfpy.timeseries_write_new>`.
 
-  :param str fname: File name for the .pvd file to write to
-  :param dict timeseries: Dictionary containing the time series information (as returned by :py:func:`timeseries_process <lagrbfpy.timeseries_process>`)
-  :param str|None prefix: Optional prefix for the step file names (default is None)
-  :param str extension: File extension for the step files (default is ``"vtp"``)
-  :param bool erase: Whether to erase the existing file content if the file already exists (default is False)
+  :param str fname: 
+    File name for the .pvd file to write to
+  :param dict timeseries: 
+    Dictionary containing the time series information 
+    (as returned by :py:func:`timeseries_process <lagrbfpy.timeseries_process>`)
+  :param str|None prefix: 
+    Optional prefix for the step file names (default is None)
+  :param str extension: 
+    File extension for the step files (default is ``"vtp"``)
+  :param bool erase: 
+    Whether to erase the existing file content if the file already exists (default is False)
   """
   if os.path.exists(fname) and not erase:
     with open(fname,'r') as f:
