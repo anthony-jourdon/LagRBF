@@ -1,6 +1,15 @@
+from typing import overload
 import numpy as np
 
-def halton_sequence_scalar(index:int, base:int) -> float:
+@overload
+def halton_sequence(index:int, base:int) -> float: 
+  ...
+
+@overload
+def halton_sequence(index:np.ndarray | list | tuple, base:int) -> np.ndarray: 
+  ...
+
+def _halton_sequence_scalar(index:int, base:int) -> float:
   """
   Compute the Halton sequence for a given index and base.
 
@@ -21,7 +30,7 @@ def halton_sequence_scalar(index:int, base:int) -> float:
     index = index // base
   return r
 
-def halton_sequence_vector(indices:np.ndarray, base:int) -> np.ndarray:
+def _halton_sequence_vector(indices:np.ndarray, base:int) -> np.ndarray:
   """
   Compute the Halton sequence for a vector of indices and a given base.
   
@@ -36,13 +45,6 @@ def halton_sequence_vector(indices:np.ndarray, base:int) -> np.ndarray:
   :raises ValueError:
     If any index is not an integer, if it is negative or if the base is less than or equal to 1.
   """
-  if not np.issubdtype(indices.dtype, np.integer):
-    raise ValueError("Indices must be an array of integers.")
-  if np.any(indices < 0):
-    raise ValueError("Indices must be non-negative.")
-  if base <= 1:
-    raise ValueError("Base must be greater than 1.")
-
   f = np.ones_like(indices, dtype=np.float64)
   r = np.zeros_like(indices, dtype=np.float64)
   
@@ -69,11 +71,19 @@ def halton_sequence(index:int|np.ndarray, base:int) -> float|np.ndarray:
   :rtype:
     float or numpy.ndarray
   """
+  if base <= 1:
+    raise ValueError("base must be greater than 1.")
+  
   if isinstance(index, (int, np.integer)):
-    return halton_sequence_scalar(index, base)
+    return _halton_sequence_scalar(index, base)
   elif isinstance(index, (np.ndarray, list, tuple)):
+    # Convert the input to a numpy array of integers
     index = np.asarray(index, dtype=np.int64)
-    return halton_sequence_vector(index, base)
+    if not np.issubdtype(index.dtype, np.integer):
+      raise ValueError("index must be an array of integers.")
+    if np.any(index < 0):
+      raise ValueError("index must be non-negative.")
+    return _halton_sequence_vector(index, base)
   else:
     raise TypeError(f"Index must be an integer or a numpy array of integers. Found index = {index} of type {type(index)}")
 

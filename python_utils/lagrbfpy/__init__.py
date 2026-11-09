@@ -16,7 +16,7 @@ from . import restart
 
 from .interface import cfuncs
 from .utils.points_container import PointContainer, fill_datafields
-from .utils.halton_seq import halton_sequence_scalar, halton_sequence_vector, halton_sequence
+from .utils.halton_seq import halton_sequence
 from .swarm_utils import PointSwarm
 from .utils.timeseries import timeseries_process, timeseries_compare, timeseries_write_step, timeseries_write_new, timeseries_append, timeseries_write
 from .petsc_io.petscvec_loader import PetscVecLoadFromFile, PetscVecLoadBlockSizeFromFile, PetscVecLoad, PetscISLoadFromFile, PetscMatDenseLoadFromFile
