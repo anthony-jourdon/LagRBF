@@ -34,7 +34,7 @@ class PointSwarm(pvs.PolyData):
     the total number of points, if an array of integers is provided, the product of its entries is done.
   :param float R:
     The major radius of the torus, used only if ``coordinate_type`` is ``"toroidal"``.
-  :param MPI.Comm comm:
+  :param petsc4py.PETSc.Comm comm:
     The MPI communicator to use for parallel point generation.
     If not provided, defaults to ``PETSc.COMM_SELF`` (no parallelism).
   :param list bases:
@@ -165,8 +165,8 @@ class PointSwarm(pvs.PolyData):
   def structured_coordinates(self, O:np.ndarray|list|tuple, L:np.ndarray|list|tuple, n:np.ndarray|list|tuple) -> np.ndarray:
     """
     Generate an uniform structured grid of points.
-    The points are generated in a grid defined by the lower bounds `O`, upper bounds `L`, 
-    and the number of points `n` along each dimension.
+    The points are generated in a grid defined by the lower bounds ``O``, upper bounds ``L``, 
+    and the number of points ``n`` along each dimension.
 
     :param numpy.ndarray|list|tuple O:
       The minimum coordinates (lower bounds) of the grid.
@@ -175,7 +175,7 @@ class PointSwarm(pvs.PolyData):
     :param numpy.ndarray|list|tuple n:
       The number of points along each dimension. Should be an array of integers.
     :return:
-      An array of shape ``(N, 3)`` containing the generated points, where `N` 
+      An array of shape ``(N, 3)`` containing the generated points, where ``N`` 
       is the total number of points (product of entries in `n`).
     :rtype: 
       numpy.ndarray
@@ -201,8 +201,8 @@ class PointSwarm(pvs.PolyData):
     """
     Generate a set of points in Cartesian coordinates using the 
     :py:func:`Halton sequence <lagrbfpy.halton_sequence>`.
-    The points are generated in a box defined by the lower bounds `O`, upper bounds `L`, 
-    and the total number of points `n`.
+    The points are generated in a box defined by the lower bounds ``O``, upper bounds ``L``, 
+    and the total number of points ``n``.
 
     .. note::
       The bases used for the Halton sequence are the first three prime numbers (2, 3, 5) 
@@ -258,7 +258,7 @@ class PointSwarm(pvs.PolyData):
 
     :param numpy.ndarray points_r:
       An array of shape ``(N, 3)`` containing the spherical coordinates of the points,
-      where `N` is the total number of points. 
+      where ``N`` is the total number of points. 
       The first column should contain the radial distances, 
       the second column should contain the polar angles (in radians), 
       and the third column should contain the azimuthal angles (in radians).
@@ -300,8 +300,8 @@ class PointSwarm(pvs.PolyData):
     :param int n:
       The total number of points to generate.
     :return:
-      An array of shape ``(N, 3)`` containing the generated points, where `N` 
-      is the total number of points (product of entries in `n`).
+      An array of shape ``(N, 3)`` containing the generated points, where ``N`` 
+      is the total number of points (product of entries in ``n``).
     :rtype:
       numpy.ndarray
     """
@@ -347,7 +347,7 @@ class PointSwarm(pvs.PolyData):
     :param float R:
       The major radius of the torus.
     :return:
-      An array of shape ``(N, 3)`` containing the Cartesian coordinates, where `N` 
+      An array of shape ``(N, 3)`` containing the Cartesian coordinates, where ``N`` 
       is the total number of points.
     :rtype:
       numpy.ndarray
@@ -361,9 +361,9 @@ class PointSwarm(pvs.PolyData):
   def halton_torus_coordinates(self, O:np.ndarray|list|tuple, L:np.ndarray|list|tuple, n:int|np.integer, R:float) -> np.ndarray:
     """
     Generate a set of points in a torus using a :py:func:`Halton sequence <lagrbfpy.halton_sequence>`.
-    The points are generated in a toroidal domain defined by the lower bounds `O`, upper bounds `L`, 
-    and the total number of points `n`.
-    The major radius of the torus is specified by `R`.
+    The points are generated in a toroidal domain defined by the lower bounds ``O``, upper bounds ``L``, 
+    and the total number of points ``n``.
+    The major radius of the torus is specified by ``R``.
 
     :param numpy.ndarray|list|tuple O:
       The minimum coordinates (lower bounds) of the toroidal domain.
@@ -374,7 +374,8 @@ class PointSwarm(pvs.PolyData):
     :param float R:
       The major radius of the torus.
     :return:
-      An array of shape ``(N, 3)`` containing the generated points, where `N` is the total number of points (product of entries in `n`).
+      An array of shape ``(N, 3)`` containing the generated points, 
+      where ``N`` is the total number of points (product of entries in ``n``).
     :rtype:
       numpy.ndarray
     """
