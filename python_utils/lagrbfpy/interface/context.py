@@ -25,7 +25,8 @@ class LagRBFCtx:
     create a new instance of this class, but rather use the same instance to call the methods. 
 
 
-  :param dict petsc_options:
+
+  :param petsc4py.PETSc.Options petsc_options:
     A dictionary of PETSc options to configure the context.
     Can be created as
 
@@ -33,7 +34,7 @@ class LagRBFCtx:
 
         petsc_options = PETSc.Options()
 
-    If not provided, a new `PETSc.Options` object will be created.
+    If not provided, a new :py:class:`petsc4py.PETSc.Options` object will be created.
 
   :param int dim:
     The spatial dimension of the problem (default: ``3``).
@@ -55,6 +56,13 @@ class LagRBFCtx:
     The shape factor for the RBFs support (default: ``1``).
   :param int kernel:
     The type of kernel to use (default: ``2``: Wendland's C2 function).
+    Available kernels are:
+
+    - ``1``: Wendland's C0 function
+    - ``2``: Wendland's C2 function
+    - ``3``: Bump function
+    - ``6``: Gaussian function
+
   :param bool advection:
     Whether to perform advection (default: False).
   :param int advection_scheme:
@@ -262,15 +270,15 @@ class LagRBFCtx:
     Fill the C swarm with the provided coordinates, values, and point indices.
 
     :param numpy.ndarray coords:
-      A 2D array of shape (npoints, dim) containing the coordinates of the points to fill in the swarm.
+      A 2D array of shape ``(npoints, dim)`` containing the coordinates of the points to fill in the swarm.
     :param numpy.ndarray values:
-      A 2D array of shape (npoints, nfields) containing the values of the fields at the points to fill in the swarm.
+      A 2D array of shape ``(npoints, nfields)`` containing the values of the fields at the points to fill in the swarm.
       If None, no values will be filled.
     :param numpy.ndarray pidx:
-      A 1D array of shape (npoints,) containing the unique point indices of the points to fill in the swarm.
+      A 1D array of shape ``(npoints,)`` containing the unique point indices of the points to fill in the swarm.
       If None, no point indices will be filled.
     :param bool is_data:
-      If True, fills the swarm corresponding to data points; if False, fills the swarm corresponding to interpolation points.
+      If ``True``, fills the swarm corresponding to data points; if ``False``, fills the swarm corresponding to interpolation points.
     :raises ValueError: If coords is None or if the shapes of values or pidx do not match the number of points in coords.
     :raises RuntimeError: If the C function call fails, see PETSc error for details.
     """
@@ -310,12 +318,12 @@ class LagRBFCtx:
     Calls :py:meth:`fill_swarm` with ``is_data=True``.
 
     :param numpy.ndarray coords:
-      A 2D array of shape (npoints, dim) containing the coordinates of the data points to fill in the swarm.
+      A 2D array of shape ``(npoints, dim)`` containing the coordinates of the data points to fill in the swarm.
     :param numpy.ndarray values:
-      A 2D array of shape (npoints, nfields) containing the values of the fields at the data points to fill in the swarm.
+      A 2D array of shape ``(npoints, nfields)`` containing the values of the fields at the data points to fill in the swarm.
       If None, no values will be filled.
     :param numpy.ndarray pidx:
-      A 1D array of shape (npoints,) containing the unique point indices of the data points to fill in the swarm.
+      A 1D array of shape ``(npoints,)`` containing the unique point indices of the data points to fill in the swarm.
       If None, no point indices will be filled.
     """
     self.fill_swarm(coords=coords, values=values, pidx=pidx, is_data=True)
@@ -328,12 +336,12 @@ class LagRBFCtx:
     Calls :py:meth:`fill_swarm` with ``is_data=False``.
     
     :param numpy.ndarray coords:
-      A 2D array of shape (npoints, dim) containing the coordinates of the interpolation points to fill in the swarm.
+      A 2D array of shape ``(npoints, dim)`` containing the coordinates of the interpolation points to fill in the swarm.
     :param numpy.ndarray values:
-      A 2D array of shape (npoints, nfields) containing the values of the fields at the interpolation points to fill in the swarm.
+      A 2D array of shape ``(npoints, nfields)`` containing the values of the fields at the interpolation points to fill in the swarm.
       If None, no values will be filled.
     :param numpy.ndarray pidx:
-      A 1D array of shape (npoints,) containing the unique point indices of the interpolation points to fill in the swarm.
+      A 1D array of shape ``(npoints,)`` containing the unique point indices of the interpolation points to fill in the swarm.
       If None, no point indices will be filled.
     """
     self.fill_swarm(coords=coords, values=values, pidx=pidx, is_data=False)
@@ -354,17 +362,23 @@ class LagRBFCtx:
     In parallel, all ranks have access to the full data.
 
     :param numpy.ndarray coords:
-      A 2D array of shape (npoints, dim) to hold the coordinates of the points in the swarm.
+      A 2D array of shape ``(npoints, dim)`` to hold the coordinates of the points in the swarm.
     :param numpy.ndarray fvals:
-      A 2D array of shape (npoints, nfields) to hold the values of the fields at the points in the swarm.
+      A 2D array of shape ``(npoints, nfields)`` to hold the values of the fields at the points in the swarm.
     :param numpy.ndarray pidx:
-      A 1D array of shape (npoints,) to hold the unique point indices of the points in the swarm.
+      A 1D array of shape ``(npoints,)`` to hold the unique point indices of the points in the swarm.
     :param str fieldname:
-      The name of the field to be outputed in the C swarm. Default is "fields" and should not be modified except if you know what you are doing.
+      The name of the field to be outputed in the C swarm. Default is ``"fields"`` 
+      and should not be modified except if you know what you are doing.
     :param bool is_data:
-      If True, outputs the swarm corresponding to data points; if False, outputs the swarm corresponding to interpolation points.
-    :raises ValueError: If coords, fvals, and pidx are all None, or if their shapes do not match the number of points in the swarm.
-    :raises RuntimeError: If the C function call fails, see PETSc error for details.
+      If ``True``, outputs the swarm corresponding to data points; if ``False``, outputs the swarm corresponding to interpolation points.
+    :raises ValueError: 
+      If ``coords``, ``fvals``, and ``pidx`` are all None, 
+      or if their shapes do not match the number of points in the swarm.
+    :raises RuntimeError: 
+      If the C function call fails, see 
+      `PETSc error <https://petsc.org/release/include/petscsystypes.h.html#PetscErrorCode>`_ 
+      for details.
     
     :Example usage:
       .. code-block:: python
@@ -428,7 +442,7 @@ class LagRBFCtx:
     Save points and their associated field values to a VTK file (``.vtp``) using the provided communicator.
     In parallel, only rank 0 will write the file to disk.
 
-    :param PETSc.Comm comm:
+    :param petsc4py.PETSc.Comm comm:
       The PETSc communicator.
     :param str fname:
       The name of the output file (should end with ``.vtp``).
@@ -442,8 +456,11 @@ class LagRBFCtx:
       The name of the fields to be retrieved from the C swarm, 
       do not change except if you know what you are doing. 
     :param bool is_data:
-      If True, saves the swarm corresponding to data points; if False, saves the swarm corresponding to interpolation points.
-    :raises RuntimeError: If the C function call fails, see PETSc error for details.
+      If ``True``, saves the swarm corresponding to data points; if ``False``, saves the swarm corresponding to interpolation points.
+    :raises RuntimeError: 
+      If the C function call fails, 
+      see `PETSc error <https://petsc.org/release/include/petscsystypes.h.html#PetscErrorCode>`_  
+      for details.
     :raises ValueError: If the output file name does not end with ``.vtp`` or if the fields_size dictionary is empty.
     """
     self.output(
@@ -470,7 +487,10 @@ class LagRBFCtx:
     """
     Call the C function to perform interpolation from the data swarm to the interpolation swarm.
 
-    :raises RuntimeError: If the C function call fails, see PETSc error for details.
+    :raises RuntimeError: 
+      If the C function call fails, 
+      see `PETSc error <https://petsc.org/release/include/petscsystypes.h.html#PetscErrorCode>`_ 
+      for details.
     """
     if not self.data_filled:
       raise RuntimeError("Data have not been provided, use fill_data() to provide data points")
@@ -489,7 +509,10 @@ class LagRBFCtx:
     Call the C function to reset the interpolation coefficients. 
     This is useful when performing multiple interpolations with different data or points.
     
-    :raises RuntimeError: If the C function call fails, see PETSc error for details
+    :raises RuntimeError: 
+      If the C function call fails, 
+      see `PETSc error <https://petsc.org/release/include/petscsystypes.h.html#PetscErrorCode>`_ 
+      for details
     """
     ierr = cfuncs["lagrbf_reset_coefficients"](self.ctx)
     if ierr != 0:
@@ -521,7 +544,10 @@ class LagRBFCtx:
       - ``stored_fn_key``: The key to look for in the stored references for the advection function (default: ``"advection_fn"``).
       - ``stored_data_key``: The key to look for in the stored references for the advection data (default: ``"advection_data"``).
     :raises ValueError: If no advection function is provided and no stored reference is found, or if the provided advection function is not callable.
-    :raises RuntimeError: If the C function call fails, see PETSc error for details.
+    :raises RuntimeError: 
+      If the C function call fails, 
+      see `PETSc error <https://petsc.org/release/include/petscsystypes.h.html#PetscErrorCode>`_ 
+      for details.
     """
     if len(args) == 0:
       # check for advection_fn and advection_data in stored refs
@@ -586,7 +612,10 @@ class LagRBFCtx:
 
     :param float time_start: The starting time for the advection.
     :param float time_end: The ending time for the advection.
-    :raises RuntimeError: If the C function call fails, see PETSc error for details.
+    :raises RuntimeError: 
+      If the C function call fails, 
+      see `PETSc error <https://petsc.org/release/include/petscsystypes.h.html#PetscErrorCode>`_ 
+      for details.
     """
     if not self.interp_filled:
       raise RuntimeError("Swarm to advect has not been provided, use fill_swarm() to provide the points to advect")
@@ -606,7 +635,10 @@ class LagRBFCtx:
 
     :param float time_start: The starting time for the advection.
     :param float time_end: The ending time for the advection.
-    :raises RuntimeError: If the C function call fails, see PETSc error for details.
+    :raises RuntimeError: 
+      If the C function call fails, 
+      see `PETSc error <https://petsc.org/release/include/petscsystypes.h.html#PetscErrorCode>`_ 
+      for details.
     """
     if not self.data_filled:
       raise RuntimeError("Data have not been provided, use fill_swarm() to provide data points")

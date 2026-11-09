@@ -13,7 +13,11 @@ class LagRBFInterpolator(LagRBFCtx):
   another set of points using RBFs. 
   It calls the C implementation :c:func:`RBFInterpolation` to perform the interpolation.
 
-  :param dict petsc_options: 
+  .. warning::
+    RBF interpolation is implemented without polynomial augmentation,
+    therefore, no polynomial kernels should be used.
+
+  :param petsc4py.PETSc.Options petsc_options: 
     A dictionary of PETSc options to configure the interpolation process.
     Can be created as 
     
@@ -60,7 +64,7 @@ class LagRBFInterpolator(LagRBFCtx):
       outputed here and can be used for successive interpolations to the same points.
     :param str fieldname:
       The name of the field to be interpolated in the C swarm. 
-      Default is "fields" and should not be modified except if you know what you are doing.
+      Default is ``"fields"`` and should not be modified except if you know what you are doing.
     
     """
     self.fill_data(

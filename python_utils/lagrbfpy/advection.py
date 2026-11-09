@@ -18,14 +18,15 @@ class Advection(LagRBFCtx):
   :param int advection_scheme:
     The advection scheme to use.
 
-    - 0: Forward Euler
-    - 1: Runge-Kutta 2nd order
-    - 2: Runge-Kutta 4th order
-    - 3: Dormand-Prince 5(4)
+    - ``0``: Forward Euler
+    - ``1``: Runge-Kutta 2nd order
+    - ``2``: Runge-Kutta 4th order
+    - ``3``: Dormand-Prince 5(4)
   
   :param float advection_cfl:
     The CFL number to use for the advection scheme. 
     This is used to compute the time step size for the advection scheme.
+    Default: ``0.4``
   :param float time_start:
     The starting time for the advection.
   :param float time_end:
@@ -40,7 +41,7 @@ class Advection(LagRBFCtx):
 
   :param numpy.ndarray time_steps:
     An array of time steps to use for the advection e.g., ``[0.0, 1.5, 10.0, 50.0]``.
-    If provided, this will override the time_start, time_end and nsteps parameters.
+    If provided, this will override the ``time_start``, ``time_end`` and ``nsteps`` parameters.
 
     .. note::
       The step between two consecutive time steps does not determine the time step size 
@@ -53,7 +54,7 @@ class Advection(LagRBFCtx):
     The name of the output PVD file to write the time series of the advected points. 
     Default is ``"timeseries-advection.pvd"``.
 
-  :param dict petsc_options:
+  :param petsc4py.PETSc.Options petsc_options:
       A dictionary of PETSc options to configure the context.
       Can be created as
 
@@ -61,7 +62,7 @@ class Advection(LagRBFCtx):
 
           petsc_options = PETSc.Options()
 
-      If not provided, a new `PETSc.Options` object will be created.
+      If not provided, a new :py:class:`petsc4py.PETSc.Options` object will be created.
   
   """
   def __init__(self, petsc_options:dict|None=None, **kwargs):
@@ -109,6 +110,16 @@ class AdvectionAnalytical(Advection):
   """
   Class to perform advection of Lagrangian points using an analytical velocity field.
   See :py:class:`Advection <lagrbfpy.Advection>` for more details on the parameters.
+
+  :param petsc4py.PETSc.Options petsc_options:
+    A dictionary of PETSc options to configure the context.
+    Can be created as
+
+    .. code-block:: python
+
+        petsc_options = PETSc.Options()
+
+    If not provided, a new :py:class:`petsc4py.PETSc.Options` object will be created.
   """
   def __init__(self, petsc_options:dict|None=None, **kwargs):
     super().__init__(petsc_options=petsc_options, **kwargs)
@@ -154,7 +165,7 @@ class AdvectionAnalytical(Advection):
           return 0
 
     :param ctypes.Structure func_data:
-      A ctypes Structure containing any additional data needed by the advection function.
+      A :py:class:`ctypes.Structure` containing any additional data needed by the advection function.
       This data will be passed to the advection function as a pointer.
 
       .. code-block:: python
@@ -183,7 +194,7 @@ class AdvectionAnalytical(Advection):
     :param lagrbfpy.PointContainer output:
       A :py:class:`PointContainer <lagrbfpy.PointContainer>` class instance to hold the output of the advected points. 
       Outputs points advected coordinates, their velocity, and their unique point indices.
-    :param PETSc.Comm comm:
+    :param petsc4py.PETSc.Comm comm:
       The PETSc communicator to use.
     :param str prefix:
       A prefix to add to the output file names. 
@@ -191,7 +202,7 @@ class AdvectionAnalytical(Advection):
 
       .. code-block:: python
 
-        step{step_number:05d}{prefix}.vtp
+        f"step{step_number:05d}{prefix}.vtp"
 
       Default is an empty string.  
     """
@@ -233,14 +244,15 @@ class AdvectionAnalytical(Advection):
 
     .. note::
       Step 0 is the initial condition and is not saved to disk.
-      The first output is saved at step 1, **after** the first advection step from time_steps[0] to time_steps[1].
+      The first output is saved at step 1, **after** the first advection step 
+      from ``time_steps[0]`` to ``time_steps[1]``.
 
     :param lagrbfpy.PointContainer points:
       A :py:class:`PointContainer <lagrbfpy.PointContainer>` class instance containing the coordinates of the points to be advected. 
     :param lagrbfpy.PointContainer output:
       A :py:class:`PointContainer <lagrbfpy.PointContainer>` class instance to hold the output of the advected points. 
       Outputs points advected coordinates, their velocity, and their unique point indices.
-    :param PETSc.Comm comm:
+    :param petsc4py.PETSc.Comm comm:
       The PETSc communicator to use.
     :param str prefix:
       A prefix to add to the output file names. 
@@ -248,7 +260,7 @@ class AdvectionAnalytical(Advection):
 
       .. code-block:: python
 
-        step{step_number:05d}{prefix}.vtp
+        f"step{step_number:05d}{prefix}.vtp"
 
       Default is an empty string.  
     """
@@ -265,6 +277,16 @@ class AdvectionInterpolation(Advection):
   """
   Class to perform advection of Lagrangian points using an interpolated velocity field.
   See :py:class:`Advection <lagrbfpy.Advection>` for more details on the parameters.
+
+  :param petsc4py.PETSc.Options petsc_options:
+    A dictionary of PETSc options to configure the context.
+    Can be created as
+
+    .. code-block:: python
+
+        petsc_options = PETSc.Options()
+
+    If not provided, a new :py:class:`petsc4py.PETSc.Options` object will be created.
   """
   def __init__(self, petsc_options:dict|None=None, **kwargs):
     super().__init__(petsc_options=petsc_options, **kwargs)
@@ -300,24 +322,34 @@ class AdvectionInterpolation(Advection):
       .. note::
         The ``data_args`` dictionary can contain the keys ``"step"`` and ``"time"``, 
         which will be automatically updated to the current step and time for each call to ``get_data()``.
+        Additionally, the MPI rank value can be accessed via the key ``"rank"``.
 
     :param lagrbfpy.PointContainer output:
       A :py:class:`PointContainer <lagrbfpy.PointContainer>` class instance 
       to hold the output of the advected points. 
       Outputs points advected coordinates, their interpolated values, and their unique point indices.
-    :param PETSc.Comm comm:
+    :param petsc4py.PETSc.Comm comm:
       The PETSc communicator to use.
     :param dict fields:
       A dictionary specifying the names and sizes of the fields to be interpolated at each time step. 
       The keys are the field names and the values are the sizes of the fields.
-      Example: ``{"velocity": 3, "pressure": 1}`` for a 3D velocity field and a scalar pressure field.
+      Example: 
+      
+      .. code-block:: python
+        
+        fields = {
+          "velocity": 3, 
+          "pressure": 1
+        }
+      
+      for a 3D velocity field and a scalar pressure field.
     :param str prefix:
       A prefix to add to the output file names. 
       Files are named as
 
       .. code-block:: python
 
-        step{step_number:05d}{prefix}.vtp
+        f"step{step_number:05d}{prefix}.vtp"
 
       Default is an empty string.
 
@@ -395,6 +427,7 @@ class AdvectionInterpolation(Advection):
       .. note::
         The ``data_args`` dictionary can contain the keys ``"step"`` and ``"time"``, 
         which will be automatically updated to the current step and time for each call to ``get_data()``.
+        Additionally, the MPI rank value can be accessed via the key ``"rank"``.
 
     :param lagrbfpy.PointContainer points:
       A :py:class:`PointContainer <lagrbfpy.PointContainer>` class instance 
@@ -403,19 +436,28 @@ class AdvectionInterpolation(Advection):
       A :py:class:`PointContainer <lagrbfpy.PointContainer>` class instance 
       to hold the output of the advected points. 
       Outputs points advected coordinates, their interpolated values, and their unique point indices.
-    :param PETSc.Comm comm:
+    :param petsc4py.PETSc.Comm comm:
       The PETSc communicator to use.
     :param dict fields:
       A dictionary specifying the names and sizes of the fields to be interpolated at each time step. 
       The keys are the field names and the values are the sizes of the fields.
-      Example: ``{"velocity": 3, "pressure": 1}`` for a 3D velocity field and a scalar pressure field.
+      Example: 
+      
+      .. code-block:: python
+              
+        fields = {
+          "velocity": 3, 
+          "pressure": 1
+        }
+      
+      for a 3D velocity field and a scalar pressure field.
     :param str prefix:
       A prefix to add to the output file names. 
       Files are named as
 
       .. code-block:: python
 
-        step{step_number:05d}{prefix}.vtp
+        f"step{step_number:05d}{prefix}.vtp"
 
       Default is an empty string.
 
