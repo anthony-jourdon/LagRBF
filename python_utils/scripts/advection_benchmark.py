@@ -1,12 +1,14 @@
-from logging import root
 import os
 import numpy as np
 import lagrbfpy as lf
-import pyvista as pvs
 
 from petsc4py import PETSc
 
 """
+Run with mpirun -np N python python_utils/scripts/advection_benchmark.py
+
+Note: analytical run does not require interpolation, so parallel execution is not necessary
+
 Note: numbers are scaled by the following factors:
 - length: 2.91e3 km
 - time:   1.0 Myr
@@ -24,10 +26,14 @@ def analytical(
     r1:float,
     velocity_data:lf.FlowData,
   ) -> None:
-  options = PETSc.Options()
+  """
+  Run advection using an analytical velocity function.
+  """
+  options = PETSc.Options() # petsc options dictionnary
   output_dir = os.path.join(root, "advection_analytical", mtype, outdirname)
   pvdfile    = "advection_analytical.pvd"
   rank = comm.getRank()
+  # generate the set of points to advect (parallel, each rank owns a subset of the npoints)
   swarm = lf.PointSwarm(
     comm=comm,
     O=swarmO, L=swarmL, n=npoints,
@@ -35,32 +41,33 @@ def analytical(
     coordinate_type="spherical",
   )
     
-  options["log_view"] = None
+  options["log_view"] = None # print out PETSc log summary
+  options["dopri_atol"] = 1e-12 # absolute tolerance for Dormand-Prince method
+  options["dopri_rtol"] = 1e-5 # relative tolerance for Dormand-Prince method
+  options["dt"] = 1e-1 # initial time step will be replaced by the CFL condition or the Dormand-Prince method
   advection = lf.AdvectionAnalytical(
     petsc_options=options,
     output_path=output_dir,
     dim=3,
+    advection_scheme=3,
     minCoords=np.array([ -2.5, -2.5, -2.5], dtype=np.float64),
     maxCoords=np.array([  2.5,  2.5,  2.5], dtype=np.float64),
     npartitions=np.array([3, 3, 3], dtype=np.int32),
     rmin=r0,
     rmax=r1,
-    advection_cfl=0.1,
+    overlap=1.2,
+    shape_factor=0.25,
+    advection_cfl=0.4,
     time_start=0.0,
-    time_end=10000.0,
-    nsteps=101,
+    time_end=4000.0,
+    nsteps=41,
     pvdfilename=pvdfile
   )
   # initial state
   swarm.point_data["velocity"] = lf.toroidal_poloidal_flow(swarm.points, velocity_data)
-  if rank == 0:
-    swarm.save(os.path.join(output_dir, f"step{0:05d}.vtp"))
-    timeseries = {
-      "time": [f"{0.0:.6e}"], # store time as string
-      "step": [f"{0:05d}"], # store step number as string
-    }
-    lf.timeseries_write(os.path.join(output_dir, pvdfile), timeseries=timeseries, prefix="", extension="vtp", erase=True)
-  
+  # write initial state to vtp file. Note: 1 per rank
+  swarm.save(os.path.join(output_dir, f"step{0:05d}-r{rank:03d}.vtp"))
+
   # set points to advect
   points = lf.PointContainer(coords=swarm.points)
   # create points to hold the output
@@ -90,15 +97,19 @@ def interpolation(
     r1:float,
     velocity_data:lf.FlowData,
   ):
+  """
+  Run advection using interpolation of a velocity function defined on a set of points.
+  """
   options    = PETSc.Options()
   rank       = comm.getRank()
   output_dir = os.path.join(root, "advection_interpolation", mtype, outdirname)
   pvdfile    = "advection_interpolation.pvd"
 
   # create points
+  npdata = np.int32(64**3) # change to control the resolution of the data 
   swarm_data = lf.PointSwarm(
     comm=comm,
-    O=swarmO, L=swarmL, n=npoints,
+    O=swarmO, L=swarmL, n=npdata,
     point_type="halton",
     coordinate_type="spherical",
   )
@@ -111,23 +122,27 @@ def interpolation(
   
   # create the advection object
   nfields = 3
-  options["log_view"] = None
+  options["log_view"] = None # print out PETSc log summary
+  options["dopri_atol"] = 1e-12 # absolute tolerance for Dormand-Prince method
+  options["dopri_rtol"] = 1e-5 # relative tolerance for Dormand-Prince method
+  options["dt"] = 1e-1 # initial time step will be replaced by the CFL condition or the Dormand-Prince method
   advection = lf.AdvectionInterpolation(
     petsc_options=options,
     output_path=output_dir,
     dim=3,
+    advection_scheme=3,
     nfields=nfields,
     minCoords=np.array([ -2.5, -2.5, -2.5], dtype=np.float64),
     maxCoords=np.array([  2.5,  2.5,  2.5], dtype=np.float64),
-    npartitions=np.array([12, 12, 12], dtype=np.int32),
+    npartitions=np.array([24, 24, 24], dtype=np.int32),
     overlap=1.2,
     shape_factor=0.25,
     rmin=r0,
     rmax=r1,
-    advection_cfl=0.1,
+    advection_cfl=0.4,
     time_start=0.0,
-    time_end=10000.0,
-    nsteps=101,
+    time_end=4000.0,
+    nsteps=41,
     pvdfilename=pvdfile
   )
 
@@ -146,14 +161,7 @@ def interpolation(
     pidx=output_pidx
   )
   # callback function to get the data for interpolation during advection
-  def get_data(step:np.int32, path:str, rank:int) -> lf.PointContainer:
-    if rank == 0:
-      # read the data from the vtp file
-      fname      = os.path.join(path, f"step{step:05d}.vtp")
-      swarm_data = pvs.read(fname)
-    else:
-      swarm_data = lf.PointSwarm()
-      swarm_data.point_data["velocity"] = -1
+  def get_data(swarm_data:lf.PointSwarm) -> lf.PointContainer:
     data = lf.PointContainer(
       coords=swarm_data.points,
       values=swarm_data.point_data["velocity"]
@@ -163,7 +171,7 @@ def interpolation(
   # advect
   advection.advect(
     get_data=get_data,
-    data_args={"step": 0, "path": os.path.join(root, "advection_analytical", mtype, outdirname), "rank": rank}, 
+    data_args={"swarm_data": swarm_data}, 
     points=points, 
     output=output, 
     comm=comm, 
@@ -173,8 +181,15 @@ def interpolation(
   del advection
   return
 
-def main(root:str, degree_t:int, degree_p:int, order_t:int, order_p:int, radial_dt:int, radial_dp:int, A:float, B:float) -> None:
-  comm    = PETSc.COMM_WORLD
+def main(
+    root:str, 
+    degree_t:int, degree_p:int, 
+    order_t:int, order_p:int, 
+    radial_dt:int, radial_dp:int, 
+    A:float, B:float,
+    interpolate:bool=False
+  ) -> None:
+  comm = PETSc.COMM_WORLD
   outdirname = f"Ht{degree_t}_{order_t}-Hp{degree_p}_{order_p}-rt{radial_dt}-rp{radial_dp}-A{A:.1e}-B{B:.1e}"
   if degree_t == 0:
     mtype = "Poloidal"
@@ -204,8 +219,10 @@ def main(root:str, degree_t:int, degree_p:int, order_t:int, order_p:int, radial_
     r1=np.float64(r1)
   )
 
-  analytical(   comm, root, mtype, outdirname, swarmO, swarmL, npoints, r0, r1, velocity_data)
-  interpolation(comm, root, mtype, outdirname, swarmO, swarmL, npoints, r0, r1, velocity_data)
+  if interpolate:
+    interpolation(comm, root, mtype, outdirname, swarmO, swarmL, npoints, r0, r1, velocity_data)
+  else:
+    analytical(   comm, root, mtype, outdirname, swarmO, swarmL, npoints, r0, r1, velocity_data)
   return
 
 if __name__ == "__main__":
@@ -231,10 +248,13 @@ if __name__ == "__main__":
     (6, -3, 6, 0.5*3e-7,   6, -3, 6, 0.5*4e-6), # T 0,-3,6 A 3e-7,   P 6,-3,6 B 4e-6
   ]
 
-  for model in models:
+  run_model = [models[10]]
+
+  for model in run_model:
     degree_t, order_t, radial_dt, A, degree_p, order_p, radial_dp, B = model
     lf.print("Running advection benchmark with parameters:")
     lf.print(f"  degree_t: {degree_t}, order_t: {order_t}, radial_dt: {radial_dt}")
     lf.print(f"  degree_p: {degree_p}, order_p: {order_p}, radial_dp: {radial_dp}")
     lf.print(f"  A: {A}, B: {B}")
-    main(root, degree_t, degree_p, order_t, order_p, radial_dt, radial_dp, A, B)
+    # run the model, set interpolate to True to run with interpolation and False to run with analytical velocity function
+    main(root, degree_t, degree_p, order_t, order_p, radial_dt, radial_dp, A, B, True)
