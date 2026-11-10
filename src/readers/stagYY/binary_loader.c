@@ -22,6 +22,7 @@ static PetscErrorCode StagReadBinaryFile(const char *filename, StagFieldBin *sfi
 {
   FILE       *fp;
   PetscInt   nval;
+  size_t     nread;
   int        i,j,k,ib,iz,iy,ix,b,v;
   int        magic,xyp,nz2,npi,step;
   int        ncpu[4],ntot[4],npar[4];
@@ -38,7 +39,8 @@ static PetscErrorCode StagReadBinaryFile(const char *filename, StagFieldBin *sfi
   fp = fopen(filename,"rb");
   PetscCheck(fp != NULL,PETSC_COMM_SELF,PETSC_ERR_FILE_OPEN,"Cannot open file: %s",filename);
 
-  fread(&magic,sizeof(int),1,fp);
+  nread = fread(&magic,sizeof(int),1,fp);
+  PetscCheck(nread == 1,PETSC_COMM_SELF,PETSC_ERR_FILE_READ,"Error reading magic number from file %s",filename);
   if ( (magic < 100 && nval > 1) || (magic > 300 && nval == 1) ) {
     SETERRQ(PETSC_COMM_SELF,PETSC_ERR_FILE_READ,"File %s contains the wrong number of components in provided field.",filename);
   }
@@ -46,22 +48,31 @@ static PetscErrorCode StagReadBinaryFile(const char *filename, StagFieldBin *sfi
   if (magic >= 9 && nval == 4) { xyp = 1; } // extra ghost point in x & y directions
   else                         { xyp = 0; }
 
-  fread(ntot,sizeof(int),4,fp);     /* Total number of grid points + # blocks (2 for yin-yang grid) */
-  fread(aspect,sizeof(float),2,fp); /* Aspect ratios */
-  fread(npar,sizeof(int),4,fp);     /* Number of parallel subdomains */
+  nread = fread(ntot,sizeof(int),4,fp);     /* Total number of grid points + # blocks (2 for yin-yang grid) */
+  PetscCheck(nread == 4,PETSC_COMM_SELF,PETSC_ERR_FILE_READ,"Error reading total number of grid points from file %s",filename);
+  nread = fread(aspect,sizeof(float),2,fp); /* Aspect ratios */
+  PetscCheck(nread == 2,PETSC_COMM_SELF,PETSC_ERR_FILE_READ,"Error reading aspect ratios from file %s",filename);
+  nread = fread(npar,sizeof(int),4,fp);     /* Number of parallel subdomains */
+  PetscCheck(nread == 4,PETSC_COMM_SELF,PETSC_ERR_FILE_READ,"Error reading number of parallel subdomains from file %s",filename);
   // z-coordinates of what ??
   nz2 = 2*ntot[2] + 1;
   PetscCall(PetscMalloc1(nz2,&zg)); //(float*) malloc( nz2 * sizeof(float) );
-  fread(zg,sizeof(float),nz2,fp);
+  nread = fread(zg,sizeof(float),nz2,fp);
+  PetscCheck(nread == nz2,PETSC_COMM_SELF,PETSC_ERR_FILE_READ,"Error reading z-coordinates from file %s",filename);
   /* Compute nx, ny, nz and nb PER CPU */
   for (k=0; k<4; k++) { ncpu[k] = ntot[k] / npar[k]; }
   /* Number of values per "read" block */
   npi = (ncpu[0]+xyp) * (ncpu[1]+xyp) * ncpu[2] * ncpu[3] * nval;
-  fread(&rcmb,sizeof(float),1,fp); /* distance from surface to CMB */
-  fread(&step,sizeof(int),1,fp); /* time step */
-  fread(&time,sizeof(float),1,fp); /* simulation time */
-  fread(&erupta_total,sizeof(float),1,fp); /* ?? */
-  fread(&botT_val,sizeof(float),1,fp); /* bottom temperature value */
+  nread = fread(&rcmb,sizeof(float),1,fp); /* distance from surface to CMB */
+  PetscCheck(nread == 1,PETSC_COMM_SELF,PETSC_ERR_FILE_READ,"Error reading CMB distance from file %s",filename);
+  nread = fread(&step,sizeof(int),1,fp); /* time step */
+  PetscCheck(nread == 1,PETSC_COMM_SELF,PETSC_ERR_FILE_READ,"Error reading time step from file %s",filename);
+  nread = fread(&time,sizeof(float),1,fp); /* simulation time */
+  PetscCheck(nread == 1,PETSC_COMM_SELF,PETSC_ERR_FILE_READ,"Error reading simulation time from file %s",filename);
+  nread = fread(&erupta_total,sizeof(float),1,fp); /* ?? */
+  PetscCheck(nread == 1,PETSC_COMM_SELF,PETSC_ERR_FILE_READ,"Error reading erupta total from file %s",filename);
+  nread = fread(&botT_val,sizeof(float),1,fp); /* bottom temperature value */
+  PetscCheck(nread == 1,PETSC_COMM_SELF,PETSC_ERR_FILE_READ,"Error reading bottom temperature value from file %s",filename);
 
 #ifdef DEBUG
   // Report for debugging
@@ -82,11 +93,17 @@ static PetscErrorCode StagReadBinaryFile(const char *filename, StagFieldBin *sfi
   if (!sfield->x) { PetscCall(PetscMalloc1(ntot[0],&sfield->x)); }
   if (!sfield->y) { PetscCall(PetscMalloc1(ntot[1],&sfield->y)); }
   if (!sfield->z) { PetscCall(PetscMalloc1(ntot[2],&sfield->z)); }
-  fread(sfield->x,sizeof(float),ntot[0],fp);
-  fread(sfield->y,sizeof(float),ntot[1],fp);
-  fread(sfield->z,sizeof(float),ntot[2],fp);
+  nread = fread(sfield->x,sizeof(float),ntot[0],fp);
+  PetscCheck(nread == ntot[0],PETSC_COMM_SELF,PETSC_ERR_FILE_READ,"Error reading x-coordinates from file %s",filename);
+  nread = fread(sfield->y,sizeof(float),ntot[1],fp);
+  PetscCheck(nread == ntot[1],PETSC_COMM_SELF,PETSC_ERR_FILE_READ,"Error reading y-coordinates from file %s",filename);
+  nread = fread(sfield->z,sizeof(float),ntot[2],fp);
+  PetscCheck(nread == ntot[2],PETSC_COMM_SELF,PETSC_ERR_FILE_READ,"Error reading z-coordinates from file %s",filename);
 
-  if (nval != 1) { fread(&scale_fac,sizeof(float),1,fp); }
+  if (nval != 1) { 
+    nread = fread(&scale_fac,sizeof(float),1,fp); 
+    PetscCheck(nread == 1,PETSC_COMM_SELF,PETSC_ERR_FILE_READ,"Error reading scale factor from file %s",filename);
+  }
   PetscCall(PetscMalloc1(ntot[0]*ntot[1]*ntot[2]*ntot[3]*nval,&data));
   PetscCall(PetscMalloc1(npi,&data_local));
   /* Read blocks */
@@ -95,7 +112,8 @@ static PetscErrorCode StagReadBinaryFile(const char *filename, StagFieldBin *sfi
       for (iy=0; iy<npar[1]; iy++) {
         for (ix=0; ix<npar[0]; ix++) {
           /* Read data block */
-          fread(data_local,sizeof(float),npi,fp);
+          nread = fread(data_local,sizeof(float),npi,fp);
+          PetscCheck(nread == npi,PETSC_COMM_SELF,PETSC_ERR_FILE_READ,"Error reading data block from file %s",filename);
           /* Copy into global array without the ghost nodes */
           for (b=0; b<ncpu[3]; b++) {
             int bb = ib*ncpu[3] + b;

@@ -137,6 +137,7 @@ PetscErrorCode PartitionLoadFactoredMatrix_SeqDense(Partition p, const char *dir
   MPI_Comm          Acomm;
   FILE             *fp;
   char              filename[PETSC_MAX_PATH_LEN];
+  int               ferrno;
   PetscFunctionBeginUser;
   PetscCallMPI(MPI_Comm_rank(PETSC_COMM_WORLD,&rank));
 
@@ -145,9 +146,12 @@ PetscErrorCode PartitionLoadFactoredMatrix_SeqDense(Partition p, const char *dir
   fp = fopen(filename,"r");
   if (!fp) { SETERRABORT(PETSC_COMM_SELF,PETSC_ERR_FILE_OPEN,"Unable to open file %s for reading",filename); }
   if (fp) {
-    fscanf(fp,"%"PetscInt_FMT"\n",&mat_rank);
-    fscanf(fp,"%"PetscInt_FMT"\n",&lda);
-    fscanf(fp,"%"PetscInt_FMT"\n",&lfwork);
+    ferrno = fscanf(fp,"%"PetscInt_FMT"\n",&mat_rank);
+    PetscCheck(ferrno == 1,PETSC_COMM_SELF,PETSC_ERR_FILE_READ,"Error reading matrix rank from file %s",filename);
+    ferrno = fscanf(fp,"%"PetscInt_FMT"\n",&lda);
+    PetscCheck(ferrno == 1,PETSC_COMM_SELF,PETSC_ERR_FILE_READ,"Error reading matrix leading dimension from file %s",filename);
+    ferrno = fscanf(fp,"%"PetscInt_FMT"\n",&lfwork);
+    PetscCheck(ferrno == 1,PETSC_COMM_SELF,PETSC_ERR_FILE_READ,"Error reading matrix fwork length from file %s",filename);
     fclose(fp);
   }
   PetscCall(MatCreateDense(PETSC_COMM_SELF,PETSC_DECIDE,PETSC_DECIDE,p->ndata,p->ndata,NULL,&A));
