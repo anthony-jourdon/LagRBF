@@ -4,10 +4,10 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "lagrbfpy"
-version = "0.1.0"
+version = "1.0.0"
 description = "Lagrangian Radial Basis Function interpolation and advection library with Python API"
 readme = "README.md"
-license = {text = "MIT"}
+license = "GPL-3.0-or-later"
 authors = [
     {name = "Anthony Jourdon", email = "jourdon@geoazur.unice.fr"}
 ]
@@ -15,7 +15,6 @@ keywords = ["rbf", "radial-basis-function", "interpolation", "advection", "lagra
 classifiers = [
     "Development Status :: 4 - Beta",
     "Intended Audience :: Science/Research",
-    "License :: OSI Approved :: MIT License",
     "Operating System :: OS Independent",
     "Programming Language :: C",
     "Programming Language :: Python :: 3",

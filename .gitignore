@@ -72,7 +72,6 @@ __pycache__/
 # documentation
 *.html
 *.js
-*.png
 *.css
 *.woff
 *.woff2
