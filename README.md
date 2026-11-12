@@ -56,3 +56,8 @@ Configuration examples for common platforms are in `petsc_config/`. See {doc}`pe
 
 ## Documentation
 The documentation of the Python API can be found here **TODO**.
+
+## Funding
+LagRBF has been developed in project PANDORA European Research Council (ERC) advanced grant, award number 101142672.
+
+![plot](./docs/source/ERC_logo.png)
