@@ -60,4 +60,4 @@ The documentation of the Python API can be found here **TODO**.
 ## Funding
 LagRBF has been developed in project PANDORA European Research Council (ERC) advanced grant, award number 101142672.
 
-![plot](./docs/source/ERC_logo.png)
+![plot](./docs/source/figures/ERC_logo.png)
