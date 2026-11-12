@@ -14,64 +14,45 @@ The advection velocity can either be interpolated from a dataset or provided fro
 The software is written in C and interfaced with Python, which is the recommended approach to use it.
 
 ## Installation
-### Python
-A functional Python is required. 
-The software has been developed with python3.13, the compatibility with earlier Python's versions is not guaranteed. 
-The following Python's module are required:
+
+**For detailed installation instructions, see {doc}`installation` or run `./install.sh --help`.**
+
+### Quick Start
+
+```bash
+# 1. Install PETSc version 3.25.3 (see install.md for details)
+# 2. Install LagRBF
+./install.sh -v path/to/python/virtual_env -p path/to/petsc/directory -a name_of_petsc_arch -j 4
+```
+
+### Requirements
+
+- **Python**: 3.12+
+- **Compiler**: GCC 9+ (other compilers not tested)
+- **MPI**: OpenMPI, MPICH, or vendor-specific implementation
+- **Linear Algebra**: BLAS and LAPACK libraries
+- **PETSc**: 3.25.3 (see {doc}`petsc_config` for details)
+
+### Python Dependencies
 
 - [NumPy](https://numpy.org/)
+- [petsc4py](https://petsc.org/release/petsc4py/index.html) (requires PETSc C library)
 - [PyVista](https://pyvista.org/)
-- [petsc4py](https://petsc.org/release/petsc4py/index.html) (Requires [PETSc](https://petsc.org/release/), see below)
-- [Sphericart](https://sphericart.readthedocs.io/en/latest/) (optional, for Cartesian Spherical Harmonics)
+- [Sphericart](https://sphericart.readthedocs.io/en/latest/) (optional, for analytical flows)
 
-### Installing PETSc
-LagRBF heavily relies on [PETSc](https://petsc.org/release/). 
-No specific external packages are required for [PETSc](https://petsc.org/release/) except a functional MPI for parallel computing.
-In addition to the required [PETSc](https://petsc.org/release/) configure options, the following are necessary:
+If installation is performed with `install.sh` or step-by-step following the {doc}`installation` guide, these dependencies will be automatically installed.
+
+### Key PETSc Configuration
+
+LagRBF requires [PETSc](https://petsc.org/release/) with at least these options:
+
 ```
 --with-memalign=32
 --with-shared-libraries=true
 --with-single-library=true
 ```
 
-[PETSc](https://petsc.org/release/) configuration files examples can be found in **TODO: ADD PETSC CONFIG FILE**.
-
-Once [PETSc](https://petsc.org/release/) is installed, your system will need to know where [PETSc](https://petsc.org/release/) has been installed, set:
-``` shell
-export PETSC_DIR=path/to/petsc/dir
-export PETSC_ARCH=name_of_petsc_arch
-```
-then, build `petsc4py` from the [PETSc](https://petsc.org/release/) directory:
-``` shell
-python -m pip install src/binding/petsc4py
-```
-
-### Recommendations
-It is recommended to work with a Python [virtual environment](https://docs.python.org/3/library/venv.html) to avoid any conflict with system-wide Python's modules and dependencies.
-A virtual environment can be created with:
-``` shell
-python3.XX -m venv /path/to/new/virtual/environment
-```
-
-In addition, to simplify path management, one can create a file to register environment variables that can be loaded before using the software such that:
-``` shell
-export PETSC_DIR=path/to/petsc/dir
-export PETSC_ARCH=name_of_petsc_arch
-export LD_LIBRARY_PATH=$PETSC_DIR/$PETSC_ARCH/lib:$LD_LIBRARY_PATH
-export PYTHONPATH=$PETSC_DIR/lib/petsc/bin:/path/to/LagRBF/python_utils:$PYTHONPATH
-```    
-
-## Compilation
-Once [PETSc](https://petsc.org/release/) is installed, compile with:
-
-> make all
-
-the option `-jN` can be used to compile using multithreading.
-A directory with the same name than `$PETSC_ARCH` should be created and contains the compiled objects, libraries and executables.
-
-The `Makefile` should not be edited, but the `makefile.arch` can. 
-Compilation flags can be added here.
+Configuration examples for common platforms are in `petsc_config/`. See {doc}`petsc_config` for detailed platform-specific guidance.
 
 ## Documentation
 The documentation of the Python API can be found here **TODO**.
-Note that the documentation of the C API is still in progress.

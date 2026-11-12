@@ -2,8 +2,12 @@ LagRBF documentation
 ====================
 
 .. toctree::
-  :maxdepth: 2
-  :caption: Contents
+   :maxdepth: 2
+   :caption: Contents
 
-  api/python/index
-  utils/index
+   overview
+   installation
+   petsc_config
+   api/python/index
+   utils/index
+

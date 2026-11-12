@@ -17,12 +17,37 @@ extensions = [
   "sphinx.ext.mathjax",
   "sphinx.ext.intersphinx",
   "sphinx.ext.viewcode",
+  "myst_parser",
   #"breathe",
-  #"myst_parser",
 ]
 
 templates_path = ["_templates"]
 exclude_patterns = ["build", "Thumbs.db", ".DS_Store"]
+
+# Support for markdown files
+source_suffix = {
+    ".rst": None,
+    ".md": "myst-nb",
+}
+
+myst_enable_extensions = [
+    "colon_fence",
+    "deflist",
+    "alert",
+]
+
+# Configure MyST to handle links properly
+myst_url_schemes = {
+    "http": None,
+    "https": None,
+    "ftp": None,
+    "mailto": None,
+}
+
+# Suppress cross-reference warnings for markdown links
+suppress_warnings = [
+    "myst.xref_missing",
+]
 
 html_theme = "sphinx_rtd_theme"
 html_theme_options = {
