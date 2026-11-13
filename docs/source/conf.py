@@ -4,7 +4,15 @@ from datetime import datetime
 import subprocess
 from pathlib import Path
 
-sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..", "python_utils")))
+sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..", "python_api")))
+# Mock petsc4py for documentation builds on Read the Docs
+# petsc4py requires PETSc to be pre-installed and compiled, which is not available
+# on Read the Docs servers. We mock it to allow autodoc to succeed without it.
+from unittest.mock import MagicMock
+
+MOCKED_MODULES = ['petsc4py', 'petsc4py.PETSc']
+for module in MOCKED_MODULES:
+    sys.modules[module] = MagicMock()
 
 project   = "LagRBF"
 author    = "Anthony Jourdon"
