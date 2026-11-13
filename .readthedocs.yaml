@@ -26,4 +26,4 @@ python:
   install:
     - requirements: docs/requirements.txt
     - method: pip
-      path: .
+      path: python_api
