@@ -1,5 +1,15 @@
 # LagRBF
-
+```
+░██                               ░█████████  ░████████   ░██████████
+░██                               ░██     ░██ ░██    ░██  ░██        
+░██          ░██████    ░████████ ░██     ░██ ░██    ░██  ░██        
+░██               ░██  ░██    ░██ ░█████████  ░████████   ░█████████ 
+░██          ░███████  ░██    ░██ ░██   ░██   ░██     ░██ ░██        
+░██         ░██   ░██  ░██   ░███ ░██    ░██  ░██     ░██ ░██        
+░██████████  ░█████░██  ░█████░██ ░██     ░██ ░█████████  ░██        
+                              ░██                                    
+                        ░███████           
+```
 LagRBF is a software developed to interpolate and advect Lagrangian points in 2- and 3-dimensions using radial basis function (RBF) with the partition of unity (PU) method.
 
 The advection is performed using an explicit integration scheme that can be either:
