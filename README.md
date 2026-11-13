@@ -65,7 +65,7 @@ LagRBF requires [PETSc](https://petsc.org/release/) with at least these options:
 Configuration examples for common platforms are in `petsc_config/`. See {doc}`petsc_config` for detailed platform-specific guidance.
 
 ## Documentation
-The documentation of the Python API can be found here **TODO**.
+The documentation of the Python API can be found [here](https://lagrbf.readthedocs.io/en/latest/).
 
 ## Funding
 LagRBF has been developed in project PANDORA European Research Council (ERC) advanced grant, award number 101142672.
