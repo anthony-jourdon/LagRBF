@@ -63,6 +63,15 @@ html_theme_options = {
   #'style_external_links': True,
 }
 
+# Skip autodoc for modules that require environment variables or C libraries
+autodoc_mock_imports = [
+    'petsc4py',
+    'petsc4py.PETSc',
+    'PetscBinaryIO',
+    'lagrbfpy.interface.register_cfunc',
+    'lagrbfpy.petsc_io.petscvec_loader',
+]
+
 autodoc_member_order = "bysource"
 autodoc_typehints = "description"
 autodoc_class_signature = "mixed"
